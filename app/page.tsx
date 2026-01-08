@@ -1,65 +1,113 @@
-import Image from "next/image";
+import { redirect } from 'next/navigation'
+import { getUserProfile, getMyProjects, getWeeklyEntries } from '@/app/data/actions'
+import TimesheetGrid from './components/timesheetGrid'
+import { startOfWeek, endOfWeek, format, addWeeks, subWeeks, parseISO, isValid } from 'date-fns'
+import Link from 'next/link'
+import { LogOut, Shield, ChevronLeft, ChevronRight, Calendar } from 'lucide-react'
 
-export default function Home() {
+// Definiujemy typ propsów z searchParams (w Next.js 15+ to Promise)
+type Props = {
+  searchParams: Promise<{ date?: string }>
+}
+
+export default async function Home(props: Props) {
+  const searchParams = await props.searchParams
+  // 1. Sprawdź sesję
+  const result = await getUserProfile()
+  if (!result || !result.user) redirect('/login')
+
+  const { user, profile } = result
+
+  const isAdmin = profile?.role === 'admin'
+
+  // 3. LOGIKA DATY (SERCE NAWIGACJI)
+  // Jeśli w URL jest data (?date=...), użyj jej. Jeśli nie, użyj dzisiaj.
+  let referenceDate = new Date()
+  if (searchParams.date) {
+    const parsed = parseISO(searchParams.date)
+    if (isValid(parsed)) {
+      referenceDate = parsed
+    }
+  }
+
+  // Wyliczamy zakres tygodnia dla wybranej daty
+  const weekStart = startOfWeek(referenceDate, { weekStartsOn: 1 })
+  const weekEnd = endOfWeek(referenceDate, { weekStartsOn: 1 })
+
+  // Wyliczamy daty dla przycisków nawigacji
+  const prevWeekDate = format(subWeeks(referenceDate, 1), 'yyyy-MM-dd')
+  const nextWeekDate = format(addWeeks(referenceDate, 1), 'yyyy-MM-dd')
+
+  // 4. Pobierz dane dla TEGO KONKRETNEGO tygodnia
+  const projects = await getMyProjects()
+  const entries = await getWeeklyEntries(
+    user.id,
+    format(weekStart, 'yyyy-MM-dd'),
+    format(weekEnd, 'yyyy-MM-dd')
+  )
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+    <div className="min-h-screen bg-gray-50">
+      {/* NAGŁÓWEK */}
+      <header className="bg-white shadow-sm sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row justify-between items-center gap-4">
+
+          {/* LEWA STRONA: Tytuł i Nawigacja */}
+          <div className="flex items-center gap-6">
+            <h1 className="text-xl font-bold text-gray-900 hidden sm:block">Mój Grafik</h1>
+
+            {/* Kontrolery nawigacji */}
+            <div className="flex items-center bg-gray-100 rounded-lg p-1">
+              <Link
+                href={`/?date=${prevWeekDate}`}
+                className="p-2 hover:bg-white hover:shadow-sm rounded-md transition text-gray-600"
+                title="Poprzedni tydzień"
+              >
+                <ChevronLeft size={20} />
+              </Link>
+
+              <div className="flex items-center gap-2 px-4 font-medium text-gray-700 min-w-[140px] justify-center">
+                <Calendar size={16} className="text-gray-400" />
+                <span>{format(weekStart, 'dd.MM')} - {format(weekEnd, 'dd.MM')}</span>
+              </div>
+
+              <Link
+                href={`/?date=${nextWeekDate}`}
+                className="p-2 hover:bg-white hover:shadow-sm rounded-md transition text-gray-600"
+                title="Następny tydzień"
+              >
+                <ChevronRight size={20} />
+              </Link>
+            </div>
+          </div>
+
+          {/* PRAWA STRONA: Akcje użytkownika */}
+          <div className="flex items-center gap-4">
+            {isAdmin && (
+              <Link href="/admin" className="text-sm font-medium text-blue-600 hover:text-blue-800 flex items-center gap-1 bg-blue-50 px-3 py-2 rounded-lg">
+                <Shield size={16} /> <span className="hidden sm:inline">Panel Admina</span>
+              </Link>
+            )}
+
+            <form action="/auth/signout" method="post">
+              <button className="text-sm text-gray-600 hover:text-red-600 flex items-center gap-1 px-3 py-2 rounded-lg hover:bg-red-50 transition">
+                <LogOut size={16} /> <span className="hidden sm:inline">Wyloguj</span>
+              </button>
+            </form>
+          </div>
+        </div>
+      </header>
+
+      {/* TREŚĆ */}
+      <main className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
+        <TimesheetGrid
+          // Kluczowe: dodajemy key={weekStart}, żeby wymusić odświeżenie komponentu przy zmianie tygodnia
+          key={weekStart.toString()}
+          projects={projects}
+          existingEntries={entries || []}
+          weekStart={weekStart}
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
       </main>
     </div>
-  );
+  )
 }
