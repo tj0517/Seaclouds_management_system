@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { getUserProfile, getMyProjects, getWeeklyEntries } from '@/app/data/actions'
+import { getUserProfile, getMyProjects, getWeeklyEntries, isWeekSubmitted, getAllSubProjects } from '@/app/data/actions'
 import TimesheetGrid from './components/timesheetGrid'
 import { startOfWeek, endOfWeek, format, addWeeks, subWeeks, parseISO, isValid } from 'date-fns'
 import Link from 'next/link'
@@ -40,11 +40,26 @@ export default async function Home(props: Props) {
 
   // 4. Pobierz dane dla TEGO KONKRETNEGO tygodnia
   const projects = await getMyProjects()
+  const projectIds = projects.map(p => p.id)
+  const subProjects = await getAllSubProjects(projectIds)
+
   const entries = await getWeeklyEntries(
     user.id,
     format(weekStart, 'yyyy-MM-dd'),
     format(weekEnd, 'yyyy-MM-dd')
   )
+
+  const submissionStatuses = await Promise.all(
+    subProjects.map(async (sp) => {
+      const isSubmitted = await isWeekSubmitted(
+        format(weekStart, 'yyyy-MM-dd'),
+        sp.id
+      )
+      return { [sp.id]: isSubmitted }
+    })
+  )
+  const initialSubmissionStatus = Object.assign({}, ...submissionStatuses)
+
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -101,11 +116,12 @@ export default async function Home(props: Props) {
       {/* TREŚĆ */}
       <main className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
         <TimesheetGrid
-          // Kluczowe: dodajemy key={weekStart}, żeby wymusić odświeżenie komponentu przy zmianie tygodnia
           key={weekStart.toString()}
           projects={projects}
+          subProjects={subProjects}
           existingEntries={entries || []}
           weekStart={weekStart}
+          initialSubmissionStatus={initialSubmissionStatus}
         />
       </main>
     </div>
