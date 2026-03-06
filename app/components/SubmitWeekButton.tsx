@@ -30,7 +30,7 @@ export default function SubmitWeekButton({ weekStart, subprojectId, isSubmitted:
             disabled={isSubmitted || loading}
             className="px-3 py-1 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
-            {isSubmitted ? 'Zatwierdzony' : loading ? '...' : 'Zatwierdź'}
+            {isSubmitted ? 'Submitted' : loading ? '...' : 'Submit'}
         </button>
     )
 }

@@ -6,10 +6,10 @@ import { LayoutDashboard, FolderKanban, Users, LogOut, FileText, Clock, Menu, X 
 
 const navLinks = [
     { href: '/admin', icon: LayoutDashboard, label: 'Dashboard' },
-    { href: '/admin/projects', icon: FolderKanban, label: 'Projekty' },
-    { href: '/admin/users', icon: Users, label: 'Pracownicy' },
-    { href: '/admin/reports', icon: FileText, label: 'Raporty' },
-    { href: '/', icon: Clock, label: 'Raportuj godziny' },
+    { href: '/admin/projects', icon: FolderKanban, label: 'Projects' },
+    { href: '/admin/users', icon: Users, label: 'Employees' },
+    { href: '/admin/reports', icon: FileText, label: 'Reports' },
+    { href: '/', icon: Clock, label: 'Log Hours' },
 ]
 
 export default function AdminSidebar({ email }: { email: string }) {
@@ -38,7 +38,7 @@ export default function AdminSidebar({ email }: { email: string }) {
                 <form action="/auth/signout" method="post">
                     <button className="flex items-center gap-3 px-4 py-3 text-red-600 hover:bg-red-50 w-full rounded-lg">
                         <LogOut size={20} />
-                        Wyloguj
+                        Sign Out
                     </button>
                 </form>
             </div>
@@ -51,7 +51,7 @@ export default function AdminSidebar({ email }: { email: string }) {
             <button
                 className="md:hidden fixed top-4 left-4 z-50 p-2 bg-white rounded-lg shadow-md"
                 onClick={() => setOpen(true)}
-                aria-label="Otwórz menu"
+                aria-label="Open menu"
             >
                 <Menu size={20} />
             </button>
@@ -69,7 +69,7 @@ export default function AdminSidebar({ email }: { email: string }) {
                 className={`md:hidden fixed top-0 left-0 h-full w-64 bg-white shadow-md flex flex-col z-50 transition-transform duration-200 ${open ? 'translate-x-0' : '-translate-x-full'}`}
             >
                 <div className="flex justify-end p-2">
-                    <button onClick={() => setOpen(false)} className="p-2 hover:bg-gray-100 rounded-lg" aria-label="Zamknij menu">
+                    <button onClick={() => setOpen(false)} className="p-2 hover:bg-gray-100 rounded-lg" aria-label="Close menu">
                         <X size={20} />
                     </button>
                 </div>

@@ -43,23 +43,23 @@ export default function SubProjectsList({ projectId, initialSubProjects }: { pro
 
         setLoading(false)
         if (result.success) {
-            toast.success('Podprojekt został dodany')
+            toast.success('Sub-project added successfully')
             setOpen(false)
             setCode('')
             setDescription('')
             router.refresh()
         } else {
-            toast.error(result.error || 'Błąd podczas dodawania podprojektu')
+            toast.error(result.error || 'Error adding sub-project')
         }
     }
 
     const handleToggleStatus = async (id: string, currentStatus: boolean) => {
         const result = await toggleSubProjectStatus(id, projectId, !currentStatus)
         if (result.success) {
-            toast.success(currentStatus ? 'Podprojekt dezaktywowany' : 'Podprojekt aktywowany')
+            toast.success(currentStatus ? 'Sub-project deactivated' : 'Sub-project activated')
             router.refresh()
         } else {
-            toast.error(result.error || 'Błąd podczas zmiany statusu')
+            toast.error(result.error || 'Error changing status')
         }
     }
 
@@ -67,45 +67,45 @@ export default function SubProjectsList({ projectId, initialSubProjects }: { pro
         <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <div>
-                    <CardTitle>Podprojekty</CardTitle>
-                    <CardDescription>Zarządzaj kodami zadań dla tego projektu.</CardDescription>
+                    <CardTitle>Sub-projects</CardTitle>
+                    <CardDescription>Manage task codes for this project.</CardDescription>
                 </div>
                 <Dialog open={open} onOpenChange={setOpen}>
                     <DialogTrigger asChild>
                         <Button size="sm" className="gap-1">
-                            <Plus size={16} /> Dodaj Podprojekt
+                            <Plus size={16} /> Add Sub-project
                         </Button>
                     </DialogTrigger>
                     <DialogContent>
                         <DialogHeader>
-                            <DialogTitle>Dodaj nowy podprojekt</DialogTitle>
+                            <DialogTitle>Add New Sub-project</DialogTitle>
                             <DialogDescription>
-                                Podprojekty pozwalają na bardziej szczegółowe raportowanie czasu.
+                                Sub-projects allow for more detailed time reporting.
                             </DialogDescription>
                         </DialogHeader>
                         <form onSubmit={handleSubmit} className="space-y-4">
                             <div className="space-y-2">
-                                <Label htmlFor="code">Kod / Nazwa (Wymagane)</Label>
+                                <Label htmlFor="code">Code / Name (Required)</Label>
                                 <Input
                                     id="code"
                                     value={code}
                                     onChange={(e) => setCode(e.target.value)}
-                                    placeholder="np. ANALIZA, DEV-001"
+                                    placeholder="e.g. ANALYSIS, DEV-001"
                                     required
                                 />
                             </div>
                             <div className="space-y-2">
-                                <Label htmlFor="description">Opis (Opcjonalne)</Label>
+                                <Label htmlFor="description">Description (Optional)</Label>
                                 <Input
                                     id="description"
                                     value={description}
                                     onChange={(e) => setDescription(e.target.value)}
-                                    placeholder="np. Analiza wymagań biznesowych"
+                                    placeholder="e.g. Business requirements analysis"
                                 />
                             </div>
                             <DialogFooter>
-                                <Button type="button" variant="outline" onClick={() => setOpen(false)}>Anuluj</Button>
-                                <Button type="submit" disabled={loading}>{loading ? 'Dodawanie...' : 'Dodaj'}</Button>
+                                <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+                                <Button type="submit" disabled={loading}>{loading ? 'Adding...' : 'Add'}</Button>
                             </DialogFooter>
                         </form>
                     </DialogContent>
@@ -114,16 +114,16 @@ export default function SubProjectsList({ projectId, initialSubProjects }: { pro
             <CardContent>
                 {initialSubProjects.length === 0 ? (
                     <div className="text-center py-6 text-muted-foreground text-sm">
-                        Brak zdefiniowanych podprojektów.
+                        No sub-projects defined.
                     </div>
                 ) : (
                     <Table>
                         <TableHeader>
                             <TableRow>
-                                <TableHead className="w-[150px]">Kod</TableHead>
-                                <TableHead>Opis</TableHead>
+                                <TableHead className="w-[150px]">Code</TableHead>
+                                <TableHead>Description</TableHead>
                                 <TableHead className="w-[100px]">Status</TableHead>
-                                <TableHead className="w-[100px] text-right">Akcje</TableHead>
+                                <TableHead className="w-[100px] text-right">Actions</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -133,14 +133,14 @@ export default function SubProjectsList({ projectId, initialSubProjects }: { pro
                                     <TableCell className="text-muted-foreground">{sp.description || '-'}</TableCell>
                                     <TableCell>
                                         <Badge variant={sp.is_active ? "outline" : "secondary"} className={sp.is_active ? "text-green-600 border-green-200" : ""}>
-                                            {sp.is_active ? 'Aktywny' : 'Nieaktywny'}
+                                            {sp.is_active ? 'Active' : 'Inactive'}
                                         </Badge>
                                     </TableCell>
                                     <TableCell className="text-right">
                                         <Button
                                             variant="ghost"
                                             size="icon"
-                                            title={sp.is_active ? "Dezaktywuj" : "Aktywuj"}
+                                            title={sp.is_active ? "Deactivate" : "Activate"}
                                             onClick={() => handleToggleStatus(sp.id, sp.is_active || false)}
                                         >
                                             {sp.is_active ? <Ban className="h-4 w-4 text-orange-500" /> : <CheckCircle2 className="h-4 w-4 text-green-600" />}

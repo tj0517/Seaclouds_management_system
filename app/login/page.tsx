@@ -29,7 +29,7 @@ export default function LoginPage() {
     })
 
     if (error) {
-      setError('Nieprawidłowy email lub hasło')
+      setError('Invalid email or password')
       setLoading(false)
     } else {
       router.push("/") // Use router push for client-side navigation after login
@@ -44,9 +44,9 @@ export default function LoginPage() {
           <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 mb-2">
             <KeyRound className="h-6 w-6 text-primary" />
           </div>
-          <CardTitle className="text-2xl font-bold">Zaloguj się</CardTitle>
+          <CardTitle className="text-2xl font-bold">Sign In</CardTitle>
           <CardDescription>
-            Wprowadź swoje dane, aby uzyskać dostęp do panelu.
+            Enter your credentials to access the dashboard.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -67,7 +67,7 @@ export default function LoginPage() {
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password">Hasło</Label>
+              <Label htmlFor="password">Password</Label>
               <div className="relative">
                 <KeyRound className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -90,12 +90,12 @@ export default function LoginPage() {
 
             <Button className="w-full" type="submit" disabled={loading}>
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {loading ? 'Logowanie...' : 'Zaloguj się'}
+              {loading ? 'Signing in...' : 'Sign In'}
             </Button>
           </form>
         </CardContent>
         <CardFooter className="flex justify-center">
-          <p className="text-xs text-muted-foreground">System zarządzania czasem pracy</p>
+          <p className="text-xs text-muted-foreground">Time management system</p>
         </CardFooter>
       </Card>
     </div>

@@ -64,7 +64,7 @@ export async function createProject(formData: FormData) {
     const project_code = formData.get('project_code') as string
     const user_ids = formData.getAll('user_id') as string[]
 
-    if (!name) return { error: 'Nazwa jest wymagana' }
+    if (!name) return { error: 'Name is required' }
 
     // 1. Utwórz projekt
     const { data: project, error: projectError } = await supabase
@@ -174,8 +174,8 @@ export async function createSubProject(formData: FormData) {
     const code = formData.get('code') as string
     const description = formData.get('description') as string
 
-    if (!code) return { error: 'Kod jest wymagany' }
-    if (!projectId) return { error: 'ID projektu jest wymagane' }
+    if (!code) return { error: 'Code is required' }
+    if (!projectId) return { error: 'Project ID is required' }
 
     const { error } = await supabase
         .from('sub_projects')
@@ -201,7 +201,7 @@ export async function updateProject(id: string, formData: FormData) {
     const description = formData.get('description') as string
     const is_active = formData.get('is_active') === 'true'
 
-    if (!name) return { error: 'Nazwa jest wymagana' }
+    if (!name) return { error: 'Name is required' }
 
     const { error } = await supabase
         .from('projects')

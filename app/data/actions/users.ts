@@ -1,6 +1,7 @@
 'use server'
 
 import { createClient } from '@/utils/supabase/server'
+import { supabaseAdmin } from '@/utils/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import { Database } from '@/utils/supabase/types'
 
@@ -72,7 +73,7 @@ export async function updateUserRole(userId: string, newRole: 'admin' | 'employe
 
     // Opcjonalnie: Sprawdź, czy wykonujący to admin
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return { error: 'Brak sesji' }
+    if (!user) return { error: 'No session' }
 
     // Tutaj zakładamy, że tylko admin może wywołać tę funkcję (RLS w bazie też powinno to blokować)
 
@@ -86,6 +87,29 @@ export async function updateUserRole(userId: string, newRole: 'admin' | 'employe
     }
 
     revalidatePath(`/admin/users/${userId}`)
+    return { success: true }
+}
+
+export async function inviteUser(formData: FormData) {
+    const email = formData.get('email') as string
+    const full_name = (formData.get('full_name') as string) || null
+    const role = (formData.get('role') as string) || 'employee'
+
+    if (!email) return { error: 'Email is required' }
+
+    const { data, error } = await supabaseAdmin.auth.admin.inviteUserByEmail(email)
+
+    if (error) return { error: error.message }
+
+    const userId = data.user.id
+
+    const { error: profileError } = await supabaseAdmin
+        .from('profiles')
+        .insert({ id: userId, full_name, role })
+
+    if (profileError) return { error: profileError.message }
+
+    revalidatePath('/admin/users')
     return { success: true }
 }
 

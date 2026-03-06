@@ -17,9 +17,9 @@ export default function UsersTable({ users }: { users: Profile[] }) {
                 <TableHeader>
                     <TableRow>
                         <TableHead className="w-[80px]">Avatar</TableHead>
-                        <TableHead>Pracownik</TableHead>
-                        <TableHead>Rola</TableHead>
-                        <TableHead className="text-right">Akcje</TableHead>
+                        <TableHead>Employee</TableHead>
+                        <TableHead>Role</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -34,7 +34,7 @@ export default function UsersTable({ users }: { users: Profile[] }) {
                                 </Avatar>
                             </TableCell>
                             <TableCell className="font-medium">
-                                {user.full_name || 'Brak nazwy'}
+                                {user.full_name || 'No name'}
                             </TableCell>
                             <TableCell>
                                 <Badge variant={user.role === 'admin' ? "default" : "secondary"}>
@@ -44,7 +44,7 @@ export default function UsersTable({ users }: { users: Profile[] }) {
                             <TableCell className="text-right">
                                 <Button variant="outline" size="sm" asChild>
                                     <Link href={`/admin/users/${user.id}`}>
-                                        <UserCog className="mr-2 h-4 w-4" /> Zarządzaj
+                                        <UserCog className="mr-2 h-4 w-4" /> Manage
                                     </Link>
                                 </Button>
                             </TableCell>

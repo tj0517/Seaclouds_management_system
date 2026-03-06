@@ -69,14 +69,14 @@ export default async function Home(props: Props) {
 
           {/* LEWA STRONA: Tytuł i Nawigacja */}
           <div className="flex items-center gap-6">
-            <h1 className="text-xl font-bold text-gray-900 hidden sm:block">Mój Grafik</h1>
+            <h1 className="text-xl font-bold text-gray-900 hidden sm:block">My Timesheet</h1>
 
             {/* Kontrolery nawigacji */}
             <div className="flex items-center bg-gray-100 rounded-lg p-1">
               <Link
                 href={`/?date=${prevWeekDate}`}
                 className="p-2 hover:bg-white hover:shadow-sm rounded-md transition text-gray-600"
-                title="Poprzedni tydzień"
+                title="Previous week"
               >
                 <ChevronLeft size={20} />
               </Link>
@@ -89,7 +89,7 @@ export default async function Home(props: Props) {
               <Link
                 href={`/?date=${nextWeekDate}`}
                 className="p-2 hover:bg-white hover:shadow-sm rounded-md transition text-gray-600"
-                title="Następny tydzień"
+                title="Next week"
               >
                 <ChevronRight size={20} />
               </Link>
@@ -100,13 +100,13 @@ export default async function Home(props: Props) {
           <div className="flex items-center gap-4">
             {isAdmin && (
               <Link href="/admin" className="text-sm font-medium text-blue-600 hover:text-blue-800 flex items-center gap-1 bg-blue-50 px-3 py-2 rounded-lg">
-                <Shield size={16} /> <span className="hidden sm:inline">Panel Admina</span>
+                <Shield size={16} /> <span className="hidden sm:inline">Admin Panel</span>
               </Link>
             )}
 
             <form action="/auth/signout" method="post">
               <button className="text-sm text-gray-600 hover:text-red-600 flex items-center gap-1 px-3 py-2 rounded-lg hover:bg-red-50 transition">
-                <LogOut size={16} /> <span className="hidden sm:inline">Wyloguj</span>
+                <LogOut size={16} /> <span className="hidden sm:inline">Sign Out</span>
               </button>
             </form>
           </div>

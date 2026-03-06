@@ -61,7 +61,7 @@ export default function NewProjectPage() {
 
 
     if (result && 'error' in result) {
-      toast.error(result.error || 'Błąd podczas tworzenia projektu')
+      toast.error(result.error || 'Error creating project')
     } else {
       setName('')
       setCode('')
@@ -79,14 +79,14 @@ export default function NewProjectPage() {
             <ArrowLeft className="h-4 w-4" />
           </Link>
         </Button>
-        <h1 className="text-2xl font-bold tracking-tight">Nowy Projekt</h1>
+        <h1 className="text-2xl font-bold tracking-tight">New Project</h1>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Utwórz projekt</CardTitle>
+          <CardTitle>Create Project</CardTitle>
           <CardDescription>
-            Wprowadź nazwę nowego projektu. Projekt zostanie automatycznie oznaczony jako aktywny.
+            Enter the name of the new project. The project will be automatically marked as active.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -144,7 +144,7 @@ export default function NewProjectPage() {
                 disabled={loading || !name.trim()}
               >
                 {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
-                {loading ? 'Tworzenie...' : 'Utwórz Projekt'}
+                {loading ? 'Creating...' : 'Create Project'}
               </Button>
             </div>
           </form>

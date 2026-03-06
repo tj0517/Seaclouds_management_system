@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation'
 
 import { useState, useEffect } from 'react'
 import { format, addDays } from 'date-fns'
-import { pl } from 'date-fns/locale'
+import { enUS } from 'date-fns/locale'
 import { saveWorkEntry, copyWeek } from '@/app/data/actions'
 import { Loader2, AlertCircle } from 'lucide-react'
 import SubmitWeekButton from './SubmitWeekButton'
@@ -113,10 +113,10 @@ export default function TimesheetGrid({
       <div className="absolute top-[-30px] right-0 h-6 flex items-center justify-end min-w-[100px]">
         {saving ? (
           <span className="text-xs text-blue-600 flex items-center gap-1">
-            <Loader2 className="animate-spin h-3 w-3" /> Zapisywanie...
+            <Loader2 className="animate-spin h-3 w-3" /> Saving...
           </span>
         ) : (
-          <span className="text-xs text-gray-400">Wszystkie zmiany zapisane</span>
+          <span className="text-xs text-gray-400">All changes saved</span>
         )}
       </div>
 
@@ -125,13 +125,13 @@ export default function TimesheetGrid({
           {/* --- NAGŁÓWEK --- */}
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-4 py-3 text-left font-medium text-gray-500 w-48 min-w-[150px]">Projekt</th>
+              <th className="px-4 py-3 text-left font-medium text-gray-500 w-48 min-w-[150px]">Project</th>
               <th className="px-4 py-3 text-left font-medium text-gray-500 w-20 min-w-[150px]">KOD</th>
               {weekDays.map(day => {
                 const isWeekend = day.getDay() === 0 || day.getDay() === 6
                 return (
                   <th key={day.toString()} className={`px-2 py-3 text-center font-medium w-24 ${isWeekend ? 'text-red-400' : 'text-gray-500'}`}>
-                    <div className="text-xs uppercase">{format(day, 'EEE', { locale: pl })}</div>
+                    <div className="text-xs uppercase">{format(day, 'EEE', { locale: enUS })}</div>
                     <div className="text-gray-900">{format(day, 'dd.MM')}</div>
                   </th>
                 )
@@ -188,7 +188,7 @@ export default function TimesheetGrid({
                     return (
                       <tr key={subProject.id} className="hover:bg-gray-50 group transition-colors">
                         <td className="px-4 py-2 pl-8 text-sm text-gray-600 truncate max-w-[200px]" title={subProject.description || ''}>
-                          {subProject.description || subProject.code || 'Brak opisu'}
+                          {subProject.description || subProject.code || 'No description'}
                         </td>
                         <td className="px-4 py-2 text-xs font-mono text-gray-500 truncate max-w-[100px]">
                           {subProject.code}
@@ -222,7 +222,7 @@ export default function TimesheetGrid({
                         <td className="px-4 py-2 text-center border-l border-gray-200">
 
                           {submittedProjects[subProject.id] ? (
-                            <span className="text-green-600">Zatwierdzony</span>
+                            <span className="text-green-600">Submitted</span>
                           ) : (
                             <SubmitWeekButton
                               weekStart={format(weekStart, 'yyyy-MM-dd')}
@@ -250,7 +250,7 @@ export default function TimesheetGrid({
                 <td colSpan={9} className="px-6 py-12 text-center text-gray-500">
                   <div className="flex flex-col items-center gap-2">
                     <AlertCircle className="h-8 w-8 text-gray-400" />
-                    <p>Brak przypisanych projektów.</p>
+                    <p>No assigned projects.</p>
                   </div>
                 </td>
               </tr>
@@ -261,7 +261,7 @@ export default function TimesheetGrid({
           <tfoot className="bg-gray-100 font-bold text-gray-900 border-t-2 border-gray-200">
             <tr>
               <td className="px-4 py-3 text-right text-gray-500 text-xs uppercase tracking-wider"></td>
-              <td className="px-4 py-3 text-gray-500 text-xs uppercase tracking-wider">Suma :</td>
+              <td className="px-4 py-3 text-gray-500 text-xs uppercase tracking-wider">Total:</td>
               {dailyTotals.map((total, index) => {
                 // Ostrzeżenie jeśli ktoś pracuje ponad 12h dziennie
                 const isOverworked = total > 12

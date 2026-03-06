@@ -17,10 +17,10 @@ export default async function StatsPage() {
     <div className="space-y-6">
       <div>
         <h2 className="text-3xl font-bold tracking-tight flex items-center gap-2">
-          <BarChart3 className="h-8 w-8 text-primary" /> Statystyki
+          <BarChart3 className="h-8 w-8 text-primary" /> Statistics
         </h2>
         <p className="text-muted-foreground mt-1">
-          Przegląd aktywności w systemie.
+          Overview of system activity.
         </p>
       </div>
 
@@ -28,42 +28,42 @@ export default async function StatsPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Projekty</CardTitle>
+            <CardTitle className="text-sm font-medium">Projects</CardTitle>
             <FolderOpen className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats.projectsCount}</div>
-            <p className="text-xs text-muted-foreground">łącznie projektów</p>
+            <p className="text-xs text-muted-foreground">total projects</p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pracownicy</CardTitle>
+            <CardTitle className="text-sm font-medium">Employees</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats.usersCount}</div>
-            <p className="text-xs text-muted-foreground">zarejestrowanych użytkowników</p>
+            <p className="text-xs text-muted-foreground">registered users</p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Godziny (ten miesiąc)</CardTitle>
+            <CardTitle className="text-sm font-medium">Hours (this month)</CardTitle>
             <Clock className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats.totalHoursThisMonth}</div>
-            <p className="text-xs text-muted-foreground">przepracowanych godzin</p>
+            <p className="text-xs text-muted-foreground">hours worked</p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Zatwierdzenia (ten miesiąc)</CardTitle>
+            <CardTitle className="text-sm font-medium">Submissions (this month)</CardTitle>
             <CheckSquare className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats.totalSubmissionsThisMonth}</div>
-            <p className="text-xs text-muted-foreground">zatwierdzonych tygodni</p>
+            <p className="text-xs text-muted-foreground">submitted weeks</p>
           </CardContent>
         </Card>
       </div>
@@ -71,21 +71,21 @@ export default async function StatsPage() {
       {/* Godziny według projektu */}
       <Card>
         <CardHeader>
-          <CardTitle>Godziny według projektu</CardTitle>
-          <CardDescription>Zestawienie godzin w bieżącym miesiącu.</CardDescription>
+          <CardTitle>Hours by Project</CardTitle>
+          <CardDescription>Hours breakdown for the current month.</CardDescription>
         </CardHeader>
         <CardContent>
           {stats.hoursPerProject.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-8">
-              Brak danych w bieżącym miesiącu.
+              No data for the current month.
             </p>
           ) : (
             <div className="rounded-md border">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Projekt</TableHead>
-                    <TableHead className="text-right">Godziny</TableHead>
+                    <TableHead>Project</TableHead>
+                    <TableHead className="text-right">Hours</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>

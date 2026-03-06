@@ -15,10 +15,10 @@ export default function ProjectsTable({ projects }: { projects: Project[] }) {
             <Table>
                 <TableHeader>
                     <TableRow>
-                        <TableHead>Nazwa</TableHead>
+                        <TableHead>Name</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead className="text-right">KOD / ID</TableHead>
-                        <TableHead className="text-right">Akcje</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -27,7 +27,7 @@ export default function ProjectsTable({ projects }: { projects: Project[] }) {
                             <TableCell className="font-medium">{project.name.slice(0, 10) + (project.name.length > 10 ? '...' : '')}</TableCell>
                             <TableCell>
                                 <Badge variant={project.is_active ? "default" : "destructive"} className={project.is_active ? "bg-emerald-600 hover:bg-emerald-700" : ""}>
-                                    {project.is_active ? 'Aktywny' : 'Zakończony'}
+                                    {project.is_active ? 'Active' : 'Completed'}
                                 </Badge>
                             </TableCell>
                             <TableCell className="text-right text-xs text-muted-foreground font-mono">
@@ -36,7 +36,7 @@ export default function ProjectsTable({ projects }: { projects: Project[] }) {
                             <TableCell className="text-right">
                                 <Button variant="outline" size="sm" asChild>
                                     <Link href={`/admin/projects/${project.id}`}>
-                                        <UserCog className="mr-2 h-4 w-4" /> Zarządzaj
+                                        <UserCog className="mr-2 h-4 w-4" /> Manage
                                     </Link>
                                 </Button>
                             </TableCell>
@@ -46,7 +46,7 @@ export default function ProjectsTable({ projects }: { projects: Project[] }) {
                     {projects?.length === 0 && (
                         <TableRow>
                             <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
-                                Brak projektów.
+                                No projects.
                             </TableCell>
                         </TableRow>
                     )}

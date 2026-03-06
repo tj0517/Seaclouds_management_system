@@ -12,13 +12,13 @@ export default async function ProjectsPage() {
     <div className="space-y-6">
       <div className="flex flex-row items-center justify-between">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">Zarządzanie Projektami</h2>
+          <h2 className="text-3xl font-bold tracking-tight">Project Management</h2>
           <p className="text-muted-foreground mt-1">
-            Dodawaj nowe projekty i monitoruj ich status.
+            Add new projects and monitor their status.
           </p>
         </div>
         <Button asChild>
-          <Link href="/admin/projects/new">Dodaj Projekt</Link>
+          <Link href="/admin/projects/new">Add Project</Link>
         </Button>
       </div>
       <Separator />
@@ -27,7 +27,7 @@ export default async function ProjectsPage() {
       <div className="md:col-span-2">
         <Card>
           <CardHeader>
-            <CardTitle>Lista Projektów</CardTitle>
+            <CardTitle>Projects List</CardTitle>
           </CardHeader>
           <CardContent>
             <ProjectsTable projects={projects} />

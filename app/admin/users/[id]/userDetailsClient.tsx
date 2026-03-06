@@ -45,9 +45,9 @@ export default function UserDetailsClient({
         startTransition(async () => {
             const result = await deactivateUser(userId)
             if (result.error) {
-                toast.error(`Błąd: ${result.error}`)
+                toast.error(`Error: ${result.error}`)
             } else {
-                toast.success('Usunięto wszystkie przypisania pracownika')
+                toast.success('All employee assignments removed')
             }
             setDeactivateOpen(false)
         })
@@ -58,9 +58,9 @@ export default function UserDetailsClient({
         startTransition(async () => {
             const result = await updateUserRole(userId, currentUser?.role === 'employee' ? 'admin' : 'employee')
             if (result.error) {
-                toast.error(`Błąd zmiany roli: ${result.error}`)
+                toast.error(`Error changing role: ${result.error}`)
             } else {
-                toast.success('Rola została zmieniona')
+                toast.success('Role changed successfully')
             }
         })
     }
@@ -70,10 +70,10 @@ export default function UserDetailsClient({
             <div className="flex items-center gap-4">
                 <Button variant="ghost" size="sm" asChild>
                     <Link href="/admin/users">
-                        <ArrowLeft className="mr-2 h-4 w-4" /> Powrót
+                        <ArrowLeft className="mr-2 h-4 w-4" /> Back
                     </Link>
                 </Button>
-                <h2 className="text-3xl font-bold tracking-tight">Edycja Uprawnień</h2>
+                <h2 className="text-3xl font-bold tracking-tight">Edit Permissions</h2>
             </div>
 
             <div className="grid gap-6 md:grid-cols-3">
@@ -88,31 +88,31 @@ export default function UserDetailsClient({
                                 </AvatarFallback>
                             </Avatar>
                             <div>
-                                <CardTitle className="text-lg">{currentUser?.full_name || 'Użytkownik'}</CardTitle>
+                                <CardTitle className="text-lg">{currentUser?.full_name || 'User'}</CardTitle>
                                 <CardDescription className="text-xs font-mono">{userId}</CardDescription>
                             </div>
                         </CardHeader>
                         <CardContent>
                             <div className="flex items-center justify-between text-sm mt-2">
                                 <span className="text-muted-foreground flex items-center gap-2">
-                                    <ShieldCheck className="h-4 w-4" /> Rola:
+                                    <ShieldCheck className="h-4 w-4" /> Role:
                                 </span>
                                 <Badge variant={currentUser?.role === 'admin' ? "default" : "secondary"}>
                                     {currentUser?.role || 'employee'}
                                 </Badge>
                                 <Button variant="ghost" size="sm" onClick={() => setIsEditing(true)}>
                                     <div className='flex flex-row'>
-                                        <Pencil className="mr-2 h-4 w-4" /> Edytuj</div >
+                                        <Pencil className="mr-2 h-4 w-4" /> Edit</div >
                                 </Button>
                             </div>
                             {isEditing && (
                                 <div className='flex flex-row gap-2'>
                                     <Button variant="default" className='w-1/2 mt-4' onClick={() => changeRole()}>
-                                        <div > Zmień rolę </div>
+                                        <div > Change Role </div>
 
                                     </Button>
                                     <Button variant="outline" className='w-1/2 mt-4' onClick={() => setIsEditing(false)}>
-                                        <div > Anuluj </div>
+                                        <div > Cancel </div>
 
                                     </Button>
                                 </div>
@@ -120,7 +120,7 @@ export default function UserDetailsClient({
 
                             <div className="pt-4 border-t mt-4">
                                 <Button variant="destructive" size="sm" className="w-full" onClick={() => setDeactivateOpen(true)}>
-                                    <UserX className="mr-2 h-4 w-4" /> Usuń pracownika
+                                    <UserX className="mr-2 h-4 w-4" /> Remove Employee
                                 </Button>
                             </div>
 
@@ -132,9 +132,9 @@ export default function UserDetailsClient({
                 <div className="md:col-span-2">
                     <Card>
                         <CardHeader>
-                            <CardTitle>Dostęp do Projektów</CardTitle>
+                            <CardTitle>Project Access</CardTitle>
                             <CardDescription>
-                                Zaznacz projekty, w których ten pracownik może rejestrować czas pracy.
+                                Select projects where this employee can log working hours.
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
@@ -147,7 +147,7 @@ export default function UserDetailsClient({
                                             <div className="flex flex-col">
                                                 <span className="font-medium text-sm">{project.name}</span>
                                                 <span className="text-xs text-muted-foreground">
-                                                    {project.is_active ? 'Aktywny' : 'Zakończony'}
+                                                    {project.is_active ? 'Active' : 'Completed'}
                                                 </span>
                                             </div>
                                             <AssignmentCheckbox
@@ -161,7 +161,7 @@ export default function UserDetailsClient({
 
                                 {projects?.length === 0 && (
                                     <div className="text-center py-8 text-muted-foreground text-sm">
-                                        Brak projektów w systemie.
+                                        No projects in the system.
                                     </div>
                                 )}
                             </div>
@@ -174,18 +174,18 @@ export default function UserDetailsClient({
         <Dialog open={deactivateOpen} onOpenChange={setDeactivateOpen}>
             <DialogContent>
                 <DialogHeader>
-                    <DialogTitle>Usuń pracownika</DialogTitle>
+                    <DialogTitle>Remove Employee</DialogTitle>
                     <DialogDescription>
-                        Czy na pewno chcesz usunąć pracownika <strong>{currentUser?.full_name || 'tego użytkownika'}</strong>?
-                        Zostaną usunięte wszystkie przypisania do projektów. Wpisy czasu pracy pozostaną w systemie.
+                        Are you sure you want to remove <strong>{currentUser?.full_name || 'this user'}</strong>?
+                        All project assignments will be removed. Time entries will remain in the system.
                     </DialogDescription>
                 </DialogHeader>
                 <DialogFooter>
                     <Button variant="outline" onClick={() => setDeactivateOpen(false)} disabled={isPending}>
-                        Anuluj
+                        Cancel
                     </Button>
                     <Button variant="destructive" onClick={handleDeactivate} disabled={isPending}>
-                        {isPending ? 'Usuwam...' : 'Usuń pracownika'}
+                        {isPending ? 'Removing...' : 'Remove Employee'}
                     </Button>
                 </DialogFooter>
             </DialogContent>

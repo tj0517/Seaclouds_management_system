@@ -14,11 +14,11 @@ export default async function AdminDashboard() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">Projekty</h2>
-          <p className="text-muted-foreground mt-1">Zarządzaj aktywnymi projektami i przypisaniami.</p>
+          <h2 className="text-3xl font-bold tracking-tight">Projects</h2>
+          <p className="text-muted-foreground mt-1">Manage active projects and assignments.</p>
         </div>
         <Button asChild>
-          <Link href="/admin/projects/new">Dodaj Projekt</Link>
+          <Link href="/admin/projects/new">Add Project</Link>
         </Button>
       </div>
 
@@ -27,7 +27,7 @@ export default async function AdminDashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Card>
           <CardHeader>
-            <CardTitle>Lista Projektów</CardTitle>
+            <CardTitle>Projects List</CardTitle>
           </CardHeader>
           <CardContent>
             <ProjectsTable projects={projects} />
@@ -35,9 +35,9 @@ export default async function AdminDashboard() {
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle>Lista Pracowników</CardTitle>
+            <CardTitle>Employees List</CardTitle>
             <CardDescription>
-              Wszyscy użytkownicy zarejestrowani w systemie.
+              All users registered in the system.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -48,7 +48,7 @@ export default async function AdminDashboard() {
 
         {projects.length === 0 && (
           <div className="col-span-full text-center py-12 text-muted-foreground">
-            Brak projektów. Dodaj pierwszy projekt!
+            No projects yet. Add your first project!
           </div>
         )}
       </div>

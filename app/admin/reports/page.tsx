@@ -1,6 +1,6 @@
 import { getGroupedReportData, getReportFilterOptions } from '@/app/data/actions/timesheet'
 import { format, startOfMonth, endOfMonth, eachWeekOfInterval, parseISO } from 'date-fns'
-import { pl } from 'date-fns/locale'
+import { enUS } from 'date-fns/locale'
 import { Filter, FileText, Calendar, CheckCircle2, Clock, Users, X } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -66,9 +66,9 @@ export default async function ReportsPage(props: Props) {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-3xl font-bold tracking-tight flex items-center gap-2">
-            <FileText className="h-8 w-8 text-primary" /> Raporty
+            <FileText className="h-8 w-8 text-primary" /> Reports
           </h2>
-          <p className="text-muted-foreground mt-1">Zestawienie godzin pracy według projektu, kodu i pracownika.</p>
+          <p className="text-muted-foreground mt-1">Work hours breakdown by project, code, and employee.</p>
         </div>
       </div>
 
@@ -78,14 +78,14 @@ export default async function ReportsPage(props: Props) {
           <form className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 items-end">
             {/* Date range */}
             <div>
-              <label className="block text-xs font-medium mb-1 text-muted-foreground uppercase tracking-wide">Data od</label>
+              <label className="block text-xs font-medium mb-1 text-muted-foreground uppercase tracking-wide">From</label>
               <div className="relative">
                 <Calendar className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input type="date" name="from" defaultValue={dateFrom} className="pl-9" />
               </div>
             </div>
             <div>
-              <label className="block text-xs font-medium mb-1 text-muted-foreground uppercase tracking-wide">Data do</label>
+              <label className="block text-xs font-medium mb-1 text-muted-foreground uppercase tracking-wide">To</label>
               <div className="relative">
                 <Calendar className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input type="date" name="to" defaultValue={dateTo} className="pl-9" />
@@ -94,13 +94,13 @@ export default async function ReportsPage(props: Props) {
 
             {/* Project filter */}
             <div>
-              <label className="block text-xs font-medium mb-1 text-muted-foreground uppercase tracking-wide">Projekt</label>
+              <label className="block text-xs font-medium mb-1 text-muted-foreground uppercase tracking-wide">Project</label>
               <select
                 name="project"
                 defaultValue={filterProject}
                 className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring"
               >
-                <option value="">Wszystkie projekty</option>
+                <option value="">All projects</option>
                 {filterOptions.projectNames.map(p => (
                   <option key={p} value={p}>{p}</option>
                 ))}
@@ -109,13 +109,13 @@ export default async function ReportsPage(props: Props) {
 
             {/* Sub-project code filter */}
             <div>
-              <label className="block text-xs font-medium mb-1 text-muted-foreground uppercase tracking-wide">Kod</label>
+              <label className="block text-xs font-medium mb-1 text-muted-foreground uppercase tracking-wide">Code</label>
               <select
                 name="code"
                 defaultValue={filterCode}
                 className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring"
               >
-                <option value="">Wszystkie kody</option>
+                <option value="">All codes</option>
                 {filterOptions.subProjectCodes.map(c => (
                   <option key={c} value={c}>{c}</option>
                 ))}
@@ -124,13 +124,13 @@ export default async function ReportsPage(props: Props) {
 
             {/* User filter */}
             <div>
-              <label className="block text-xs font-medium mb-1 text-muted-foreground uppercase tracking-wide">Pracownik</label>
+              <label className="block text-xs font-medium mb-1 text-muted-foreground uppercase tracking-wide">Employee</label>
               <select
                 name="user"
                 defaultValue={filterUser}
                 className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring"
               >
-                <option value="">Wszyscy pracownicy</option>
+                <option value="">All employees</option>
                 {filterOptions.users.map(u => (
                   <option key={u} value={u}>{u}</option>
                 ))}
@@ -140,13 +140,13 @@ export default async function ReportsPage(props: Props) {
             {/* Actions */}
             <div className="flex gap-2">
               <Button type="submit" className="flex-1">
-                <Filter className="mr-2 h-4 w-4" /> Filtruj
+                <Filter className="mr-2 h-4 w-4" /> Filter
               </Button>
               {activeFilters > 0 && (
                 <Link
                   href={`/admin/reports?from=${dateFrom}&to=${dateTo}`}
                   className="flex items-center gap-1 px-3 py-2 rounded-md border border-input text-sm text-muted-foreground hover:bg-accent"
-                  title="Wyczyść filtry"
+                  title="Clear filters"
                 >
                   <X className="h-4 w-4" />
                 </Link>
@@ -157,15 +157,15 @@ export default async function ReportsPage(props: Props) {
           {/* Active filter badges */}
           {activeFilters > 0 && (
             <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t">
-              <span className="text-xs text-muted-foreground self-center">Aktywne filtry:</span>
+              <span className="text-xs text-muted-foreground self-center">Active filters:</span>
               {filterProject && (
                 <Badge variant="secondary" className="gap-1">
-                  Projekt: {filterProject}
+                  Project: {filterProject}
                 </Badge>
               )}
               {filterCode && (
                 <Badge variant="secondary" className="gap-1">
-                  Kod: {filterCode}
+                  Code: {filterCode}
                 </Badge>
               )}
               {filterUser && (
@@ -181,10 +181,10 @@ export default async function ReportsPage(props: Props) {
       {/* SUMMARY CARDS */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { label: 'Suma godzin', value: `${totalHours}h`, icon: Clock },
-          { label: 'Pracownicy', value: uniqueUsers, icon: Users },
-          { label: 'Projekty', value: uniqueProjects, icon: FileText },
-          { label: 'Zatwierdzone wiersze', value: totalSubmitted, icon: CheckCircle2 },
+          { label: 'Total Hours', value: `${totalHours}h`, icon: Clock },
+          { label: 'Employees', value: uniqueUsers, icon: Users },
+          { label: 'Projects', value: uniqueProjects, icon: FileText },
+          { label: 'Submitted Rows', value: totalSubmitted, icon: CheckCircle2 },
         ].map(({ label, value, icon: Icon }) => (
           <Card key={label}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -202,7 +202,7 @@ export default async function ReportsPage(props: Props) {
       {rows.length === 0 ? (
         <Card>
           <CardContent className="py-16 text-center text-muted-foreground">
-            Brak wpisów dla wybranych filtrów.
+            No entries found for the selected filters.
           </CardContent>
         </Card>
       ) : (
@@ -222,13 +222,13 @@ export default async function ReportsPage(props: Props) {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b bg-gray-50">
-                        <th className="text-left px-3 py-2 font-medium text-gray-600 w-32">Kod</th>
-                        <th className="text-left px-3 py-2 font-medium text-gray-600 w-40">Opis</th>
-                        <th className="text-left px-3 py-2 font-medium text-gray-600">Pracownik</th>
+                        <th className="text-left px-3 py-2 font-medium text-gray-600 w-32">Code</th>
+                        <th className="text-left px-3 py-2 font-medium text-gray-600 w-40">Description</th>
+                        <th className="text-left px-3 py-2 font-medium text-gray-600">Employee</th>
                         {allWeeks.map(w => (
                           <th key={w} className="text-center px-2 py-2 font-medium text-gray-600 whitespace-nowrap">
-                            <div className="text-xs text-gray-400">tyg.</div>
-                            <div>{format(parseISO(w), 'dd.MM', { locale: pl })}</div>
+                            <div className="text-xs text-gray-400">wk.</div>
+                            <div>{format(parseISO(w), 'dd.MM', { locale: enUS })}</div>
                           </th>
                         ))}
                         <th className="text-center px-3 py-2 font-bold text-gray-800 bg-gray-100 w-16">Σ</th>
@@ -268,10 +268,10 @@ export default async function ReportsPage(props: Props) {
                             <td className="px-3 py-2 text-center">
                               {userRow.isSubmitted ? (
                                 <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-100">
-                                  <CheckCircle2 className="h-3 w-3 mr-1" /> Zatwierdzony
+                                  <CheckCircle2 className="h-3 w-3 mr-1" /> Submitted
                                 </Badge>
                               ) : (
-                                <Badge variant="outline" className="text-amber-600 border-amber-300">Oczekuje</Badge>
+                                <Badge variant="outline" className="text-amber-600 border-amber-300">Pending</Badge>
                               )}
                             </td>
                           </tr>
@@ -279,7 +279,7 @@ export default async function ReportsPage(props: Props) {
                       )}
                       {/* Project subtotal */}
                       <tr className="bg-gray-50 font-semibold border-t-2 border-gray-200">
-                        <td colSpan={3} className="px-3 py-2 text-right text-xs text-gray-500 uppercase tracking-wide">Suma projektu</td>
+                        <td colSpan={3} className="px-3 py-2 text-right text-xs text-gray-500 uppercase tracking-wide">Project Total</td>
                         {allWeeks.map(w => {
                           const t = rows.filter(r => r.projectName === projectName).reduce((s, r) => s + (r.weekBreakdown[w] ?? 0), 0)
                           return (

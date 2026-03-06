@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Pencil } from 'lucide-react'
+import { UserPlus } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -14,12 +14,16 @@ import {
     DialogTitle,
     DialogFooter,
 } from '@/components/ui/dialog'
-import { updateProject } from '@/app/data/actions'
-import { Database } from '@/utils/supabase/types'
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select'
+import { inviteUser } from '@/app/data/actions'
 
-type Project = Database['public']['Tables']['projects']['Row']
-
-export default function EditProjectDialog({ project }: { project: Project }) {
+export default function InviteUserDialog() {
     const [open, setOpen] = useState(false)
     const [isPending, startTransition] = useTransition()
     const router = useRouter()
@@ -28,11 +32,11 @@ export default function EditProjectDialog({ project }: { project: Project }) {
         e.preventDefault()
         const formData = new FormData(e.currentTarget)
         startTransition(async () => {
-            const result = await updateProject(project.id, formData)
+            const result = await inviteUser(formData)
             if (result.error) {
                 toast.error(`Error: ${result.error}`)
             } else {
-                toast.success('Project updated successfully')
+                toast.success('Invitation sent successfully')
                 setOpen(false)
                 router.refresh()
             }
@@ -41,44 +45,41 @@ export default function EditProjectDialog({ project }: { project: Project }) {
 
     return (
         <>
-            <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
-                <Pencil className="mr-2 h-4 w-4" /> Edit
+            <Button onClick={() => setOpen(true)}>
+                <UserPlus className="mr-2 h-4 w-4" /> Invite
             </Button>
             <Dialog open={open} onOpenChange={setOpen}>
                 <DialogContent>
                     <DialogHeader>
-                        <DialogTitle>Edit Project</DialogTitle>
+                        <DialogTitle>Invite User</DialogTitle>
                     </DialogHeader>
                     <form onSubmit={handleSubmit} className="space-y-4">
                         <div className="space-y-2">
-                            <Label htmlFor="name">Name</Label>
-                            <Input id="name" name="name" defaultValue={project.name} required />
+                            <Label htmlFor="email">Email</Label>
+                            <Input id="email" name="email" type="email" required />
                         </div>
                         <div className="space-y-2">
-                            <Label htmlFor="project_code">Project Code</Label>
-                            <Input id="project_code" name="project_code" defaultValue={project.project_code || ''} />
+                            <Label htmlFor="full_name">Full Name</Label>
+                            <Input id="full_name" name="full_name" />
                         </div>
                         <div className="space-y-2">
-                            <Label htmlFor="description">Description</Label>
-                            <Input id="description" name="description" defaultValue={project.description || ''} />
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <input
-                                type="checkbox"
-                                id="is_active_check"
-                                name="is_active"
-                                value="true"
-                                defaultChecked={project.is_active ?? true}
-                                className="h-4 w-4"
-                            />
-                            <Label htmlFor="is_active_check">Project active</Label>
+                            <Label htmlFor="role">Role</Label>
+                            <Select name="role" defaultValue="employee">
+                                <SelectTrigger>
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="employee">Employee</SelectItem>
+                                    <SelectItem value="admin">Admin</SelectItem>
+                                </SelectContent>
+                            </Select>
                         </div>
                         <DialogFooter>
                             <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={isPending}>
                                 Cancel
                             </Button>
                             <Button type="submit" disabled={isPending}>
-                                {isPending ? 'Saving...' : 'Save'}
+                                {isPending ? 'Sending...' : 'Send Invitation'}
                             </Button>
                         </DialogFooter>
                     </form>

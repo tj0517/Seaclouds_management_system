@@ -33,7 +33,7 @@ export async function getAdminStats() {
     // Aggregate hours per project
     const projectMap = new Map<string, number>()
     for (const entry of entries) {
-        const name = (entry.sub_projects as any)?.projects?.name || 'Nieznany projekt'
+        const name = (entry.sub_projects as any)?.projects?.name || 'Unknown project'
         projectMap.set(name, (projectMap.get(name) || 0) + (entry.hours || 0))
     }
     const hoursPerProject = Array.from(projectMap.entries())

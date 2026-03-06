@@ -4,7 +4,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Seaclouds Timesheet",
-  description: "System zarządzania czasem pracy — Seaclouds",
+  description: "Time management system — Seaclouds",
 };
 
 export default function RootLayout({

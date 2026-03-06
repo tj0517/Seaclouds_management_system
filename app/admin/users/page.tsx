@@ -1,6 +1,7 @@
 import { getUsers } from '@/app/data/actions'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import UsersTable from '@/app/components/UsersTable'
+import InviteUserDialog from './InviteUserDialog'
 
 export default async function UsersPage() {
   const users = await getUsers()
@@ -9,18 +10,19 @@ export default async function UsersPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">Pracownicy</h2>
+          <h2 className="text-3xl font-bold tracking-tight">Employees</h2>
           <p className="text-muted-foreground mt-1">
-            Zarządzaj kontami pracowników i ich uprawnieniami.
+            Manage employee accounts and permissions.
           </p>
         </div>
+        <InviteUserDialog />
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Lista Pracowników</CardTitle>
+          <CardTitle>Employees List</CardTitle>
           <CardDescription>
-            Wszyscy użytkownicy zarejestrowani w systemie.
+            All users registered in the system.
           </CardDescription>
         </CardHeader>
         <CardContent>

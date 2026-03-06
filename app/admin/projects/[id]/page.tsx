@@ -28,7 +28,7 @@ export default async function ProjectDetailsPage({
     if (!project) {
         return (
             <div className="p-8 text-center text-muted-foreground">
-                Nie znaleziono projektu. <Link href="/admin/projects" className="underline">Wróć do listy.</Link>
+                Project not found. <Link href="/admin/projects" className="underline">Back to list.</Link>
             </div>
         )
     }
@@ -38,10 +38,10 @@ export default async function ProjectDetailsPage({
             <div className="flex items-center gap-4">
                 <Button variant="ghost" size="sm" asChild>
                     <Link href="/admin/projects">
-                        <ArrowLeft className="mr-2 h-4 w-4" /> Powrót
+                        <ArrowLeft className="mr-2 h-4 w-4" /> Back
                     </Link>
                 </Button>
-                <h2 className="text-3xl font-bold tracking-tight">Szczegóły Projektu</h2>
+                <h2 className="text-3xl font-bold tracking-tight">Project Details</h2>
             </div>
 
             <div className="grid gap-6 md:grid-cols-3">
@@ -54,15 +54,15 @@ export default async function ProjectDetailsPage({
                         </CardHeader>
                         <CardContent className="space-y-4">
                             <div className="flex items-center justify-between text-sm">
-                                <span className="text-muted-foreground">Status:</span>
+                                <span className="text-muted-foreground">Status</span>
                                 <Badge variant={project.is_active ? "default" : "destructive"} className={project.is_active ? "bg-emerald-600" : ""}>
                                     {project.is_active ? <CheckCircle2 className="h-3 w-3 mr-1" /> : <XCircle className="h-3 w-3 mr-1" />}
-                                    {project.is_active ? 'Aktywny' : 'Zakończony'}
+                                    {project.is_active ? 'Active' : 'Completed'}
                                 </Badge>
                             </div>
                             <div className="text-sm text-muted-foreground">
-                                <p className="font-medium mb-1 text-gray-700">Opis:</p>
-                                <p>{project.description || 'Brak opisu.'}</p>
+                                <p className="font-medium mb-1 text-gray-700">Description:</p>
+                                <p>{project.description || 'No description.'}</p>
                             </div>
                             <div className="flex gap-2 pt-2">
                                 <EditProjectDialog project={project} />
@@ -76,9 +76,9 @@ export default async function ProjectDetailsPage({
                 <div className="md:col-span-2">
                     <Card>
                         <CardHeader>
-                            <CardTitle>Przypisani Pracownicy</CardTitle>
+                            <CardTitle>Assigned Employees</CardTitle>
                             <CardDescription>
-                                Zaznacz pracowników, którzy mają dostęp do tego projektu.
+                                Select employees who have access to this project.
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
@@ -99,7 +99,7 @@ export default async function ProjectDetailsPage({
                                                     </AvatarFallback>
                                                 </Avatar>
                                                 <div className="flex flex-col">
-                                                    <span className="font-medium text-sm">{user.full_name || 'Użytkownik'}</span>
+                                                    <span className="font-medium text-sm">{user.full_name || 'User'}</span>
                                                     <span className="text-xs text-muted-foreground">{user.role}</span>
                                                 </div>
                                             </div>

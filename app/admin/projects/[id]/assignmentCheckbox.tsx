@@ -25,11 +25,11 @@ export default function AssignmentCheckbox({
 
         try {
             await toggleProjectAssignment(userId, projectId, val)
-            toast.success(val ? "Przypisano pracownika" : "Odebrano dostęp")
+            toast.success(val ? "Employee assigned" : "Access revoked")
         } catch (error) {
             // Revert on error
             setChecked(!val)
-            toast.error("Wystąpił błąd podczas zmiany uprawnień")
+            toast.error("Error changing permissions")
         } finally {
             setLoading(false)
         }

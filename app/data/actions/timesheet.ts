@@ -4,14 +4,6 @@ import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { addDays, subDays, format } from 'date-fns'
 
-type ReportEntry = {
-    id: string
-    work_date: string
-    hours: number
-    profiles: { full_name: string | null } | null
-    sub_projects: { code: string; description: string | null; projects: { name: string; project_code: string | null } | null } | null
-}
-
 // 4. Pobierz wpisy z danego tygodnia
 export async function getWeeklyEntries(userId: string, startOfWeek: string, endOfWeek: string) {
     const supabase = await createClient()
@@ -34,10 +26,10 @@ export async function getWeeklyEntries(userId: string, startOfWeek: string, endO
 export async function saveWorkEntry(projectId: string, date: string, hours: number) {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return { error: 'Brak sesji' }
+    if (!user) return { error: 'No session' }
 
     // Walidacja
-    if (hours < 0 || hours > 24) return { error: 'Nieprawidłowa liczba godzin' }
+    if (hours < 0 || hours > 24) return { error: 'Invalid number of hours' }
 
     // Jeśli 0, to usuwamy wpis (żeby nie trzymać śmieci w bazie)
     if (hours === 0) {
@@ -73,7 +65,7 @@ export async function submitWeek(weekStart: string, subprojectId: string) {
     const supabase = await createClient()
 
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return { error: 'Brak sesji' }
+    if (!user) return { error: 'No session' }
 
 
     const { error } = await supabase
@@ -87,7 +79,7 @@ export async function submitWeek(weekStart: string, subprojectId: string) {
 
     if (error) {
         if (error.code === '23505') {
-            return { error: 'Ten tydzień został już zatwierdzony.' }
+            return { error: 'This week has already been submitted.' }
         }
         return { error: error.message }
     }
@@ -115,32 +107,6 @@ export async function isWeekSubmitted(weekStart: string, subProjectId: string) {
     }
 
     return !!data
-}
-
-export async function getReportData(startDate: string, endDate: string) {
-    const supabase = await createClient()
-
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return []
-
-    const { data, error } = await supabase
-        .from('timesheet_entries')
-        .select(`
-      id,
-      work_date,
-      hours,
-      profiles:user_id ( full_name ),
-      sub_projects:sub_project_id ( code, description, projects:project_id ( name, project_code ) )
-    `)
-        .gte('work_date', startDate)
-        .lte('work_date', endDate)
-        .order('work_date', { ascending: true })
-
-    if (error) {
-        return []
-    }
-
-    return data as unknown as ReportEntry[]
 }
 
 export type GroupedReportRow = {
@@ -206,11 +172,11 @@ export async function getGroupedReportData(
     for (const entry of entries) {
         const sp = entry.sub_projects as any
         const project = sp?.projects
-        const projectName = project?.name ?? 'Nieznany projekt'
+        const projectName = project?.name ?? 'Unknown project'
         const projectCode = project?.project_code ?? null
         const subCode = sp?.code ?? '?'
         const subDesc = sp?.description ?? null
-        const userName = (entry.profiles as any)?.full_name ?? 'Nieznany użytkownik'
+        const userName = (entry.profiles as any)?.full_name ?? 'Unknown user'
         const weekStart = getWeekStart(entry.work_date)
         const key = `${projectName}||${subCode}||${userName}`
 
@@ -287,7 +253,7 @@ export async function getReportFilterOptions(startDate: string, endDate: string)
 export async function copyWeek(currentWeekStart: string) {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return { error: 'Brak sesji' }
+    if (!user) return { error: 'No session' }
 
     const currentStart = new Date(currentWeekStart)
     const prevStart = subDays(currentStart, 7)
@@ -305,7 +271,7 @@ export async function copyWeek(currentWeekStart: string) {
         .lte('work_date', prevEndStr)
 
     if (!oldEntries || oldEntries.length === 0) {
-        return { error: 'Brak wpisów w poprzednim tygodniu' }
+        return { error: 'No entries in the previous week' }
     }
 
 

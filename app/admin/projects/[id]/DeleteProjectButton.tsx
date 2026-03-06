@@ -24,11 +24,11 @@ export default function DeleteProjectButton({ projectId, projectName }: { projec
         startTransition(async () => {
             const result = await deleteProject(projectId)
             if (result.error) {
-                toast.error(`Błąd: ${result.error}`)
+                toast.error(`Error: ${result.error}`)
             } else {
                 toast.success(result.softDeleted
-                    ? 'Projekt dezaktywowany (zawiera wpisy czasu pracy)'
-                    : 'Projekt został usunięty')
+                    ? 'Project deactivated (contains time entries)'
+                    : 'Project deleted successfully')
                 router.push('/admin/projects')
             }
             setOpen(false)
@@ -38,23 +38,23 @@ export default function DeleteProjectButton({ projectId, projectName }: { projec
     return (
         <>
             <Button variant="destructive" size="sm" onClick={() => setOpen(true)}>
-                <Trash2 className="mr-2 h-4 w-4" /> Usuń / Dezaktywuj
+                <Trash2 className="mr-2 h-4 w-4" /> Delete / Deactivate
             </Button>
             <Dialog open={open} onOpenChange={setOpen}>
                 <DialogContent>
                     <DialogHeader>
-                        <DialogTitle>Usuń projekt</DialogTitle>
+                        <DialogTitle>Delete Project</DialogTitle>
                         <DialogDescription>
-                            Czy na pewno chcesz usunąć projekt <strong>{projectName}</strong>?
-                            Jeśli istnieją wpisy czasu pracy, projekt zostanie dezaktywowany, a nie trwale usunięty.
+                            Are you sure you want to delete <strong>{projectName}</strong>?
+                            If time entries exist, the project will be deactivated instead of permanently deleted.
                         </DialogDescription>
                     </DialogHeader>
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setOpen(false)} disabled={isPending}>
-                            Anuluj
+                            Cancel
                         </Button>
                         <Button variant="destructive" onClick={handleDelete} disabled={isPending}>
-                            {isPending ? 'Usuwam...' : 'Usuń / Dezaktywuj'}
+                            {isPending ? 'Deleting...' : 'Delete / Deactivate'}
                         </Button>
                     </DialogFooter>
                 </DialogContent>
