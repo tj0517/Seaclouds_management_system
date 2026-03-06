@@ -92,12 +92,18 @@ export async function updateUserRole(userId: string, newRole: 'admin' | 'employe
 
 export async function inviteUser(formData: FormData) {
     const email = formData.get('email') as string
+    const password = formData.get('password') as string
     const full_name = (formData.get('full_name') as string) || null
     const role = ((formData.get('role') as string) || 'employee') as 'admin' | 'employee'
 
     if (!email) return { error: 'Email is required' }
+    if (!password || password.length < 6) return { error: 'Password must be at least 6 characters' }
 
-    const { data, error } = await getSupabaseAdmin().auth.admin.inviteUserByEmail(email)
+    const { data, error } = await getSupabaseAdmin().auth.admin.createUser({
+        email,
+        password,
+        email_confirm: true,
+    })
 
     if (error) return { error: error.message }
 
@@ -105,7 +111,7 @@ export async function inviteUser(formData: FormData) {
 
     const { error: profileError } = await getSupabaseAdmin()
         .from('profiles')
-        .insert({ id: userId, full_name, role })
+        .upsert({ id: userId, full_name, role }, { onConflict: 'id' })
 
     if (profileError) return { error: profileError.message }
 

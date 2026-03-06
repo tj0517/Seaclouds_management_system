@@ -36,7 +36,7 @@ export default function InviteUserDialog() {
             if (result.error) {
                 toast.error(`Error: ${result.error}`)
             } else {
-                toast.success('Invitation sent successfully')
+                toast.success('User created successfully')
                 setOpen(false)
                 router.refresh()
             }
@@ -46,17 +46,21 @@ export default function InviteUserDialog() {
     return (
         <>
             <Button onClick={() => setOpen(true)}>
-                <UserPlus className="mr-2 h-4 w-4" /> Invite
+                <UserPlus className="mr-2 h-4 w-4" /> Add User
             </Button>
             <Dialog open={open} onOpenChange={setOpen}>
                 <DialogContent>
                     <DialogHeader>
-                        <DialogTitle>Invite User</DialogTitle>
+                        <DialogTitle>Add User</DialogTitle>
                     </DialogHeader>
                     <form onSubmit={handleSubmit} className="space-y-4">
                         <div className="space-y-2">
                             <Label htmlFor="email">Email</Label>
                             <Input id="email" name="email" type="email" required />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="password">Password</Label>
+                            <Input id="password" name="password" type="password" minLength={6} required />
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="full_name">Full Name</Label>
@@ -79,7 +83,7 @@ export default function InviteUserDialog() {
                                 Cancel
                             </Button>
                             <Button type="submit" disabled={isPending}>
-                                {isPending ? 'Sending...' : 'Send Invitation'}
+                                {isPending ? 'Creating...' : 'Create User'}
                             </Button>
                         </DialogFooter>
                     </form>
