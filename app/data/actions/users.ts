@@ -1,7 +1,7 @@
 'use server'
 
 import { createClient } from '@/utils/supabase/server'
-import { supabaseAdmin } from '@/utils/supabase/admin'
+import { getSupabaseAdmin } from '@/utils/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import { Database } from '@/utils/supabase/types'
 
@@ -97,13 +97,13 @@ export async function inviteUser(formData: FormData) {
 
     if (!email) return { error: 'Email is required' }
 
-    const { data, error } = await supabaseAdmin.auth.admin.inviteUserByEmail(email)
+    const { data, error } = await getSupabaseAdmin().auth.admin.inviteUserByEmail(email)
 
     if (error) return { error: error.message }
 
     const userId = data.user.id
 
-    const { error: profileError } = await supabaseAdmin
+    const { error: profileError } = await getSupabaseAdmin()
         .from('profiles')
         .insert({ id: userId, full_name, role })
 
@@ -116,7 +116,7 @@ export async function inviteUser(formData: FormData) {
 export async function deactivateUser(userId: string) {
     try {
         // Use admin client to bypass RLS
-        const { error } = await supabaseAdmin
+        const { error } = await getSupabaseAdmin()
             .from('project_assignments')
             .delete()
             .eq('user_id', userId)
