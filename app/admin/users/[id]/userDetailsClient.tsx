@@ -66,6 +66,7 @@ export default function UserDetailsClient({
     }
 
     return (
+        <>
         <div className="space-y-6">
             <div className="flex items-center gap-4">
                 <Button variant="ghost" size="sm" asChild>
@@ -190,5 +191,6 @@ export default function UserDetailsClient({
                 </DialogFooter>
             </DialogContent>
         </Dialog>
+        </>
     )
 }
