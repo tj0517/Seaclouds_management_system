@@ -93,7 +93,7 @@ export async function updateUserRole(userId: string, newRole: 'admin' | 'employe
 export async function inviteUser(formData: FormData) {
     const email = formData.get('email') as string
     const full_name = (formData.get('full_name') as string) || null
-    const role = (formData.get('role') as string) || 'employee'
+    const role = ((formData.get('role') as string) || 'employee') as 'admin' | 'employee'
 
     if (!email) return { error: 'Email is required' }
 
