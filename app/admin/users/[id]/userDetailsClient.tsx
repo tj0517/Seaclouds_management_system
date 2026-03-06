@@ -18,6 +18,7 @@ import {
     DialogFooter,
 } from '@/components/ui/dialog'
 import { useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import { Database } from '@/utils/supabase/types'
 import { updateUserRole, deactivateUser } from '@/app/data/actions'
 
@@ -40,16 +41,20 @@ export default function UserDetailsClient({
     const [isEditing, setIsEditing] = useState(false)
     const [isPending, startTransition] = useTransition()
     const [deactivateOpen, setDeactivateOpen] = useState(false)
+    const router = useRouter()
 
     const handleDeactivate = () => {
         startTransition(async () => {
             const result = await deactivateUser(userId)
             if (result.error) {
                 toast.error(`Error: ${result.error}`)
+                setDeactivateOpen(false)
             } else {
                 toast.success('All employee assignments removed')
+                setDeactivateOpen(false)
+                router.push('/admin/users')
+                router.refresh()
             }
-            setDeactivateOpen(false)
         })
     }
 
@@ -61,6 +66,7 @@ export default function UserDetailsClient({
                 toast.error(`Error changing role: ${result.error}`)
             } else {
                 toast.success('Role changed successfully')
+                router.refresh()
             }
         })
     }

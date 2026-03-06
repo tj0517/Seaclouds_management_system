@@ -114,20 +114,22 @@ export async function inviteUser(formData: FormData) {
 }
 
 export async function deactivateUser(userId: string) {
-    const supabase = await createClient()
+    try {
+        // Use admin client to bypass RLS
+        const { error } = await supabaseAdmin
+            .from('project_assignments')
+            .delete()
+            .eq('user_id', userId)
 
-    // Remove all project assignments as a soft block
-    const { error } = await supabase
-        .from('project_assignments')
-        .delete()
-        .eq('user_id', userId)
+        if (error) {
+            return { error: error.message }
+        }
 
-    if (error) {
-        return { error: error.message }
+        revalidatePath(`/admin/users/${userId}`)
+        revalidatePath('/admin/users')
+        return { success: true }
+    } catch (e: any) {
+        return { error: e.message || 'Unknown error' }
     }
-
-    revalidatePath(`/admin/users/${userId}`)
-    revalidatePath('/admin/users')
-    return { success: true }
 }
 
