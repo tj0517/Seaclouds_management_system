@@ -1,13 +1,18 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { ChevronLeft, ChevronRight, CheckCircle2 } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { ChevronLeft, ChevronRight, CheckCircle2, Undo2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { adminWithdrawSubmission } from '@/app/data/actions/timesheet'
+import { toast } from 'sonner'
 
 export type UserRow = {
+  userId: string
   userName: string
+  subProjectId: string
   isSubmitted: boolean
   dailyHours: Record<string, number>
   weekTotal: number
@@ -15,6 +20,7 @@ export type UserRow = {
 
 export type SubProjectData = {
   code: string
+  subProjectId: string
   description: string | null
   users: UserRow[]
 }
@@ -118,6 +124,45 @@ function buildAggregatedProjects(weeks: WeekData[]): AggregatedProject[] {
       })),
     })),
   }))
+}
+
+function StatusCell({ userRow, weekStart }: { userRow: UserRow; weekStart: string }) {
+  const router = useRouter()
+  const [loading, setLoading] = useState(false)
+  const [withdrawn, setWithdrawn] = useState(false)
+
+  if (!userRow.isSubmitted || withdrawn) {
+    return <Badge variant="outline" className="text-amber-600 border-amber-300">Pending</Badge>
+  }
+
+  const handleWithdraw = async () => {
+    setLoading(true)
+    const result = await adminWithdrawSubmission(userRow.userId, weekStart, userRow.subProjectId)
+    setLoading(false)
+    if (result.success) {
+      setWithdrawn(true)
+      toast.success(`Withdrawn submission for ${userRow.userName}`)
+      router.refresh()
+    } else if (result.error) {
+      toast.error(result.error)
+    }
+  }
+
+  return (
+    <div className="flex items-center justify-center gap-1.5">
+      <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-100">
+        <CheckCircle2 className="h-3 w-3 mr-1" /> Submitted
+      </Badge>
+      <button
+        onClick={handleWithdraw}
+        disabled={loading}
+        title="Withdraw submission"
+        className="text-amber-500 hover:text-amber-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+      >
+        <Undo2 className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  )
 }
 
 export default function WeeklyReportSlider({ weeks }: { weeks: WeekData[] }) {
@@ -277,13 +322,7 @@ export default function WeeklyReportSlider({ weeks }: { weeks: WeekData[] }) {
                           ))}
                           <td className="px-3 py-2 text-center font-bold text-blue-600 bg-gray-50">{userRow.weekTotal}h</td>
                           <td className="px-3 py-2 text-center">
-                            {userRow.isSubmitted ? (
-                              <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-100">
-                                <CheckCircle2 className="h-3 w-3 mr-1" /> Submitted
-                              </Badge>
-                            ) : (
-                              <Badge variant="outline" className="text-amber-600 border-amber-300">Pending</Badge>
-                            )}
+                            <StatusCell userRow={userRow} weekStart={week.weekStart} />
                           </td>
                         </tr>
                       ))

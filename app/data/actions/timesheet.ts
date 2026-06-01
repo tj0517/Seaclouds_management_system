@@ -3,6 +3,7 @@
 import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { addDays, subDays, format } from 'date-fns'
+import { sendAdminNotification } from '@/lib/email'
 
 // 4. Pobierz wpisy z danego tygodnia
 export async function getWeeklyEntries(userId: string, startOfWeek: string, endOfWeek: string) {
@@ -84,7 +85,58 @@ export async function submitWeek(weekStart: string, subprojectId: string) {
         return { error: error.message }
     }
 
+    // Fire-and-forget email notification to admins
+    const notifyAdmins = async () => {
+        try {
+            const { data: profile } = await supabase
+                .from('profiles')
+                .select('full_name')
+                .eq('id', user.id)
+                .single()
+
+            const { data: subProject } = await supabase
+                .from('sub_projects')
+                .select('code')
+                .eq('id', subprojectId)
+                .single()
+
+            await sendAdminNotification({
+                employeeName: profile?.full_name ?? 'Unknown',
+                subProjectCode: subProject?.code ?? subprojectId,
+                weekStart,
+            })
+        } catch (e) {
+            console.error('Failed to send admin notification:', e)
+        }
+    }
+    notifyAdmins()
+
     revalidatePath('/')
+    return { success: true }
+}
+
+export async function adminWithdrawSubmission(userId: string, weekStart: string, subprojectId: string) {
+    const supabase = await createClient()
+
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return { error: 'No session' }
+
+    // Verify caller is admin
+    const { data: isAdmin } = await supabase.rpc('is_admin')
+    if (!isAdmin) return { error: 'Unauthorized' }
+
+    const { error } = await supabase
+        .from('timesheet_submissions')
+        .delete()
+        .eq('user_id', userId)
+        .eq('sub_project_id', subprojectId)
+        .eq('week_start', weekStart)
+
+    if (error) {
+        return { error: error.message }
+    }
+
+    revalidatePath('/admin/reports')
     return { success: true }
 }
 
@@ -113,7 +165,9 @@ export type GroupedReportRow = {
     projectName: string
     projectCode: string | null
     subProjectCode: string
+    subProjectId: string
     subProjectDescription: string | null
+    userId: string
     userName: string
     totalHours: number
     dailyBreakdown: Record<string, number> // work_date -> hours
@@ -185,7 +239,9 @@ export async function getGroupedReportData(
                 projectName,
                 projectCode,
                 subProjectCode: subCode,
+                subProjectId: entry.sub_project_id,
                 subProjectDescription: subDesc,
+                userId: entry.user_id,
                 userName,
                 totalHours: 0,
                 dailyBreakdown: {},
@@ -255,7 +311,8 @@ export async function copyWeek(currentWeekStart: string) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return { error: 'No session' }
 
-    const currentStart = new Date(currentWeekStart)
+    // Parse as local date (append T00:00:00 to avoid UTC shift)
+    const currentStart = new Date(currentWeekStart + 'T00:00:00')
     const prevStart = subDays(currentStart, 7)
     const prevEnd = addDays(prevStart, 6)
 
@@ -274,9 +331,8 @@ export async function copyWeek(currentWeekStart: string) {
         return { error: 'No entries in the previous week' }
     }
 
-
     const newEntries = oldEntries.map(entry => {
-        const oldDate = new Date(entry.work_date)
+        const oldDate = new Date(entry.work_date + 'T00:00:00')
         const newDate = addDays(oldDate, 7)
         return {
             user_id: user.id,

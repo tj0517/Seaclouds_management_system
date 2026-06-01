@@ -98,12 +98,14 @@ export default async function ReportsPage(props: Props) {
               const usersWithHours = spData.users
                 .filter(u => week.days.some(d => (u.dailyBreakdown[d] ?? 0) > 0))
                 .map(u => ({
+                  userId: u.userId,
                   userName: u.userName,
+                  subProjectId: u.subProjectId,
                   isSubmitted: u.isSubmitted,
                   dailyHours: Object.fromEntries(week.days.map(d => [d, u.dailyBreakdown[d] ?? 0])),
                   weekTotal: week.days.reduce((s, d) => s + (u.dailyBreakdown[d] ?? 0), 0),
                 }))
-              return { code: spCode, description: spData.description, users: usersWithHours }
+              return { code: spCode, subProjectId: spData.users[0]?.subProjectId ?? '', description: spData.description, users: usersWithHours }
             })
             .filter(sp => sp.users.length > 0)
 

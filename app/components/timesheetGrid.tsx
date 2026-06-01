@@ -6,7 +6,7 @@ import { useState, useEffect } from 'react'
 import { format, addDays } from 'date-fns'
 import { enUS } from 'date-fns/locale'
 import { saveWorkEntry, copyWeek } from '@/app/data/actions'
-import { Loader2, AlertCircle } from 'lucide-react'
+import { Loader2, AlertCircle, ChevronRight } from 'lucide-react'
 import { toast } from 'sonner'
 import { Fragment } from 'react'
 import SubmitWeekButton from './SubmitWeekButton'
@@ -33,9 +33,6 @@ export default function TimesheetGrid({
   const router = useRouter()
   const [saving, setSaving] = useState(false)
 
-
-  // Inicjalizacja danych
-  // Inicjalizacja danych
   const initialData: Record<string, Record<string, number>> = {}
   existingEntries.forEach(entry => {
     if (!initialData[entry.sub_project_id]) initialData[entry.sub_project_id] = {}
@@ -53,7 +50,6 @@ export default function TimesheetGrid({
 
   const [gridData, setGridData] = useState(initialData)
 
-  // Efekt do aktualizacji stanu, gdy przyjdą nowe dane z serwera (np. po Copy Week)
   useEffect(() => {
     const newData: Record<string, Record<string, number>> = {}
     existingEntries.forEach(entry => {
@@ -66,10 +62,7 @@ export default function TimesheetGrid({
   const weekDays = Array.from({ length: 7 }).map((_, i) => addDays(weekStart, i))
 
   const handleChange = (projectId: string, dateStr: string, value: string) => {
-    // Pozwalamy na pusty ciąg (kasowanie), zamieniamy na 0 przy obliczeniach
     let num = value === '' ? 0 : parseFloat(value)
-
-    // Proste zabezpieczenie przed ujemnymi w UI (choć backend też to sprawdza)
     if (num < 0) num = 0
 
     setGridData(prev => ({
@@ -91,8 +84,6 @@ export default function TimesheetGrid({
     setSaving(false)
   }
 
-
-
   const dailyTotals = weekDays.map(day => {
     const dateStr = format(day, 'yyyy-MM-dd')
     return subProjects.reduce((acc, sp) => {
@@ -104,9 +95,6 @@ export default function TimesheetGrid({
 
   const [submittedProjects, setSubmittedProjects] = useState<Record<string, boolean>>(initialSubmissionStatus)
 
-
-
-  // Grupuj subprojekty po projekcie
   const projectSubProjects = projects.reduce((acc, project) => {
     acc[project.id] = subProjects.filter(sp => sp.project_id === project.id)
     return acc
@@ -114,7 +102,7 @@ export default function TimesheetGrid({
 
   return (
     <div className="relative">
-      {/* Status zapisywania */}
+      {/* Save status */}
       <div className="absolute top-[-30px] right-0 h-6 flex items-center justify-end min-w-[100px]">
         {saving ? (
           <span className="text-xs text-blue-600 flex items-center gap-1">
@@ -125,9 +113,9 @@ export default function TimesheetGrid({
         )}
       </div>
 
-      <div className="overflow-x-auto bg-white rounded-lg shadow border border-gray-200">
+      {/* ==================== DESKTOP TABLE ==================== */}
+      <div className="hidden md:block overflow-x-auto bg-white rounded-lg shadow border border-gray-200">
         <table className="min-w-full divide-y divide-gray-200 text-sm">
-          {/* --- NAGŁÓWEK --- */}
           <thead className="bg-gray-50">
             <tr>
               <th className="px-4 py-3 text-left font-medium text-gray-500 w-48 min-w-[150px]">Project</th>
@@ -146,13 +134,11 @@ export default function TimesheetGrid({
             </tr>
           </thead>
 
-          {/* --- BODY --- */}
           <tbody className="divide-y divide-gray-200">
             {projects.map(project => {
               const pSubProjects = projectSubProjects[project.id] || []
               const isExpanded = expandedProjects[project.id]
 
-              // Suma Projektu (ze wszystkich subprojektów)
               const projectDailyTotals = weekDays.map(day => {
                 const dateStr = format(day, 'yyyy-MM-dd')
                 return pSubProjects.reduce((acc, sp) => {
@@ -163,7 +149,6 @@ export default function TimesheetGrid({
 
               return (
                 <Fragment key={project.id}>
-                  {/* --- NAGŁÓWEK PROJEKTU --- */}
                   <tr className="bg-gray-100/50 hover:bg-gray-100 cursor-pointer" onClick={() => toggleProject(project.id)}>
                     <td colSpan={2} className="px-4 py-3 font-semibold text-gray-800 flex items-center gap-2">
                       <span className={`transform transition-transform ${isExpanded ? 'rotate-90' : ''}`}>▶</span>
@@ -183,7 +168,6 @@ export default function TimesheetGrid({
                     </td>
                   </tr>
 
-                  {/* --- WIERSZE SUBPROJEKTÓW --- */}
                   {isExpanded && pSubProjects.map(subProject => {
                     const rowTotal = weekDays.reduce((acc, day) => {
                       const dateStr = format(day, 'yyyy-MM-dd')
@@ -225,7 +209,6 @@ export default function TimesheetGrid({
                           {rowTotal > 0 ? rowTotal : <span className="text-gray-300">-</span>}
                         </td>
                         <td className="px-4 py-2 text-center border-l border-gray-200">
-
                           {submittedProjects[subProject.id] ? (
                             <span className="text-green-600">Submitted</span>
                           ) : (
@@ -261,13 +244,11 @@ export default function TimesheetGrid({
             )}
           </tbody>
 
-          {/* --- STOPKA (NOWOŚĆ) --- */}
           <tfoot className="bg-gray-100 font-bold text-gray-900 border-t-2 border-gray-200">
             <tr>
               <td className="px-4 py-3 text-right text-gray-500 text-xs uppercase tracking-wider"></td>
               <td className="px-4 py-3 text-gray-500 text-xs uppercase tracking-wider">Total:</td>
               {dailyTotals.map((total, index) => {
-                // Ostrzeżenie jeśli ktoś pracuje ponad 12h dziennie
                 const isOverworked = total > 12
                 return (
                   <td key={index} className={`px-2 py-3 text-center border-l border-gray-200 ${isOverworked ? 'text-red-600' : ''}`}>
@@ -283,9 +264,8 @@ export default function TimesheetGrid({
                   onClick={async () => {
                     setSaving(true)
                     await copyWeek(format(weekStart, 'yyyy-MM-dd'))
-                    router.refresh() // Added: 4. Call router.refresh()
+                    router.refresh()
                     setSaving(false)
-                    // Opcjonalnie: reload strony, ale saveWorkEntry robi revalidatePath
                   }}
                   variant="outline"
                   className="bg-blue-50 hover:bg-blue-100 text-blue-600 border-blue-200"
@@ -298,6 +278,153 @@ export default function TimesheetGrid({
           </tfoot>
         </table>
       </div>
-    </div >
+
+      {/* ==================== MOBILE VIEW ==================== */}
+      <div className="md:hidden space-y-3">
+        {projects.length === 0 && (
+          <div className="bg-white rounded-lg shadow border border-gray-200 px-6 py-12 text-center text-gray-500">
+            <div className="flex flex-col items-center gap-2">
+              <AlertCircle className="h-8 w-8 text-gray-400" />
+              <p>No assigned projects.</p>
+            </div>
+          </div>
+        )}
+
+        {projects.map(project => {
+          const pSubProjects = projectSubProjects[project.id] || []
+          const isExpanded = expandedProjects[project.id]
+
+          const projectWeeklyTotal = weekDays.reduce((acc, day) => {
+            const dateStr = format(day, 'yyyy-MM-dd')
+            return acc + pSubProjects.reduce((a, sp) => a + (gridData[sp.id]?.[dateStr] || 0), 0)
+          }, 0)
+
+          return (
+            <div key={project.id}>
+              {/* Project header */}
+              <button
+                onClick={() => toggleProject(project.id)}
+                className="w-full flex items-center justify-between bg-white rounded-lg shadow border border-gray-200 px-4 py-3"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <ChevronRight className={`h-4 w-4 text-gray-400 flex-shrink-0 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                  <span className="font-semibold text-gray-800 truncate">{project.name}</span>
+                  {project.project_code && (
+                    <span className="text-xs font-mono text-gray-400 flex-shrink-0">{project.project_code}</span>
+                  )}
+                </div>
+                <span className="text-sm font-bold text-gray-600 flex-shrink-0 ml-2">
+                  {projectWeeklyTotal > 0 ? `${projectWeeklyTotal}h` : '-'}
+                </span>
+              </button>
+
+              {/* Sub-project cards */}
+              {isExpanded && (
+                <div className="mt-2 space-y-2 pl-2">
+                  {pSubProjects.map(subProject => {
+                    const isDisabled = submittedProjects[subProject.id]
+                    const rowTotal = weekDays.reduce((acc, day) => {
+                      const dateStr = format(day, 'yyyy-MM-dd')
+                      return acc + (gridData[subProject.id]?.[dateStr] || 0)
+                    }, 0)
+
+                    return (
+                      <div
+                        key={subProject.id}
+                        className={`bg-white rounded-lg shadow-sm border ${isDisabled ? 'border-emerald-200 bg-emerald-50/30' : 'border-gray-200'}`}
+                      >
+                        {/* Sub-project header */}
+                        <div className="px-3 py-2 border-b border-gray-100 flex items-center justify-between">
+                          <div className="min-w-0">
+                            <div className="text-xs font-mono text-blue-700 font-semibold">{subProject.code}</div>
+                            <div className="text-xs text-gray-500 truncate">{subProject.description || 'No description'}</div>
+                          </div>
+                          <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                            <span className="text-sm font-bold text-blue-600">{rowTotal > 0 ? `${rowTotal}h` : '-'}</span>
+                          </div>
+                        </div>
+
+                        {/* Day inputs - 2 column grid */}
+                        <div className="grid grid-cols-2 gap-px bg-gray-100 p-px">
+                          {weekDays.map(day => {
+                            const dateStr = format(day, 'yyyy-MM-dd')
+                            const hours = gridData[subProject.id]?.[dateStr]
+                            const isWeekend = day.getDay() === 0 || day.getDay() === 6
+
+                            return (
+                              <div
+                                key={dateStr}
+                                className={`flex items-center justify-between px-3 py-2 ${isWeekend ? 'bg-gray-50' : 'bg-white'}`}
+                              >
+                                <span className={`text-xs font-medium ${isWeekend ? 'text-red-400' : 'text-gray-500'}`}>
+                                  {format(day, 'EEE', { locale: enUS })} {format(day, 'dd.MM')}
+                                </span>
+                                <input
+                                  type="number"
+                                  inputMode="decimal"
+                                  min="0"
+                                  max="24"
+                                  step="0.5"
+                                  disabled={isDisabled}
+                                  className={`w-14 h-8 text-center text-sm rounded border border-gray-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 ${isWeekend ? 'bg-gray-50' : 'bg-white'} ${hours && hours > 12 ? 'text-red-600 font-bold' : ''} disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed`}
+                                  value={!hours ? '' : hours}
+                                  placeholder="-"
+                                  onChange={(e) => handleChange(subProject.id, dateStr, e.target.value)}
+                                  onBlur={() => handleSave(subProject.id, dateStr)}
+                                />
+                              </div>
+                            )
+                          })}
+                        </div>
+
+                        {/* Submit row */}
+                        <div className="px-3 py-2 border-t border-gray-100 flex items-center justify-end">
+                          {submittedProjects[subProject.id] ? (
+                            <span className="text-xs text-emerald-600 font-medium">Submitted</span>
+                          ) : (
+                            <SubmitWeekButton
+                              weekStart={format(weekStart, 'yyyy-MM-dd')}
+                              subprojectId={subProject.id}
+                              isSubmitted={submittedProjects[subProject.id] || false}
+                              onSuccess={() => {
+                                setSubmittedProjects(prev => ({
+                                  ...prev,
+                                  [subProject.id]: true
+                                }))
+                              }}
+                            />
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )
+        })}
+
+        {/* Mobile footer: total + copy */}
+        <div className="bg-white rounded-lg shadow border border-gray-200 px-4 py-3 flex items-center justify-between">
+          <div>
+            <span className="text-xs text-gray-500 uppercase tracking-wide">Week total</span>
+            <div className="text-xl font-bold text-blue-700">{weeklyTotal > 0 ? `${weeklyTotal}h` : '-'}</div>
+          </div>
+          <Button
+            onClick={async () => {
+              setSaving(true)
+              await copyWeek(format(weekStart, 'yyyy-MM-dd'))
+              router.refresh()
+              setSaving(false)
+            }}
+            variant="outline"
+            className="bg-blue-50 hover:bg-blue-100 text-blue-600 border-blue-200"
+            disabled={saving}
+          >
+            Copy (last week)
+          </Button>
+        </div>
+      </div>
+    </div>
   )
 }
