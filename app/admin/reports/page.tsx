@@ -1,12 +1,13 @@
 import { getGroupedReportData, getReportFilterOptions } from '@/app/data/actions/timesheet'
-import { format, startOfMonth, endOfMonth, eachWeekOfInterval, parseISO } from 'date-fns'
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, eachWeekOfInterval, addDays, parseISO, startOfWeek, min, max } from 'date-fns'
 import { enUS } from 'date-fns/locale'
 import { Filter, FileText, Calendar, CheckCircle2, Clock, Users, X } from 'lucide-react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
+import WeeklyReportSlider, { type WeekData } from './WeeklyReportSlider'
 
 type Props = {
   searchParams: Promise<{ from?: string; to?: string; user?: string; code?: string; project?: string }>
@@ -25,7 +26,6 @@ export default async function ReportsPage(props: Props) {
   const filterCode = searchParams.code || ''
   const filterProject = searchParams.project || ''
 
-  // Fetch filter options (unfiltered — always show all available for the date range)
   const [rows, filterOptions] = await Promise.all([
     getGroupedReportData(dateFrom, dateTo, {
       userName: filterUser || undefined,
@@ -35,11 +35,27 @@ export default async function ReportsPage(props: Props) {
     getReportFilterOptions(dateFrom, dateTo),
   ])
 
-  // Collect all weeks in the range for column headers
-  const allWeeks: string[] = eachWeekOfInterval(
-    { start: parseISO(dateFrom), end: parseISO(dateTo) },
+  // Generate weeks in the range, each with its days clamped to the from/to range
+  const rangeStart = parseISO(dateFrom)
+  const rangeEnd = parseISO(dateTo)
+
+  const weekStartDates = eachWeekOfInterval(
+    { start: rangeStart, end: rangeEnd },
     { weekStartsOn: 1 }
-  ).map(d => format(d, 'yyyy-MM-dd'))
+  )
+
+  const weeks = weekStartDates.map(ws => {
+    const weekEnd = addDays(ws, 6)
+    const clampedStart = max([ws, rangeStart])
+    const clampedEnd = min([weekEnd, rangeEnd])
+    const days = eachDayOfInterval({ start: clampedStart, end: clampedEnd }).map(d => format(d, 'yyyy-MM-dd'))
+    return {
+      weekStart: format(ws, 'yyyy-MM-dd'),
+      weekEndLabel: format(min([weekEnd, rangeEnd]), 'dd.MM'),
+      weekStartLabel: format(max([ws, rangeStart]), 'dd.MM'),
+      days,
+    }
+  })
 
   // Summary stats
   const totalHours = rows.reduce((s, r) => s + r.totalHours, 0)
@@ -60,6 +76,59 @@ export default async function ReportsPage(props: Props) {
     return acc
   }, {} as Record<string, { code: string | null; subProjects: Record<string, { description: string | null; users: typeof rows }> }>)
 
+  // Build serializable WeekData[] for the client slider
+  const weekData: WeekData[] = weeks
+    .map(week => {
+      const days = week.days.map(d => {
+        const date = parseISO(d)
+        return {
+          key: d,
+          dayName: format(date, 'EEE', { locale: enUS }),
+          dateLabel: format(date, 'dd.MM'),
+          isWeekend: date.getDay() === 0 || date.getDay() === 6,
+        }
+      })
+
+      const projects = Object.entries(byProject)
+        .map(([projectName, projectData]) => {
+          const projectWeekRows = rows.filter(r => r.projectName === projectName)
+
+          const subProjects = Object.entries(projectData.subProjects)
+            .map(([spCode, spData]) => {
+              const usersWithHours = spData.users
+                .filter(u => week.days.some(d => (u.dailyBreakdown[d] ?? 0) > 0))
+                .map(u => ({
+                  userName: u.userName,
+                  isSubmitted: u.isSubmitted,
+                  dailyHours: Object.fromEntries(week.days.map(d => [d, u.dailyBreakdown[d] ?? 0])),
+                  weekTotal: week.days.reduce((s, d) => s + (u.dailyBreakdown[d] ?? 0), 0),
+                }))
+              return { code: spCode, description: spData.description, users: usersWithHours }
+            })
+            .filter(sp => sp.users.length > 0)
+
+          const dailyTotals = Object.fromEntries(
+            week.days.map(d => [d, projectWeekRows.reduce((s, r) => s + (r.dailyBreakdown[d] ?? 0), 0)])
+          )
+          const weekTotal = Object.values(dailyTotals).reduce((a, b) => a + b, 0)
+
+          return { name: projectName, code: projectData.code, subProjects, weekTotal, dailyTotals }
+        })
+        .filter(p => p.weekTotal > 0)
+
+      const weekTotal = projects.reduce((s, p) => s + p.weekTotal, 0)
+
+      return {
+        weekStart: week.weekStart,
+        weekStartLabel: week.weekStartLabel,
+        weekEndLabel: week.weekEndLabel,
+        days,
+        projects,
+        weekTotal,
+      }
+    })
+    .filter(w => w.weekTotal > 0)
+
   return (
     <div className="space-y-6">
       {/* HEADER */}
@@ -76,7 +145,6 @@ export default async function ReportsPage(props: Props) {
       <Card>
         <CardContent className="pt-4">
           <form className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 items-end">
-            {/* Date range */}
             <div>
               <label className="block text-xs font-medium mb-1 text-muted-foreground uppercase tracking-wide">From</label>
               <div className="relative">
@@ -92,7 +160,6 @@ export default async function ReportsPage(props: Props) {
               </div>
             </div>
 
-            {/* Project filter */}
             <div>
               <label className="block text-xs font-medium mb-1 text-muted-foreground uppercase tracking-wide">Project</label>
               <select
@@ -107,7 +174,6 @@ export default async function ReportsPage(props: Props) {
               </select>
             </div>
 
-            {/* Sub-project code filter */}
             <div>
               <label className="block text-xs font-medium mb-1 text-muted-foreground uppercase tracking-wide">Code</label>
               <select
@@ -122,7 +188,6 @@ export default async function ReportsPage(props: Props) {
               </select>
             </div>
 
-            {/* User filter */}
             <div>
               <label className="block text-xs font-medium mb-1 text-muted-foreground uppercase tracking-wide">Employee</label>
               <select
@@ -137,7 +202,6 @@ export default async function ReportsPage(props: Props) {
               </select>
             </div>
 
-            {/* Actions */}
             <div className="flex gap-2">
               <Button type="submit" className="flex-1">
                 <Filter className="mr-2 h-4 w-4" /> Filter
@@ -154,7 +218,6 @@ export default async function ReportsPage(props: Props) {
             </div>
           </form>
 
-          {/* Active filter badges */}
           {activeFilters > 0 && (
             <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t">
               <span className="text-xs text-muted-foreground self-center">Active filters:</span>
@@ -198,109 +261,8 @@ export default async function ReportsPage(props: Props) {
         ))}
       </div>
 
-      {/* MAIN TABLE — grouped by project > sub-project > user */}
-      {rows.length === 0 ? (
-        <Card>
-          <CardContent className="py-16 text-center text-muted-foreground">
-            No entries found for the selected filters.
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-6">
-          {Object.entries(byProject).map(([projectName, projectData]) => (
-            <Card key={projectName}>
-              <CardHeader className="pb-2">
-                <div className="flex items-center gap-3">
-                  <CardTitle className="text-lg">{projectName}</CardTitle>
-                  {projectData.code && (
-                    <Badge variant="outline" className="font-mono text-xs">{projectData.code}</Badge>
-                  )}
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b bg-gray-50">
-                        <th className="text-left px-3 py-2 font-medium text-gray-600 w-32">Code</th>
-                        <th className="text-left px-3 py-2 font-medium text-gray-600 w-40">Description</th>
-                        <th className="text-left px-3 py-2 font-medium text-gray-600">Employee</th>
-                        {allWeeks.map(w => (
-                          <th key={w} className="text-center px-2 py-2 font-medium text-gray-600 whitespace-nowrap">
-                            <div className="text-xs text-gray-400">wk.</div>
-                            <div>{format(parseISO(w), 'dd.MM', { locale: enUS })}</div>
-                          </th>
-                        ))}
-                        <th className="text-center px-3 py-2 font-bold text-gray-800 bg-gray-100 w-16">Σ</th>
-                        <th className="text-center px-3 py-2 font-medium text-gray-600 w-28">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {Object.entries(projectData.subProjects).map(([spCode, spData]) =>
-                        spData.users.map((userRow, idx) => (
-                          <tr key={`${spCode}-${userRow.userName}`} className="hover:bg-gray-50">
-                            {idx === 0 && (
-                              <td className="px-3 py-2 font-mono text-xs text-blue-700 font-semibold align-top" rowSpan={spData.users.length}>
-                                {spCode}
-                              </td>
-                            )}
-                            {idx === 0 && (
-                              <td className="px-3 py-2 text-xs text-gray-500 align-top" rowSpan={spData.users.length}>
-                                {spData.description || '—'}
-                              </td>
-                            )}
-                            <td className="px-3 py-2">
-                              <div className="flex items-center gap-2">
-                                <div className="h-6 w-6 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-bold flex-shrink-0">
-                                  {userRow.userName.charAt(0)}
-                                </div>
-                                {userRow.userName}
-                              </div>
-                            </td>
-                            {allWeeks.map(w => (
-                              <td key={w} className="px-2 py-2 text-center">
-                                {userRow.weekBreakdown[w]
-                                  ? <span className="font-medium text-gray-800">{userRow.weekBreakdown[w]}h</span>
-                                  : <span className="text-gray-300">—</span>}
-                              </td>
-                            ))}
-                            <td className="px-3 py-2 text-center font-bold text-blue-600 bg-gray-50">{userRow.totalHours}h</td>
-                            <td className="px-3 py-2 text-center">
-                              {userRow.isSubmitted ? (
-                                <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-100">
-                                  <CheckCircle2 className="h-3 w-3 mr-1" /> Submitted
-                                </Badge>
-                              ) : (
-                                <Badge variant="outline" className="text-amber-600 border-amber-300">Pending</Badge>
-                              )}
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                      {/* Project subtotal */}
-                      <tr className="bg-gray-50 font-semibold border-t-2 border-gray-200">
-                        <td colSpan={3} className="px-3 py-2 text-right text-xs text-gray-500 uppercase tracking-wide">Project Total</td>
-                        {allWeeks.map(w => {
-                          const t = rows.filter(r => r.projectName === projectName).reduce((s, r) => s + (r.weekBreakdown[w] ?? 0), 0)
-                          return (
-                            <td key={w} className="px-2 py-2 text-center text-sm">
-                              {t > 0 ? <span className="font-bold">{t}h</span> : <span className="text-gray-300">—</span>}
-                            </td>
-                          )
-                        })}
-                        <td className="px-3 py-2 text-center text-blue-700 bg-blue-50">
-                          {rows.filter(r => r.projectName === projectName).reduce((s, r) => s + r.totalHours, 0)}h
-                        </td>
-                        <td />
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
+      {/* WEEKLY TABLES */}
+      <WeeklyReportSlider weeks={weekData} />
     </div>
   )
 }

@@ -1,4 +1,4 @@
-import { getProjectById, getUsers, getProjectAssignments, fetchSubProjects } from '@/app/data/actions'
+import { getProjectById, getUsers, getProjectAssignments, fetchSubProjects, getSubProjectAssignments } from '@/app/data/actions'
 import AssignmentCheckbox from './assignmentCheckbox'
 import SubProjectsList from './SubProjectsList'
 import EditProjectDialog from './EditProjectDialog'
@@ -24,6 +24,11 @@ export default async function ProjectDetailsPage({
         getProjectAssignments(projectId),
         fetchSubProjects(projectId)
     ])
+
+    const subProjectIds = subProjects.map(sp => sp.id)
+    const subProjectAssignments = await getSubProjectAssignments(subProjectIds)
+
+    const assignedUsers = users.filter(u => assignedUserIds.includes(u.id))
 
     if (!project) {
         return (
@@ -119,7 +124,12 @@ export default async function ProjectDetailsPage({
 
             {/* Lista Podprojektów */}
             <div className="md:col-span-3">
-                <SubProjectsList projectId={projectId} initialSubProjects={subProjects} />
+                <SubProjectsList
+                    projectId={projectId}
+                    initialSubProjects={subProjects}
+                    assignedUsers={assignedUsers}
+                    subProjectAssignments={subProjectAssignments}
+                />
             </div>
         </div>
     )

@@ -7,6 +7,8 @@ import { format, addDays } from 'date-fns'
 import { enUS } from 'date-fns/locale'
 import { saveWorkEntry, copyWeek } from '@/app/data/actions'
 import { Loader2, AlertCircle } from 'lucide-react'
+import { toast } from 'sonner'
+import { Fragment } from 'react'
 import SubmitWeekButton from './SubmitWeekButton'
 import { Button } from '@/components/ui/button'
 
@@ -82,7 +84,10 @@ export default function TimesheetGrid({
   const handleSave = async (subprojectId: string, dateStr: string) => {
     const hours = gridData[subprojectId]?.[dateStr] || 0
     setSaving(true)
-    await saveWorkEntry(subprojectId, dateStr, hours)
+    const result = await saveWorkEntry(subprojectId, dateStr, hours)
+    if (result && 'error' in result) {
+      toast.error(result.error || 'Failed to save entry')
+    }
     setSaving(false)
   }
 
@@ -157,9 +162,9 @@ export default function TimesheetGrid({
               const projectWeeklyTotal = projectDailyTotals.reduce((a, b) => a + b, 0)
 
               return (
-                <>
+                <Fragment key={project.id}>
                   {/* --- NAGŁÓWEK PROJEKTU --- */}
-                  <tr key={project.id} className="bg-gray-100/50 hover:bg-gray-100 cursor-pointer" onClick={() => toggleProject(project.id)}>
+                  <tr className="bg-gray-100/50 hover:bg-gray-100 cursor-pointer" onClick={() => toggleProject(project.id)}>
                     <td colSpan={2} className="px-4 py-3 font-semibold text-gray-800 flex items-center gap-2">
                       <span className={`transform transition-transform ${isExpanded ? 'rotate-90' : ''}`}>▶</span>
                       {project.name}
@@ -208,7 +213,7 @@ export default function TimesheetGrid({
                                 step="0.5"
                                 disabled={submittedProjects[subProject.id]}
                                 className={`w-full h-8 text-center text-sm rounded border-transparent hover:border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all ${bgClass} ${hours && hours > 12 ? 'text-red-600 font-bold' : ''} disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed`}
-                                value={hours === 0 ? '' : hours}
+                                value={!hours ? '' : hours}
                                 placeholder="-"
                                 onChange={(e) => handleChange(subProject.id, dateStr, e.target.value)}
                                 onBlur={() => handleSave(subProject.id, dateStr)}
@@ -237,11 +242,10 @@ export default function TimesheetGrid({
                             />
                           )}
                         </td>
-                        <td className="border-l border-gray-200"></td>
                       </tr>
                     )
                   })}
-                </>
+                </Fragment>
               )
             })}
 

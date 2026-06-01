@@ -20,7 +20,7 @@ export async function getProjects(): Promise<Project[]> {
         return []
     }
 
-    return data as Project[] || []
+    return (data ?? []) as Project[]
 }
 
 export async function findProject(name: string): Promise<Project | null> {
@@ -61,7 +61,7 @@ export async function getProjectById(id: string): Promise<Project | null> {
 export async function createProject(formData: FormData) {
     const supabase = await createClient()
     const name = formData.get('name') as string
-    const project_code = formData.get('project_code') as string
+    const project_code = (formData.get('project_code') as string)?.trim() || null
     const user_ids = formData.getAll('user_id') as string[]
 
     if (!name) return { error: 'Name is required' }
@@ -151,7 +151,7 @@ export async function fetchSubProjects(projectId: string) {
         .select('*')
         .eq('project_id', projectId)
 
-    return data as SubProject[] || []
+    return (data ?? []) as SubProject[]
 }
 
 export async function getAllSubProjects(projectIds: string[]) {
@@ -165,7 +165,7 @@ export async function getAllSubProjects(projectIds: string[]) {
         .in('project_id', projectIds)
         .eq('is_active', true)
 
-    return data as SubProject[] || []
+    return (data ?? []) as SubProject[]
 }
 
 export async function createSubProject(formData: FormData) {
@@ -197,7 +197,7 @@ export async function createSubProject(formData: FormData) {
 export async function updateProject(id: string, formData: FormData) {
     const supabase = await createClient()
     const name = formData.get('name') as string
-    const project_code = formData.get('project_code') as string
+    const project_code = (formData.get('project_code') as string)?.trim() || null
     const description = formData.get('description') as string
     const is_active = formData.get('is_active') === 'true'
 
@@ -256,6 +256,83 @@ export async function deleteProject(id: string) {
 
     revalidatePath('/admin/projects')
     return { success: true, softDeleted: false }
+}
+
+export async function getSubProjectAssignments(subProjectIds: string[]): Promise<Record<string, string[]>> {
+    const supabase = await createClient()
+
+    if (subProjectIds.length === 0) return {}
+
+    const { data } = await (supabase as any)
+        .from('sub_project_assignments')
+        .select('sub_project_id, user_id')
+        .in('sub_project_id', subProjectIds)
+
+    const result: Record<string, string[]> = {}
+    for (const id of subProjectIds) {
+        result[id] = []
+    }
+    for (const row of data ?? []) {
+        const r = row as any
+        if (result[r.sub_project_id]) {
+            result[r.sub_project_id].push(r.user_id)
+        }
+    }
+    return result
+}
+
+export async function getUserSubProjectAssignments(userId: string): Promise<string[]> {
+    const supabase = await createClient()
+
+    const { data } = await (supabase as any)
+        .from('sub_project_assignments')
+        .select('sub_project_id')
+        .eq('user_id', userId)
+
+    return (data ?? []).map((r: any) => r.sub_project_id)
+}
+
+export async function getMyAssignedSubProjects(projectIds: string[]) {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user || projectIds.length === 0) return []
+
+    const { data: assignments } = await (supabase as any)
+        .from('sub_project_assignments')
+        .select('sub_project_id')
+        .eq('user_id', user.id)
+
+    const assignedSubProjectIds: string[] = (assignments ?? []).map((r: any) => r.sub_project_id)
+
+    if (assignedSubProjectIds.length === 0) return []
+
+    const { data } = await supabase
+        .from('sub_projects')
+        .select('*')
+        .in('id', assignedSubProjectIds)
+        .in('project_id', projectIds)
+        .eq('is_active', true)
+
+    return (data ?? []) as SubProject[]
+}
+
+export async function toggleSubProjectAssignment(subProjectId: string, userId: string, projectId: string, isAssigned: boolean) {
+    const supabase = await createClient()
+
+    if (isAssigned) {
+        await (supabase as any)
+            .from('sub_project_assignments')
+            .insert([{ sub_project_id: subProjectId, user_id: userId }])
+    } else {
+        await (supabase as any)
+            .from('sub_project_assignments')
+            .delete()
+            .match({ sub_project_id: subProjectId, user_id: userId })
+    }
+
+    revalidatePath(`/admin/projects/${projectId}`)
+    revalidatePath(`/admin/users`)
+    return { success: true }
 }
 
 export async function toggleSubProjectStatus(id: string, projectId: string, isActive: boolean) {

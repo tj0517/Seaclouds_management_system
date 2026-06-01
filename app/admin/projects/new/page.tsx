@@ -6,10 +6,9 @@ import { toast } from 'sonner'
 import { Plus, Loader2, ArrowLeft, User } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { createProject } from '@/app/data/actions'
+import { createProject, getUsers } from '@/app/data/actions'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import Link from 'next/link'
-import { getUsers, toggleProjectAssignment, findProject } from '@/app/data/actions'
 import { Database } from '@/utils/supabase/types'
 
 export default function NewProjectPage() {
@@ -51,14 +50,6 @@ export default function NewProjectPage() {
     })
 
     const result = await createProject(formData)
-
-    const project = await findProject(name)
-    if (project?.id) {
-      selectedUsers.forEach(userId => {
-        toggleProjectAssignment(userId, project?.id, true)
-      })
-    }
-
 
     if (result && 'error' in result) {
       toast.error(result.error || 'Error creating project')

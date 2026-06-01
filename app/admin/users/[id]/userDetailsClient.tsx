@@ -3,8 +3,9 @@
 import { toast } from "sonner"
 
 import AssignmentCheckbox from './assignmentCheckbox'
+import SubProjectAssignmentCheckbox from './subProjectAssignmentCheckbox'
 import Link from 'next/link'
-import { ArrowLeft, ShieldCheck, Pencil, UserX } from 'lucide-react'
+import { ArrowLeft, ShieldCheck, Pencil, UserX, ChevronDown, ChevronRight } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -25,23 +26,40 @@ import { updateUserRole, deactivateUser } from '@/app/data/actions'
 type Profile = Database['public']['Tables']['profiles']['Row']
 type Project = Database['public']['Tables']['projects']['Row']
 
+type SubProject = {
+    id: string
+    code: string
+    description: string | null
+    is_active: boolean | null
+    project_id: string
+}
+
 interface UserDetailsClientProps {
     currentUser: Profile | undefined
     userId: string
     projects: Project[]
     assignedProjectIds: string[]
+    subProjectsByProject: Record<string, SubProject[]>
+    userSubProjectIds: string[]
 }
 
 export default function UserDetailsClient({
     currentUser,
     userId,
     projects,
-    assignedProjectIds
+    assignedProjectIds,
+    subProjectsByProject,
+    userSubProjectIds
 }: UserDetailsClientProps) {
     const [isEditing, setIsEditing] = useState(false)
     const [isPending, startTransition] = useTransition()
     const [deactivateOpen, setDeactivateOpen] = useState(false)
+    const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>({})
     const router = useRouter()
+
+    const toggleExpanded = (projectId: string) => {
+        setExpandedProjects(prev => ({ ...prev, [projectId]: !prev[projectId] }))
+    }
 
     const handleDeactivate = () => {
         startTransition(async () => {
@@ -84,7 +102,7 @@ export default function UserDetailsClient({
             </div>
 
             <div className="grid gap-6 md:grid-cols-3">
-                {/* Karta Pracownika */}
+                {/* User Card */}
                 <div className="md:col-span-1">
                     <Card>
                         <CardHeader className="flex flex-row items-center gap-4">
@@ -135,33 +153,75 @@ export default function UserDetailsClient({
                     </Card>
                 </div>
 
-                {/* Lista Projektów */}
+                {/* Project & Sub-project Access */}
                 <div className="md:col-span-2">
                     <Card>
                         <CardHeader>
                             <CardTitle>Project Access</CardTitle>
                             <CardDescription>
-                                Select projects where this employee can log working hours.
+                                Select projects and sub-projects where this employee can log working hours.
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
-                            <div className="space-y-4">
+                            <div className="space-y-2">
                                 {projects?.map((project) => {
                                     const isAssigned = assignedProjectIds.includes(project.id)
+                                    const subProjects = subProjectsByProject[project.id] || []
+                                    const isExpanded = expandedProjects[project.id]
+                                    const activeSubProjects = subProjects.filter(sp => sp.is_active)
 
                                     return (
-                                        <div key={project.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent/5 transition-colors">
-                                            <div className="flex flex-col">
-                                                <span className="font-medium text-sm">{project.name}</span>
-                                                <span className="text-xs text-muted-foreground">
-                                                    {project.is_active ? 'Active' : 'Completed'}
-                                                </span>
+                                        <div key={project.id} className="border rounded-lg overflow-hidden">
+                                            <div className="flex items-center justify-between p-4 hover:bg-accent/5 transition-colors">
+                                                <div className="flex items-center gap-3 flex-1">
+                                                    {isAssigned && activeSubProjects.length > 0 ? (
+                                                        <button
+                                                            onClick={() => toggleExpanded(project.id)}
+                                                            className="text-muted-foreground hover:text-foreground"
+                                                        >
+                                                            {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                                                        </button>
+                                                    ) : (
+                                                        <div className="w-4" />
+                                                    )}
+                                                    <div className="flex flex-col">
+                                                        <span className="font-medium text-sm">{project.name}</span>
+                                                        <span className="text-xs text-muted-foreground">
+                                                            {project.is_active ? 'Active' : 'Completed'}
+                                                            {isAssigned && activeSubProjects.length > 0 && (
+                                                                <> &middot; {userSubProjectIds.filter(id => activeSubProjects.some(sp => sp.id === id)).length}/{activeSubProjects.length} sub-projects</>
+                                                            )}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                <AssignmentCheckbox
+                                                    userId={userId}
+                                                    projectId={project.id}
+                                                    initialChecked={isAssigned}
+                                                />
                                             </div>
-                                            <AssignmentCheckbox
-                                                userId={userId}
-                                                projectId={project.id}
-                                                initialChecked={isAssigned}
-                                            />
+
+                                            {isAssigned && isExpanded && activeSubProjects.length > 0 && (
+                                                <div className="border-t bg-muted/30 px-4 py-2 space-y-1">
+                                                    <p className="text-xs text-muted-foreground font-medium px-7 py-1">Sub-projects:</p>
+                                                    {activeSubProjects.map(sp => (
+                                                        <div key={sp.id} className="flex items-center justify-between py-2 px-7">
+                                                            <div className="flex flex-col">
+                                                                <span className="text-sm">{sp.code}</span>
+                                                                {sp.description && (
+                                                                    <span className="text-xs text-muted-foreground">{sp.description}</span>
+                                                                )}
+                                                            </div>
+                                                            <SubProjectAssignmentCheckbox
+                                                                userId={userId}
+                                                                subProjectId={sp.id}
+                                                                projectId={project.id}
+                                                                initialChecked={userSubProjectIds.includes(sp.id)}
+                                                            />
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
                                         </div>
                                     )
                                 })}

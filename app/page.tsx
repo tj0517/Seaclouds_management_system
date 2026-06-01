@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { getUserProfile, getMyProjects, getWeeklyEntries, isWeekSubmitted, getAllSubProjects } from '@/app/data/actions'
+import { getUserProfile, getMyProjects, getWeeklyEntries, isWeekSubmitted, getMyAssignedSubProjects } from '@/app/data/actions'
 import TimesheetGrid from './components/timesheetGrid'
 import { startOfWeek, endOfWeek, format, addWeeks, subWeeks, parseISO, isValid } from 'date-fns'
 import Link from 'next/link'
@@ -41,7 +41,7 @@ export default async function Home(props: Props) {
   // 4. Pobierz dane dla TEGO KONKRETNEGO tygodnia
   const projects = await getMyProjects()
   const projectIds = projects.map(p => p.id)
-  const subProjects = await getAllSubProjects(projectIds)
+  const subProjects = await getMyAssignedSubProjects(projectIds)
 
   const entries = await getWeeklyEntries(
     user.id,

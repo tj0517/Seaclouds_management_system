@@ -116,7 +116,7 @@ export type GroupedReportRow = {
     subProjectDescription: string | null
     userName: string
     totalHours: number
-    weekBreakdown: Record<string, number> // week_start (Mon) -> hours
+    dailyBreakdown: Record<string, number> // work_date -> hours
     isSubmitted: boolean
 }
 
@@ -188,7 +188,7 @@ export async function getGroupedReportData(
                 subProjectDescription: subDesc,
                 userName,
                 totalHours: 0,
-                weekBreakdown: {},
+                dailyBreakdown: {},
                 isSubmitted: false,
             })
         }
@@ -196,7 +196,7 @@ export async function getGroupedReportData(
         const row = map.get(key)!
         const hours = entry.hours ?? 0
         row.totalHours += hours
-        row.weekBreakdown[weekStart] = (row.weekBreakdown[weekStart] ?? 0) + hours
+        row.dailyBreakdown[entry.work_date] = (row.dailyBreakdown[entry.work_date] ?? 0) + hours
 
         // Mark as submitted if ANY week for this user/subproject is submitted
         const isThisWeekSubmitted = submissionSet.has(`${entry.user_id}__${entry.sub_project_id}__${weekStart}`)
