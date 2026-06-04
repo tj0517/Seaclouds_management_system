@@ -167,6 +167,7 @@ export type GroupedReportRow = {
     subProjectCode: string
     subProjectId: string
     subProjectDescription: string | null
+    trackingType: 'hours' | 'days'
     userId: string
     userName: string
     totalHours: number
@@ -194,7 +195,7 @@ export async function getGroupedReportData(
             user_id,
             sub_project_id,
             profiles:user_id ( full_name ),
-            sub_projects:sub_project_id ( code, description, projects:project_id ( name, project_code ) )
+            sub_projects:sub_project_id ( code, description, tracking_type, projects:project_id ( name, project_code ) )
         `)
         .gte('work_date', startDate)
         .lte('work_date', endDate)
@@ -230,6 +231,7 @@ export async function getGroupedReportData(
         const projectCode = project?.project_code ?? null
         const subCode = sp?.code ?? '?'
         const subDesc = sp?.description ?? null
+        const trackingType = (sp?.tracking_type === 'days' ? 'days' : 'hours') as 'hours' | 'days'
         const userName = (entry.profiles as any)?.full_name ?? 'Unknown user'
         const weekStart = getWeekStart(entry.work_date)
         const key = `${projectName}||${subCode}||${userName}`
@@ -241,6 +243,7 @@ export async function getGroupedReportData(
                 subProjectCode: subCode,
                 subProjectId: entry.sub_project_id,
                 subProjectDescription: subDesc,
+                trackingType,
                 userId: entry.user_id,
                 userName,
                 totalHours: 0,
@@ -331,32 +334,40 @@ export async function copyWeek(currentWeekStart: string) {
         return { error: 'No entries in the previous week' }
     }
 
-    const newEntries = oldEntries.map(entry => {
-        const oldDate = new Date(entry.work_date + 'T00:00:00')
-        const newDate = addDays(oldDate, 7)
-        return {
-            user_id: user.id,
-            sub_project_id: entry.sub_project_id,
-            work_date: format(newDate, 'yyyy-MM-dd'),
-            hours: entry.hours
-        }
-    })
+    // Check which sub-projects are already submitted for the current week
+    const subProjectIds = [...new Set(oldEntries.map(e => e.sub_project_id))]
+    const { data: submissions } = await supabase
+        .from('timesheet_submissions')
+        .select('sub_project_id')
+        .eq('user_id', user.id)
+        .eq('week_start', currentWeekStart)
+        .in('sub_project_id', subProjectIds)
 
+    const submittedSet = new Set((submissions || []).map(s => s.sub_project_id))
+
+    const newEntries = oldEntries
+        .filter(entry => !submittedSet.has(entry.sub_project_id))
+        .map(entry => {
+            const oldDate = new Date(entry.work_date + 'T00:00:00')
+            const newDate = addDays(oldDate, 7)
+            return {
+                user_id: user.id,
+                sub_project_id: entry.sub_project_id,
+                work_date: format(newDate, 'yyyy-MM-dd'),
+                hours: entry.hours
+            }
+        })
+
+    if (newEntries.length === 0) {
+        return { error: 'All sub-projects are already submitted for this week' }
+    }
 
     const { error } = await supabase
         .from('timesheet_entries')
-        .insert(newEntries)
-        .select() // opcjonalne
+        .upsert(newEntries as any, { onConflict: 'user_id, sub_project_id, work_date' })
 
     if (error) {
-        // Spróbujmy insert z ignoreDuplicates
-        const { error: insertError } = await supabase
-            .from('timesheet_entries')
-            .upsert(newEntries, { onConflict: 'user_id, sub_project_id, work_date', ignoreDuplicates: true })
-
-        if (insertError) {
-            return { error: insertError.message }
-        }
+        return { error: error.message }
     }
 
     revalidatePath('/')

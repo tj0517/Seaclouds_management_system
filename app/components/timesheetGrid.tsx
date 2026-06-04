@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button'
 
 
 type Project = { id: string; name: string, project_code: string | null }
-type SubProject = { id: string; code: string; description: string | null; project_id: string }
+type SubProject = { id: string; code: string; description: string | null; project_id: string; tracking_type?: string }
 type Entry = { sub_project_id: string; work_date: string; hours: number | null }
 
 export default function TimesheetGrid({
@@ -74,8 +74,8 @@ export default function TimesheetGrid({
     }))
   }
 
-  const handleSave = async (subprojectId: string, dateStr: string) => {
-    const hours = gridData[subprojectId]?.[dateStr] || 0
+  const handleSave = async (subprojectId: string, dateStr: string, overrideHours?: number) => {
+    const hours = overrideHours ?? gridData[subprojectId]?.[dateStr] ?? 0
     setSaving(true)
     const result = await saveWorkEntry(subprojectId, dateStr, hours)
     if (result && 'error' in result) {
@@ -86,9 +86,11 @@ export default function TimesheetGrid({
 
   const dailyTotals = weekDays.map(day => {
     const dateStr = format(day, 'yyyy-MM-dd')
-    return subProjects.reduce((acc, sp) => {
-      return acc + (gridData[sp.id]?.[dateStr] || 0)
-    }, 0)
+    return subProjects
+      .filter(sp => sp.tracking_type !== 'days')
+      .reduce((acc, sp) => {
+        return acc + (gridData[sp.id]?.[dateStr] || 0)
+      }, 0)
   })
 
   const weeklyTotal = dailyTotals.reduce((acc, val) => acc + val, 0)
@@ -139,13 +141,22 @@ export default function TimesheetGrid({
               const pSubProjects = projectSubProjects[project.id] || []
               const isExpanded = expandedProjects[project.id]
 
+              const hoursSubProjects = pSubProjects.filter(sp => sp.tracking_type !== 'days')
+              const daysSubProjects = pSubProjects.filter(sp => sp.tracking_type === 'days')
               const projectDailyTotals = weekDays.map(day => {
                 const dateStr = format(day, 'yyyy-MM-dd')
-                return pSubProjects.reduce((acc, sp) => {
+                return hoursSubProjects.reduce((acc, sp) => {
                   return acc + (gridData[sp.id]?.[dateStr] || 0)
                 }, 0)
               })
+              const projectDailyDays = weekDays.map(day => {
+                const dateStr = format(day, 'yyyy-MM-dd')
+                return daysSubProjects.reduce((acc, sp) => {
+                  return acc + ((gridData[sp.id]?.[dateStr] ?? 0) >= 1 ? 1 : 0)
+                }, 0)
+              })
               const projectWeeklyTotal = projectDailyTotals.reduce((a, b) => a + b, 0)
+              const projectWeeklyDays = projectDailyDays.reduce((a, b) => a + b, 0)
 
               return (
                 <Fragment key={project.id}>
@@ -155,13 +166,27 @@ export default function TimesheetGrid({
                       {project.name}
                     </td>
                     <th className="px-4 py-3 text-left font-medium text-gray-500 w-20 min-w-[150px]">{project.project_code}</th>
-                    {projectDailyTotals.map((total, idx) => (
-                      <td key={idx} className="px-1 py-3 text-center text-xs font-medium text-gray-500 bg-gray-50/50">
-                        {total > 0 ? total : '-'}
-                      </td>
-                    ))}
+                    {projectDailyTotals.map((total, idx) => {
+                      const days = projectDailyDays[idx]
+                      const hasHours = total > 0
+                      const hasDays = days > 0
+                      return (
+                        <td key={idx} className="px-1 py-3 text-center text-xs font-medium text-gray-500 bg-gray-50/50">
+                          {hasHours || hasDays ? (
+                            <div className="flex flex-col items-center">
+                              {hasHours && <span>{total}</span>}
+                              {hasDays && <span className="text-purple-600">{days}d</span>}
+                            </div>
+                          ) : '-'}
+                        </td>
+                      )
+                    })}
                     <td className="px-4 py-3 text-center font-bold text-gray-700 bg-gray-100">
-                      {projectWeeklyTotal > 0 ? projectWeeklyTotal : '-'}
+                      <div className="flex flex-col items-center">
+                        {projectWeeklyTotal > 0 && <span>{projectWeeklyTotal}</span>}
+                        {projectWeeklyDays > 0 && <span className="text-purple-600 text-xs">{projectWeeklyDays}d</span>}
+                        {projectWeeklyTotal === 0 && projectWeeklyDays === 0 && '-'}
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-center border-l border-gray-200">
                       -
@@ -169,6 +194,7 @@ export default function TimesheetGrid({
                   </tr>
 
                   {isExpanded && pSubProjects.map(subProject => {
+                    const isDays = subProject.tracking_type === 'days'
                     const rowTotal = weekDays.reduce((acc, day) => {
                       const dateStr = format(day, 'yyyy-MM-dd')
                       return acc + (gridData[subProject.id]?.[dateStr] || 0)
@@ -188,6 +214,32 @@ export default function TimesheetGrid({
                           const isWeekend = day.getDay() === 0 || day.getDay() === 6
                           const bgClass = isWeekend ? 'bg-gray-50' : 'bg-white'
 
+                          if (isDays) {
+                            const isChecked = (hours ?? 0) >= 1
+                            return (
+                              <td key={dateStr} className={`p-1 border-l border-gray-100 ${bgClass}`}>
+                                <div className="flex items-center justify-center h-8">
+                                  {submittedProjects[subProject.id] ? (
+                                    <span className={`text-sm ${isChecked ? 'text-emerald-600 font-bold' : 'text-gray-300'}`}>
+                                      {isChecked ? '✓' : '-'}
+                                    </span>
+                                  ) : (
+                                    <input
+                                      type="checkbox"
+                                      checked={isChecked}
+                                      className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                      onChange={(e) => {
+                                        const newHours = e.target.checked ? 1 : 0
+                                        handleChange(subProject.id, dateStr, String(newHours))
+                                        handleSave(subProject.id, dateStr, newHours)
+                                      }}
+                                    />
+                                  )}
+                                </div>
+                              </td>
+                            )
+                          }
+
                           return (
                             <td key={dateStr} className={`p-1 border-l border-gray-100 ${bgClass}`}>
                               <input
@@ -206,7 +258,7 @@ export default function TimesheetGrid({
                           )
                         })}
                         <td className="px-4 py-2 text-center font-bold text-blue-600 bg-gray-50 border-l border-gray-200">
-                          {rowTotal > 0 ? rowTotal : <span className="text-gray-300">-</span>}
+                          {rowTotal > 0 ? `${rowTotal}${isDays ? 'd' : ''}` : <span className="text-gray-300">-</span>}
                         </td>
                         <td className="px-4 py-2 text-center border-l border-gray-200">
                           {submittedProjects[subProject.id] ? (
@@ -263,7 +315,12 @@ export default function TimesheetGrid({
                 <Button
                   onClick={async () => {
                     setSaving(true)
-                    await copyWeek(format(weekStart, 'yyyy-MM-dd'))
+                    const result = await copyWeek(format(weekStart, 'yyyy-MM-dd'))
+                    if (result && 'error' in result) {
+                      toast.error(result.error)
+                    } else {
+                      toast.success('Copied entries from last week')
+                    }
                     router.refresh()
                     setSaving(false)
                   }}
@@ -294,9 +351,15 @@ export default function TimesheetGrid({
           const pSubProjects = projectSubProjects[project.id] || []
           const isExpanded = expandedProjects[project.id]
 
+          const mobileHoursSubProjects = pSubProjects.filter(sp => sp.tracking_type !== 'days')
+          const mobileDaysSubProjects = pSubProjects.filter(sp => sp.tracking_type === 'days')
           const projectWeeklyTotal = weekDays.reduce((acc, day) => {
             const dateStr = format(day, 'yyyy-MM-dd')
-            return acc + pSubProjects.reduce((a, sp) => a + (gridData[sp.id]?.[dateStr] || 0), 0)
+            return acc + mobileHoursSubProjects.reduce((a, sp) => a + (gridData[sp.id]?.[dateStr] || 0), 0)
+          }, 0)
+          const mobileWeeklyDays = weekDays.reduce((acc, day) => {
+            const dateStr = format(day, 'yyyy-MM-dd')
+            return acc + mobileDaysSubProjects.reduce((a, sp) => a + ((gridData[sp.id]?.[dateStr] ?? 0) >= 1 ? 1 : 0), 0)
           }, 0)
 
           return (
@@ -314,7 +377,10 @@ export default function TimesheetGrid({
                   )}
                 </div>
                 <span className="text-sm font-bold text-gray-600 flex-shrink-0 ml-2">
-                  {projectWeeklyTotal > 0 ? `${projectWeeklyTotal}h` : '-'}
+                  {projectWeeklyTotal > 0 ? `${projectWeeklyTotal}h` : ''}
+                  {projectWeeklyTotal > 0 && mobileWeeklyDays > 0 ? ' · ' : ''}
+                  {mobileWeeklyDays > 0 ? <span className="text-purple-600">{mobileWeeklyDays}d</span> : ''}
+                  {projectWeeklyTotal === 0 && mobileWeeklyDays === 0 ? '-' : ''}
                 </span>
               </button>
 
@@ -323,6 +389,7 @@ export default function TimesheetGrid({
                 <div className="mt-2 space-y-2 pl-2">
                   {pSubProjects.map(subProject => {
                     const isDisabled = submittedProjects[subProject.id]
+                    const mobileIsDays = subProject.tracking_type === 'days'
                     const rowTotal = weekDays.reduce((acc, day) => {
                       const dateStr = format(day, 'yyyy-MM-dd')
                       return acc + (gridData[subProject.id]?.[dateStr] || 0)
@@ -340,7 +407,7 @@ export default function TimesheetGrid({
                             <div className="text-xs text-gray-500 truncate">{subProject.description || 'No description'}</div>
                           </div>
                           <div className="flex items-center gap-2 flex-shrink-0 ml-2">
-                            <span className="text-sm font-bold text-blue-600">{rowTotal > 0 ? `${rowTotal}h` : '-'}</span>
+                            <span className="text-sm font-bold text-blue-600">{rowTotal > 0 ? `${rowTotal}${mobileIsDays ? 'd' : 'h'}` : '-'}</span>
                           </div>
                         </div>
 
@@ -359,19 +426,38 @@ export default function TimesheetGrid({
                                 <span className={`text-xs font-medium ${isWeekend ? 'text-red-400' : 'text-gray-500'}`}>
                                   {format(day, 'EEE', { locale: enUS })} {format(day, 'dd.MM')}
                                 </span>
-                                <input
-                                  type="number"
-                                  inputMode="decimal"
-                                  min="0"
-                                  max="24"
-                                  step="0.5"
-                                  disabled={isDisabled}
-                                  className={`w-14 h-8 text-center text-sm rounded border border-gray-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 ${isWeekend ? 'bg-gray-50' : 'bg-white'} ${hours && hours > 12 ? 'text-red-600 font-bold' : ''} disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed`}
-                                  value={!hours ? '' : hours}
-                                  placeholder="-"
-                                  onChange={(e) => handleChange(subProject.id, dateStr, e.target.value)}
-                                  onBlur={() => handleSave(subProject.id, dateStr)}
-                                />
+                                {mobileIsDays ? (
+                                  isDisabled ? (
+                                    <span className={`text-sm ${(hours ?? 0) >= 1 ? 'text-emerald-600 font-bold' : 'text-gray-300'}`}>
+                                      {(hours ?? 0) >= 1 ? '✓' : '-'}
+                                    </span>
+                                  ) : (
+                                    <input
+                                      type="checkbox"
+                                      checked={(hours ?? 0) >= 1}
+                                      className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                      onChange={(e) => {
+                                        const newHours = e.target.checked ? 1 : 0
+                                        handleChange(subProject.id, dateStr, String(newHours))
+                                        handleSave(subProject.id, dateStr, newHours)
+                                      }}
+                                    />
+                                  )
+                                ) : (
+                                  <input
+                                    type="number"
+                                    inputMode="decimal"
+                                    min="0"
+                                    max="24"
+                                    step="0.5"
+                                    disabled={isDisabled}
+                                    className={`w-14 h-8 text-center text-sm rounded border border-gray-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 ${isWeekend ? 'bg-gray-50' : 'bg-white'} ${hours && hours > 12 ? 'text-red-600 font-bold' : ''} disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed`}
+                                    value={!hours ? '' : hours}
+                                    placeholder="-"
+                                    onChange={(e) => handleChange(subProject.id, dateStr, e.target.value)}
+                                    onBlur={() => handleSave(subProject.id, dateStr)}
+                                  />
+                                )}
                               </div>
                             )
                           })}
@@ -413,7 +499,12 @@ export default function TimesheetGrid({
           <Button
             onClick={async () => {
               setSaving(true)
-              await copyWeek(format(weekStart, 'yyyy-MM-dd'))
+              const result = await copyWeek(format(weekStart, 'yyyy-MM-dd'))
+              if (result && 'error' in result) {
+                toast.error(result.error)
+              } else {
+                toast.success('Copied entries from last week')
+              }
               router.refresh()
               setSaving(false)
             }}
