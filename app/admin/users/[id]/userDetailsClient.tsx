@@ -5,7 +5,7 @@ import { toast } from "sonner"
 import AssignmentCheckbox from './assignmentCheckbox'
 import SubProjectAssignmentCheckbox from './subProjectAssignmentCheckbox'
 import Link from 'next/link'
-import { ArrowLeft, ShieldCheck, Pencil, UserX, ChevronDown, ChevronRight } from 'lucide-react'
+import { ArrowLeft, ShieldCheck, Pencil, ShieldOff, ChevronDown, ChevronRight } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -68,7 +68,7 @@ export default function UserDetailsClient({
                 toast.error(`Error: ${result.error}`)
                 setDeactivateOpen(false)
             } else {
-                toast.success('All employee assignments removed')
+                toast.success('All project access has been revoked')
                 setDeactivateOpen(false)
                 router.push('/admin/users')
                 router.refresh()
@@ -144,8 +144,8 @@ export default function UserDetailsClient({
                             )}
 
                             <div className="pt-4 border-t mt-4">
-                                <Button variant="destructive" size="sm" className="w-full" onClick={() => setDeactivateOpen(true)}>
-                                    <UserX className="mr-2 h-4 w-4" /> Remove Employee
+                                <Button variant="outline" size="sm" className="w-full border-amber-300 text-amber-700 hover:bg-amber-50 hover:text-amber-800" onClick={() => setDeactivateOpen(true)}>
+                                    <ShieldOff className="mr-2 h-4 w-4" /> Revoke All Access
                                 </Button>
                             </div>
 
@@ -241,18 +241,18 @@ export default function UserDetailsClient({
         <Dialog open={deactivateOpen} onOpenChange={setDeactivateOpen}>
             <DialogContent>
                 <DialogHeader>
-                    <DialogTitle>Remove Employee</DialogTitle>
+                    <DialogTitle>Revoke All Project Access</DialogTitle>
                     <DialogDescription>
-                        Are you sure you want to remove <strong>{currentUser?.full_name || 'this user'}</strong>?
-                        All project assignments will be removed. Time entries will remain in the system.
+                        This will remove <strong>{currentUser?.full_name || 'this user'}</strong> from all project assignments.
+                        Their account will be preserved and access can be reassigned later. Time entries will remain in the system.
                     </DialogDescription>
                 </DialogHeader>
                 <DialogFooter>
                     <Button variant="outline" onClick={() => setDeactivateOpen(false)} disabled={isPending}>
                         Cancel
                     </Button>
-                    <Button variant="destructive" onClick={handleDeactivate} disabled={isPending}>
-                        {isPending ? 'Removing...' : 'Remove Employee'}
+                    <Button variant="outline" className="border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 hover:text-amber-800" onClick={handleDeactivate} disabled={isPending}>
+                        {isPending ? 'Revoking...' : 'Revoke Access'}
                     </Button>
                 </DialogFooter>
             </DialogContent>

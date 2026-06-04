@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -9,10 +9,11 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Checkbox } from '@/components/ui/checkbox'
-import { createSubProject, toggleSubProjectStatus, toggleSubProjectAssignment } from '@/app/data/actions/projects'
-import { Plus, CheckCircle2, Ban, Users, Loader2 } from 'lucide-react'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { createSubProject, updateSubProject, toggleSubProjectStatus, toggleSubProjectAssignment, deleteSubProject } from '@/app/data/actions/projects'
+import { Plus, Users, Loader2, Pencil, Trash2, Search } from 'lucide-react'
+import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 
@@ -22,6 +23,7 @@ type SubProject = {
     description: string | null
     is_active: boolean | null
     project_id: string
+    tracking_type?: string
 }
 
 type User = {
@@ -46,6 +48,52 @@ export default function SubProjectsList({ projectId, initialSubProjects, assigne
 
     const [code, setCode] = useState('')
     const [description, setDescription] = useState('')
+    const [trackingType, setTrackingType] = useState('hours')
+
+    const [editOpen, setEditOpen] = useState(false)
+    const [editLoading, setEditLoading] = useState(false)
+    const [editingSp, setEditingSp] = useState<SubProject | null>(null)
+    const [editCode, setEditCode] = useState('')
+    const [editDescription, setEditDescription] = useState('')
+    const [editTrackingType, setEditTrackingType] = useState('hours')
+
+    const [deleteOpen, setDeleteOpen] = useState(false)
+    const [deletingSp, setDeletingSp] = useState<SubProject | null>(null)
+    const [deleteLoading, setDeleteLoading] = useState(false)
+
+    const [assignOpen, setAssignOpen] = useState(false)
+    const [assigningSp, setAssigningSp] = useState<SubProject | null>(null)
+    const [assignSearch, setAssignSearch] = useState('')
+
+    const openEdit = (sp: SubProject) => {
+        setEditingSp(sp)
+        setEditCode(sp.code)
+        setEditDescription(sp.description || '')
+        setEditTrackingType(sp.tracking_type || 'hours')
+        setEditOpen(true)
+    }
+
+    const handleEditSubmit = async (e: React.FormEvent) => {
+        e.preventDefault()
+        if (!editingSp) return
+        setEditLoading(true)
+
+        const formData = new FormData()
+        formData.append('code', editCode)
+        formData.append('description', editDescription)
+        formData.append('tracking_type', editTrackingType)
+
+        const result = await updateSubProject(editingSp.id, projectId, formData)
+        setEditLoading(false)
+        if (result.success) {
+            toast.success('Sub-project updated')
+            setEditOpen(false)
+            setEditingSp(null)
+            router.refresh()
+        } else {
+            toast.error(result.error || 'Error updating sub-project')
+        }
+    }
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -55,6 +103,7 @@ export default function SubProjectsList({ projectId, initialSubProjects, assigne
         formData.append('project_id', projectId)
         formData.append('code', code)
         formData.append('description', description)
+        formData.append('tracking_type', trackingType)
 
         const result = await createSubProject(formData)
 
@@ -64,6 +113,7 @@ export default function SubProjectsList({ projectId, initialSubProjects, assigne
             setOpen(false)
             setCode('')
             setDescription('')
+            setTrackingType('hours')
             router.refresh()
         } else {
             toast.error(result.error || 'Error adding sub-project')
@@ -95,10 +145,52 @@ export default function SubProjectsList({ projectId, initialSubProjects, assigne
         }
     }
 
+    const openDeleteConfirm = (sp: SubProject) => {
+        setDeletingSp(sp)
+        setDeleteOpen(true)
+    }
+
+    const handleDelete = async () => {
+        if (!deletingSp) return
+        setDeleteLoading(true)
+        const result = await deleteSubProject(deletingSp.id, projectId)
+        setDeleteLoading(false)
+        if (result.success) {
+            toast.success(result.softDeleted ? 'Sub-project deactivated (has time entries)' : 'Sub-project deleted')
+            setDeleteOpen(false)
+            setDeletingSp(null)
+            router.refresh()
+        } else {
+            toast.error(result.error || 'Error deleting sub-project')
+        }
+    }
+
     const getAssignedUserNames = (subProjectId: string) => {
         const userIds = subProjectAssignments[subProjectId] || []
         return assignedUsers.filter(u => userIds.includes(u.id))
     }
+
+    const openAssignDialog = (sp: SubProject) => {
+        setAssigningSp(sp)
+        setAssignSearch('')
+        setAssignOpen(true)
+    }
+
+    const filteredAssignUsers = useMemo(() => {
+        if (!assigningSp) return []
+        const filtered = assignedUsers.filter(u => {
+            if (!assignSearch) return true
+            return (u.full_name || '').toLowerCase().includes(assignSearch.toLowerCase())
+        })
+        const spAssigned = subProjectAssignments[assigningSp.id] || []
+        return filtered.sort((a, b) => {
+            const aAssigned = spAssigned.includes(a.id)
+            const bAssigned = spAssigned.includes(b.id)
+            if (aAssigned && !bAssigned) return -1
+            if (!aAssigned && bAssigned) return 1
+            return (a.full_name || '').localeCompare(b.full_name || '')
+        })
+    }, [assignedUsers, assigningSp, assignSearch, subProjectAssignments])
 
     return (
         <Card>
@@ -140,6 +232,18 @@ export default function SubProjectsList({ projectId, initialSubProjects, assigne
                                     placeholder="e.g. Business requirements analysis"
                                 />
                             </div>
+                            <div className="space-y-2">
+                                <Label>Tracking Type</Label>
+                                <Select value={trackingType} onValueChange={setTrackingType}>
+                                    <SelectTrigger>
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="hours">Hours</SelectItem>
+                                        <SelectItem value="days">Days</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
                             <DialogFooter>
                                 <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
                                 <Button type="submit" disabled={loading}>{loading ? 'Adding...' : 'Add'}</Button>
@@ -159,6 +263,7 @@ export default function SubProjectsList({ projectId, initialSubProjects, assigne
                             <TableRow>
                                 <TableHead className="w-[150px]">Code</TableHead>
                                 <TableHead>Description</TableHead>
+                                <TableHead className="w-[80px]">Type</TableHead>
                                 <TableHead>Assigned Users</TableHead>
                                 <TableHead className="w-[100px]">Status</TableHead>
                                 <TableHead className="w-[100px] text-right">Actions</TableHead>
@@ -172,6 +277,11 @@ export default function SubProjectsList({ projectId, initialSubProjects, assigne
                                     <TableRow key={sp.id} className={sp.is_active ? '' : 'bg-muted/50'}>
                                         <TableCell className="font-medium">{sp.code}</TableCell>
                                         <TableCell className="text-muted-foreground">{sp.description || '-'}</TableCell>
+                                        <TableCell>
+                                            <Badge variant="outline" className={(sp.tracking_type ?? 'hours') === 'days' ? 'text-purple-600 border-purple-200' : 'text-blue-600 border-blue-200'}>
+                                                {(sp.tracking_type ?? 'hours') === 'days' ? 'Days' : 'Hours'}
+                                            </Badge>
+                                        </TableCell>
                                         <TableCell>
                                             <div className="flex items-center gap-2">
                                                 {spAssignedUsers.length > 0 ? (
@@ -192,54 +302,9 @@ export default function SubProjectsList({ projectId, initialSubProjects, assigne
                                                 ) : (
                                                     <span className="text-xs text-muted-foreground">No users</span>
                                                 )}
-                                                <Popover>
-                                                    <PopoverTrigger asChild>
-                                                        <Button variant="ghost" size="icon" className="h-7 w-7">
-                                                            <Users className="h-3.5 w-3.5" />
-                                                        </Button>
-                                                    </PopoverTrigger>
-                                                    <PopoverContent className="w-64 p-0" align="start">
-                                                        <div className="p-3 border-b">
-                                                            <p className="text-sm font-medium">Assign Users</p>
-                                                            <p className="text-xs text-muted-foreground">
-                                                                Select employees for {sp.code}
-                                                            </p>
-                                                        </div>
-                                                        <div className="max-h-48 overflow-y-auto p-2 space-y-1">
-                                                            {assignedUsers.length === 0 ? (
-                                                                <p className="text-xs text-muted-foreground p-2 text-center">
-                                                                    No employees assigned to this project yet.
-                                                                </p>
-                                                            ) : (
-                                                                assignedUsers.map(user => {
-                                                                    const isAssigned = (subProjectAssignments[sp.id] || []).includes(user.id)
-                                                                    const isToggling = togglingAssignment === `${sp.id}-${user.id}`
-
-                                                                    return (
-                                                                        <label
-                                                                            key={user.id}
-                                                                            className="flex items-center gap-2 p-2 rounded-md hover:bg-accent cursor-pointer"
-                                                                        >
-                                                                            <Checkbox
-                                                                                checked={isAssigned}
-                                                                                disabled={isToggling}
-                                                                                onCheckedChange={() => handleToggleAssignment(sp.id, user.id, isAssigned)}
-                                                                            />
-                                                                            <Avatar className="h-6 w-6">
-                                                                                <AvatarFallback className="text-[10px] bg-primary/10 text-primary">
-                                                                                    {user.full_name?.charAt(0) || 'U'}
-                                                                                </AvatarFallback>
-                                                                            </Avatar>
-                                                                            <span className="text-sm truncate">
-                                                                                {user.full_name || 'User'}
-                                                                            </span>
-                                                                        </label>
-                                                                    )
-                                                                })
-                                                            )}
-                                                        </div>
-                                                    </PopoverContent>
-                                                </Popover>
+                                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openAssignDialog(sp)}>
+                                                    <Users className="h-3.5 w-3.5" />
+                                                </Button>
                                             </div>
                                         </TableCell>
                                         <TableCell>
@@ -248,18 +313,33 @@ export default function SubProjectsList({ projectId, initialSubProjects, assigne
                                             </Badge>
                                         </TableCell>
                                         <TableCell className="text-right">
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                title={sp.is_active ? "Deactivate" : "Activate"}
-                                                disabled={togglingStatus === sp.id}
-                                                onClick={() => handleToggleStatus(sp.id, sp.is_active || false)}
-                                            >
-                                                {togglingStatus === sp.id
-                                                    ? <Loader2 className="h-4 w-4 animate-spin" />
-                                                    : sp.is_active ? <Ban className="h-4 w-4 text-orange-500" /> : <CheckCircle2 className="h-4 w-4 text-green-600" />
-                                                }
-                                            </Button>
+                                            <div className="flex items-center justify-end gap-1">
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    title="Edit sub-project"
+                                                    onClick={() => openEdit(sp)}
+                                                >
+                                                    <Pencil className="h-4 w-4 text-blue-500" />
+                                                </Button>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    title="Delete sub-project"
+                                                    onClick={() => openDeleteConfirm(sp)}
+                                                >
+                                                    <Trash2 className="h-4 w-4 text-destructive" />
+                                                </Button>
+                                                {togglingStatus === sp.id ? (
+                                                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                                                ) : (
+                                                    <Switch
+                                                        checked={sp.is_active || false}
+                                                        onCheckedChange={() => handleToggleStatus(sp.id, sp.is_active || false)}
+                                                        aria-label={sp.is_active ? "Deactivate" : "Activate"}
+                                                    />
+                                                )}
+                                            </div>
                                         </TableCell>
                                     </TableRow>
                                 )
@@ -268,6 +348,135 @@ export default function SubProjectsList({ projectId, initialSubProjects, assigne
                     </Table>
                 )}
             </CardContent>
+
+            <Dialog open={editOpen} onOpenChange={(v) => { setEditOpen(v); if (!v) setEditingSp(null) }}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Edit Sub-project</DialogTitle>
+                    </DialogHeader>
+                    <form onSubmit={handleEditSubmit} className="space-y-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="edit-code">Code / Name</Label>
+                            <Input
+                                id="edit-code"
+                                value={editCode}
+                                onChange={(e) => setEditCode(e.target.value)}
+                                required
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="edit-description">Description</Label>
+                            <Input
+                                id="edit-description"
+                                value={editDescription}
+                                onChange={(e) => setEditDescription(e.target.value)}
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Tracking Type</Label>
+                            <Select value={editTrackingType} onValueChange={setEditTrackingType}>
+                                <SelectTrigger>
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="hours">Hours</SelectItem>
+                                    <SelectItem value="days">Days</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <DialogFooter>
+                            <Button type="button" variant="outline" onClick={() => setEditOpen(false)}>Cancel</Button>
+                            <Button type="submit" disabled={editLoading}>{editLoading ? 'Saving...' : 'Save'}</Button>
+                        </DialogFooter>
+                    </form>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog open={deleteOpen} onOpenChange={(v) => { setDeleteOpen(v); if (!v) setDeletingSp(null) }}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Delete Sub-project</DialogTitle>
+                        <DialogDescription>
+                            Are you sure you want to delete <span className="font-semibold">{deletingSp?.code}</span>?
+                            If time entries exist, the sub-project will be deactivated instead of permanently deleted.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter>
+                        <Button type="button" variant="outline" onClick={() => setDeleteOpen(false)}>Cancel</Button>
+                        <Button variant="destructive" disabled={deleteLoading} onClick={handleDelete}>
+                            {deleteLoading ? 'Deleting...' : 'Delete'}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog open={assignOpen} onOpenChange={(v) => { if (togglingAssignment) return; setAssignOpen(v); if (!v) { setAssigningSp(null); setAssignSearch('') } }}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Assign Users</DialogTitle>
+                        <DialogDescription>
+                            Select employees for <span className="font-semibold">{assigningSp?.code}</span>
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                            placeholder="Search employees..."
+                            value={assignSearch}
+                            onChange={(e) => setAssignSearch(e.target.value)}
+                            className="pl-9"
+                        />
+                    </div>
+                    <div className="max-h-72 overflow-y-auto -mx-1 px-1 space-y-1">
+                        {assignedUsers.length === 0 ? (
+                            <p className="text-sm text-muted-foreground py-6 text-center">
+                                No employees assigned to this project yet.
+                            </p>
+                        ) : filteredAssignUsers.length === 0 ? (
+                            <p className="text-sm text-muted-foreground py-6 text-center">
+                                No employees match your search.
+                            </p>
+                        ) : (
+                            filteredAssignUsers.map(user => {
+                                const isAssigned = assigningSp ? (subProjectAssignments[assigningSp.id] || []).includes(user.id) : false
+                                const isToggling = assigningSp ? togglingAssignment === `${assigningSp.id}-${user.id}` : false
+
+                                return (
+                                    <label
+                                        key={user.id}
+                                        className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-accent cursor-pointer transition-colors"
+                                    >
+                                        <Checkbox
+                                            checked={isAssigned}
+                                            disabled={!!togglingAssignment}
+                                            onCheckedChange={() => assigningSp && handleToggleAssignment(assigningSp.id, user.id, isAssigned)}
+                                        />
+                                        <Avatar className="h-8 w-8">
+                                            <AvatarFallback className="text-xs bg-primary/10 text-primary">
+                                                {user.full_name?.charAt(0) || 'U'}
+                                            </AvatarFallback>
+                                        </Avatar>
+                                        <div className="flex-1 min-w-0">
+                                            <span className="text-sm font-medium truncate block">
+                                                {user.full_name || 'User'}
+                                            </span>
+                                        </div>
+                                        {isToggling && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+                                    </label>
+                                )
+                            })
+                        )}
+                    </div>
+                    <DialogFooter>
+                        <div className="flex items-center justify-between w-full">
+                            <span className="text-xs text-muted-foreground">
+                                {assigningSp ? (subProjectAssignments[assigningSp.id] || []).length : 0} assigned
+                            </span>
+                            <Button variant="outline" disabled={!!togglingAssignment} onClick={() => setAssignOpen(false)}>Done</Button>
+                        </div>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </Card>
     )
 }

@@ -26,6 +26,9 @@ import { inviteUser } from '@/app/data/actions'
 export default function InviteUserDialog() {
     const [open, setOpen] = useState(false)
     const [isPending, startTransition] = useTransition()
+    const [email, setEmail] = useState('')
+    const [password, setPassword] = useState('')
+    const [fullName, setFullName] = useState('')
     const router = useRouter()
 
     const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
@@ -38,6 +41,9 @@ export default function InviteUserDialog() {
             } else {
                 toast.success('User created successfully')
                 setOpen(false)
+                setEmail('')
+                setPassword('')
+                setFullName('')
                 router.refresh()
             }
         })
@@ -48,23 +54,49 @@ export default function InviteUserDialog() {
             <Button onClick={() => setOpen(true)}>
                 <UserPlus className="mr-2 h-4 w-4" /> Add User
             </Button>
-            <Dialog open={open} onOpenChange={setOpen}>
+            <Dialog open={open} onOpenChange={(v) => {
+                setOpen(v)
+                if (!v) { setEmail(''); setPassword(''); setFullName('') }
+            }}>
                 <DialogContent>
                     <DialogHeader>
                         <DialogTitle>Add User</DialogTitle>
                     </DialogHeader>
                     <form onSubmit={handleSubmit} className="space-y-4">
                         <div className="space-y-2">
-                            <Label htmlFor="email">Email</Label>
-                            <Input id="email" name="email" type="email" required />
+                            <Label htmlFor="invite-email">Email</Label>
+                            <Input
+                                id="invite-email"
+                                name="email"
+                                type="email"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                autoComplete="off"
+                                required
+                            />
                         </div>
                         <div className="space-y-2">
-                            <Label htmlFor="password">Password</Label>
-                            <Input id="password" name="password" type="password" minLength={6} required />
+                            <Label htmlFor="invite-password">Password</Label>
+                            <Input
+                                id="invite-password"
+                                name="password"
+                                type="text"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                autoComplete="off"
+                                minLength={6}
+                                required
+                            />
                         </div>
                         <div className="space-y-2">
-                            <Label htmlFor="full_name">Full Name</Label>
-                            <Input id="full_name" name="full_name" />
+                            <Label htmlFor="invite-fullname">Full Name</Label>
+                            <Input
+                                id="invite-fullname"
+                                name="full_name"
+                                value={fullName}
+                                onChange={(e) => setFullName(e.target.value)}
+                                autoComplete="off"
+                            />
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="role">Role</Label>

@@ -98,6 +98,42 @@ export type Database = {
         }
         Relationships: []
       }
+      sub_project_assignments: {
+        Row: {
+          assigned_at: string | null
+          id: string
+          sub_project_id: string
+          user_id: string
+        }
+        Insert: {
+          assigned_at?: string | null
+          id?: string
+          sub_project_id: string
+          user_id: string
+        }
+        Update: {
+          assigned_at?: string | null
+          id?: string
+          sub_project_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sub_project_assignments_sub_project_id_fkey"
+            columns: ["sub_project_id"]
+            isOneToOne: false
+            referencedRelation: "sub_projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sub_project_assignments_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sub_projects: {
         Row: {
           code: string
@@ -106,6 +142,7 @@ export type Database = {
           id: string
           is_active: boolean | null
           project_id: string
+          tracking_type: string
         }
         Insert: {
           code: string
@@ -114,6 +151,7 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           project_id: string
+          tracking_type?: string
         }
         Update: {
           code?: string
@@ -122,6 +160,7 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           project_id?: string
+          tracking_type?: string
         }
         Relationships: [
           {

@@ -3,7 +3,8 @@ import { getUserProfile, getMyProjects, getWeeklyEntries, isWeekSubmitted, getMy
 import TimesheetGrid from './components/timesheetGrid'
 import { startOfWeek, endOfWeek, format, addWeeks, subWeeks, parseISO, isValid } from 'date-fns'
 import Link from 'next/link'
-import { LogOut, Shield, ChevronLeft, ChevronRight, Calendar } from 'lucide-react'
+import { Shield, ChevronLeft, ChevronRight, Calendar } from 'lucide-react'
+import AccountMenu from './components/AccountMenu'
 
 // Definiujemy typ propsów z searchParams (w Next.js 15+ to Promise)
 type Props = {
@@ -104,11 +105,7 @@ export default async function Home(props: Props) {
               </Link>
             )}
 
-            <form action="/auth/signout" method="post">
-              <button className="text-sm text-gray-600 hover:text-red-600 flex items-center gap-1 px-3 py-2 rounded-lg hover:bg-red-50 transition">
-                <LogOut size={16} /> <span className="hidden sm:inline">Sign Out</span>
-              </button>
-            </form>
+            <AccountMenu email={user.email || ''} />
           </div>
         </div>
       </header>

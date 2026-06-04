@@ -1,5 +1,5 @@
 import { getProjectById, getUsers, getProjectAssignments, fetchSubProjects, getSubProjectAssignments } from '@/app/data/actions'
-import AssignmentCheckbox from './assignmentCheckbox'
+import AssignedEmployeesTable from './AssignedEmployeesTable'
 import SubProjectsList from './SubProjectsList'
 import EditProjectDialog from './EditProjectDialog'
 import DeleteProjectButton from './DeleteProjectButton'
@@ -8,7 +8,6 @@ import { ArrowLeft, CheckCircle2, XCircle } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 
 export default async function ProjectDetailsPage({
     params
@@ -87,36 +86,11 @@ export default async function ProjectDetailsPage({
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
-                            <div className="space-y-4">
-                                {users.map((user) => {
-                                    const isAssigned = assignedUserIds.includes(user.id)
-
-                                    // Sortowanie: przypisani na górze
-                                    // (Tu prosta pętla, ale można posortować tablicę users wcześniej)
-
-                                    return (
-                                        <div key={user.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent/5 transition-colors">
-                                            <div className="flex items-center gap-3">
-                                                <Avatar className="h-9 w-9">
-                                                    <AvatarImage src="" />
-                                                    <AvatarFallback className="text-xs bg-primary/10 text-primary">
-                                                        {user.full_name?.charAt(0) || 'U'}
-                                                    </AvatarFallback>
-                                                </Avatar>
-                                                <div className="flex flex-col">
-                                                    <span className="font-medium text-sm">{user.full_name || 'User'}</span>
-                                                    <span className="text-xs text-muted-foreground">{user.role}</span>
-                                                </div>
-                                            </div>
-                                            <AssignmentCheckbox
-                                                userId={user.id}
-                                                projectId={projectId}
-                                                initialChecked={isAssigned}
-                                            />
-                                        </div>
-                                    )
-                                })}
-                            </div>
+                            <AssignedEmployeesTable
+                                users={users}
+                                projectId={projectId}
+                                assignedUserIds={assignedUserIds}
+                            />
                         </CardContent>
                     </Card>
                 </div>

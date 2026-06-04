@@ -119,6 +119,27 @@ export async function inviteUser(formData: FormData) {
     return { success: true }
 }
 
+export async function changePassword(currentPassword: string, newPassword: string) {
+    if (!newPassword || newPassword.length < 6) return { error: 'New password must be at least 6 characters' }
+
+    const supabase = await createClient()
+
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user || !user.email) return { error: 'No session' }
+
+    // Verify current password by re-signing in
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: currentPassword,
+    })
+    if (signInError) return { error: 'Current password is incorrect' }
+
+    const { error } = await supabase.auth.updateUser({ password: newPassword })
+    if (error) return { error: error.message }
+
+    return { success: true }
+}
+
 export async function deactivateUser(userId: string) {
     try {
         // Use admin client to bypass RLS

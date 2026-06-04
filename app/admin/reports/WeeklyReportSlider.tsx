@@ -14,6 +14,7 @@ export type UserRow = {
   userName: string
   subProjectId: string
   isSubmitted: boolean
+  trackingType?: 'hours' | 'days'
   dailyHours: Record<string, number>
   weekTotal: number
 }
@@ -22,6 +23,7 @@ export type SubProjectData = {
   code: string
   subProjectId: string
   description: string | null
+  trackingType?: 'hours' | 'days'
   users: UserRow[]
 }
 
@@ -55,6 +57,7 @@ type AggregatedUser = {
 type AggregatedSubProject = {
   code: string
   description: string | null
+  trackingType?: 'hours' | 'days'
   users: AggregatedUser[]
 }
 
@@ -71,6 +74,7 @@ function buildAggregatedProjects(weeks: WeekData[]): AggregatedProject[] {
     code: string | null
     subProjectMap: Map<string, {
       description: string | null
+      trackingType?: 'hours' | 'days'
       userMap: Map<string, { weeklyHours: Record<string, number>; total: number; isSubmitted: boolean }>
     }>
     weeklyTotals: Record<string, number>
@@ -90,7 +94,7 @@ function buildAggregatedProjects(weeks: WeekData[]): AggregatedProject[] {
       for (const sp of project.subProjects) {
         let spEntry = pEntry.subProjectMap.get(sp.code)
         if (!spEntry) {
-          spEntry = { description: sp.description, userMap: new Map() }
+          spEntry = { description: sp.description, trackingType: sp.trackingType, userMap: new Map() }
           pEntry.subProjectMap.set(sp.code, spEntry)
         }
 
@@ -116,6 +120,7 @@ function buildAggregatedProjects(weeks: WeekData[]): AggregatedProject[] {
     subProjects: Array.from(p.subProjectMap.entries()).map(([code, sp]) => ({
       code,
       description: sp.description,
+      trackingType: sp.trackingType,
       users: Array.from(sp.userMap.entries()).map(([userName, u]) => ({
         userName,
         weeklyHours: u.weeklyHours,
@@ -313,14 +318,17 @@ export default function WeeklyReportSlider({ weeks }: { weeks: WeekData[] }) {
                               {userRow.userName}
                             </div>
                           </td>
-                          {week.days.map(d => (
-                            <td key={d.key} className={`px-2 py-2 text-center ${d.isWeekend ? 'bg-red-50/30' : ''}`}>
-                              {userRow.dailyHours[d.key]
-                                ? <span className="font-medium text-gray-800">{userRow.dailyHours[d.key]}h</span>
-                                : <span className="text-gray-300">—</span>}
-                            </td>
-                          ))}
-                          <td className="px-3 py-2 text-center font-bold text-blue-600 bg-gray-50">{userRow.weekTotal}h</td>
+                          {week.days.map(d => {
+                            const unit = (userRow.trackingType ?? sp.trackingType) === 'days' ? 'd' : 'h'
+                            return (
+                              <td key={d.key} className={`px-2 py-2 text-center ${d.isWeekend ? 'bg-red-50/30' : ''}`}>
+                                {userRow.dailyHours[d.key]
+                                  ? <span className="font-medium text-gray-800">{userRow.dailyHours[d.key]}{unit}</span>
+                                  : <span className="text-gray-300">—</span>}
+                              </td>
+                            )
+                          })}
+                          <td className="px-3 py-2 text-center font-bold text-blue-600 bg-gray-50">{userRow.weekTotal}{(userRow.trackingType ?? sp.trackingType) === 'days' ? 'd' : 'h'}</td>
                           <td className="px-3 py-2 text-center">
                             <StatusCell userRow={userRow} weekStart={week.weekStart} />
                           </td>
@@ -403,15 +411,16 @@ export default function WeeklyReportSlider({ weeks }: { weeks: WeekData[] }) {
                           </td>
                           {weeks.map(w => {
                             const h = user.weeklyHours[w.weekStart] ?? 0
+                            const wUnit = sp.trackingType === 'days' ? 'd' : 'h'
                             return (
                               <td key={w.weekStart} className="px-2 py-2 text-center">
                                 {h > 0
-                                  ? <span className="font-medium text-gray-800">{h}h</span>
+                                  ? <span className="font-medium text-gray-800">{h}{wUnit}</span>
                                   : <span className="text-gray-300">—</span>}
                               </td>
                             )
                           })}
-                          <td className="px-3 py-2 text-center font-bold text-blue-600 bg-gray-50">{user.total}h</td>
+                          <td className="px-3 py-2 text-center font-bold text-blue-600 bg-gray-50">{user.total}{sp.trackingType === 'days' ? 'd' : 'h'}</td>
                           <td className="px-3 py-2 text-center">
                             {user.isSubmitted ? (
                               <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-100">

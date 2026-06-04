@@ -173,6 +173,7 @@ export async function createSubProject(formData: FormData) {
     const projectId = formData.get('project_id') as string
     const code = formData.get('code') as string
     const description = formData.get('description') as string
+    const tracking_type = (formData.get('tracking_type') as string) || 'hours'
 
     if (!code) return { error: 'Code is required' }
     if (!projectId) return { error: 'Project ID is required' }
@@ -183,12 +184,32 @@ export async function createSubProject(formData: FormData) {
             project_id: projectId,
             code: code,
             description: description,
-            is_active: true
-        })
+            is_active: true,
+            tracking_type,
+        } as any)
 
     if (error) {
         return { error: error.message }
     }
+
+    revalidatePath(`/admin/projects/${projectId}`)
+    return { success: true }
+}
+
+export async function updateSubProject(id: string, projectId: string, formData: FormData) {
+    const supabase = await createClient()
+    const code = formData.get('code') as string
+    const description = (formData.get('description') as string) || null
+    const tracking_type = (formData.get('tracking_type') as string) || 'hours'
+
+    if (!code) return { error: 'Code is required' }
+
+    const { error } = await supabase
+        .from('sub_projects')
+        .update({ code, description, tracking_type } as any)
+        .eq('id', id)
+
+    if (error) return { error: error.message }
 
     revalidatePath(`/admin/projects/${projectId}`)
     return { success: true }
@@ -333,6 +354,40 @@ export async function toggleSubProjectAssignment(subProjectId: string, userId: s
     revalidatePath(`/admin/projects/${projectId}`)
     revalidatePath(`/admin/users`)
     return { success: true }
+}
+
+export async function deleteSubProject(id: string, projectId: string) {
+    const supabase = await createClient()
+
+    // Check for timesheet entries on this sub-project
+    const { count } = await supabase
+        .from('timesheet_entries')
+        .select('*', { count: 'exact', head: true })
+        .eq('sub_project_id', id)
+
+    if (count && count > 0) {
+        // Soft delete: deactivate instead of hard delete
+        const { error } = await supabase
+            .from('sub_projects')
+            .update({ is_active: false })
+            .eq('id', id)
+
+        if (error) return { error: error.message }
+
+        revalidatePath(`/admin/projects/${projectId}`)
+        return { success: true, softDeleted: true }
+    }
+
+    // Hard delete if no entries exist
+    const { error } = await supabase
+        .from('sub_projects')
+        .delete()
+        .eq('id', id)
+
+    if (error) return { error: error.message }
+
+    revalidatePath(`/admin/projects/${projectId}`)
+    return { success: true, softDeleted: false }
 }
 
 export async function toggleSubProjectStatus(id: string, projectId: string, isActive: boolean) {
