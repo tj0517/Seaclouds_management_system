@@ -110,6 +110,48 @@ export default function InviteUserDialog() {
                                 </SelectContent>
                             </Select>
                         </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="invite-employee-id">Employee ID</Label>
+                            <Input
+                                id="invite-employee-id"
+                                name="employee_id"
+                                placeholder="e.g. EMP-001"
+                                autoComplete="off"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="invite-position">Position</Label>
+                            <Input
+                                id="invite-position"
+                                name="position"
+                                placeholder="e.g. Software Engineer"
+                                autoComplete="off"
+                            />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="invite-rate-hourly">Hourly Rate</Label>
+                                <Input
+                                    id="invite-rate-hourly"
+                                    name="rate_hourly"
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    placeholder="0.00"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="invite-rate-daily">Daily Rate</Label>
+                                <Input
+                                    id="invite-rate-daily"
+                                    name="rate_daily"
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    placeholder="0.00"
+                                />
+                            </div>
+                        </div>
                         <DialogFooter>
                             <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={isPending}>
                                 Cancel

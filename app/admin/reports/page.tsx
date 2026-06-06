@@ -115,13 +115,23 @@ export default async function ReportsPage(props: Props) {
           const dailyTotals = Object.fromEntries(
             week.days.map(d => [d, projectWeekRows.reduce((s, r) => s + (r.dailyBreakdown[d] ?? 0), 0)])
           )
+          const dailyTotalsHours = Object.fromEntries(
+            week.days.map(d => [d, projectWeekRows.filter(r => r.trackingType !== 'days').reduce((s, r) => s + (r.dailyBreakdown[d] ?? 0), 0)])
+          )
+          const dailyTotalsDays = Object.fromEntries(
+            week.days.map(d => [d, projectWeekRows.filter(r => r.trackingType === 'days').reduce((s, r) => s + (r.dailyBreakdown[d] ?? 0), 0)])
+          )
           const weekTotal = Object.values(dailyTotals).reduce((a, b) => a + b, 0)
+          const weekTotalHours = Object.values(dailyTotalsHours).reduce((a, b) => a + b, 0)
+          const weekTotalDays = Object.values(dailyTotalsDays).reduce((a, b) => a + b, 0)
 
-          return { name: projectName, code: projectData.code, subProjects, weekTotal, dailyTotals }
+          return { name: projectName, code: projectData.code, subProjects, weekTotal, weekTotalHours, weekTotalDays, dailyTotals, dailyTotalsHours, dailyTotalsDays }
         })
         .filter(p => p.weekTotal > 0)
 
       const weekTotal = projects.reduce((s, p) => s + p.weekTotal, 0)
+      const weekTotalHours = projects.reduce((s, p) => s + p.weekTotalHours, 0)
+      const weekTotalDays = projects.reduce((s, p) => s + p.weekTotalDays, 0)
 
       return {
         weekStart: week.weekStart,
@@ -130,6 +140,8 @@ export default async function ReportsPage(props: Props) {
         days,
         projects,
         weekTotal,
+        weekTotalHours,
+        weekTotalDays,
       }
     })
     .filter(w => w.weekTotal > 0)

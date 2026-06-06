@@ -156,7 +156,7 @@ export default function SubProjectsList({ projectId, initialSubProjects, assigne
         const result = await deleteSubProject(deletingSp.id, projectId)
         setDeleteLoading(false)
         if (result.success) {
-            toast.success(result.softDeleted ? 'Sub-project deactivated (has time entries)' : 'Sub-project deleted')
+            toast.success('Sub-project deleted')
             setDeleteOpen(false)
             setDeletingSp(null)
             router.refresh()
@@ -398,7 +398,7 @@ export default function SubProjectsList({ projectId, initialSubProjects, assigne
                         <DialogTitle>Delete Sub-project</DialogTitle>
                         <DialogDescription>
                             Are you sure you want to delete <span className="font-semibold">{deletingSp?.code}</span>?
-                            If time entries exist, the sub-project will be deactivated instead of permanently deleted.
+                            It will be hidden from the UI but all data will be preserved in the database.
                         </DialogDescription>
                     </DialogHeader>
                     <DialogFooter>

@@ -5,10 +5,9 @@ import { toast } from "sonner"
 import AssignmentCheckbox from './assignmentCheckbox'
 import SubProjectAssignmentCheckbox from './subProjectAssignmentCheckbox'
 import Link from 'next/link'
-import { ArrowLeft, ShieldCheck, Pencil, ShieldOff, ChevronDown, ChevronRight } from 'lucide-react'
+import { ArrowLeft, ShieldOff, ChevronDown, ChevronRight } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
     Dialog,
@@ -21,7 +20,16 @@ import {
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Database } from '@/utils/supabase/types'
-import { updateUserRole, deactivateUser } from '@/app/data/actions'
+import { deactivateUser, updateUserProfile } from '@/app/data/actions'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select'
 
 type Profile = Database['public']['Tables']['profiles']['Row']
 type Project = Database['public']['Tables']['projects']['Row']
@@ -51,11 +59,17 @@ export default function UserDetailsClient({
     subProjectsByProject,
     userSubProjectIds
 }: UserDetailsClientProps) {
-    const [isEditing, setIsEditing] = useState(false)
     const [isPending, startTransition] = useTransition()
     const [deactivateOpen, setDeactivateOpen] = useState(false)
     const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>({})
     const router = useRouter()
+
+    const [fullName, setFullName] = useState(currentUser?.full_name || '')
+    const [employeeId, setEmployeeId] = useState(currentUser?.employee_id || '')
+    const [position, setPosition] = useState(currentUser?.position || '')
+    const [role, setRole] = useState<'admin' | 'employee'>(currentUser?.role || 'employee')
+    const [rateHourly, setRateHourly] = useState(currentUser?.rate_hourly?.toString() || '')
+    const [rateDaily, setRateDaily] = useState(currentUser?.rate_daily?.toString() || '')
 
     const toggleExpanded = (projectId: string) => {
         setExpandedProjects(prev => ({ ...prev, [projectId]: !prev[projectId] }))
@@ -76,14 +90,20 @@ export default function UserDetailsClient({
         })
     }
 
-    const changeRole = () => {
-        setIsEditing(false)
+    const handleSaveProfile = () => {
         startTransition(async () => {
-            const result = await updateUserRole(userId, currentUser?.role === 'employee' ? 'admin' : 'employee')
+            const result = await updateUserProfile(userId, {
+                full_name: fullName || null,
+                employee_id: employeeId || null,
+                position: position || null,
+                role,
+                rate_hourly: rateHourly ? Number(rateHourly) : null,
+                rate_daily: rateDaily ? Number(rateDaily) : null,
+            })
             if (result.error) {
-                toast.error(`Error changing role: ${result.error}`)
+                toast.error(`Error: ${result.error}`)
             } else {
-                toast.success('Role changed successfully')
+                toast.success('Profile updated successfully')
                 router.refresh()
             }
         })
@@ -102,7 +122,7 @@ export default function UserDetailsClient({
             </div>
 
             <div className="grid gap-6 md:grid-cols-3">
-                {/* User Card */}
+                {/* User Profile Card */}
                 <div className="md:col-span-1">
                     <Card>
                         <CardHeader className="flex flex-row items-center gap-4">
@@ -117,38 +137,80 @@ export default function UserDetailsClient({
                                 <CardDescription className="text-xs font-mono">{userId}</CardDescription>
                             </div>
                         </CardHeader>
-                        <CardContent>
-                            <div className="flex items-center justify-between text-sm mt-2">
-                                <span className="text-muted-foreground flex items-center gap-2">
-                                    <ShieldCheck className="h-4 w-4" /> Role:
-                                </span>
-                                <Badge variant={currentUser?.role === 'admin' ? "default" : "secondary"}>
-                                    {currentUser?.role || 'employee'}
-                                </Badge>
-                                <Button variant="ghost" size="sm" onClick={() => setIsEditing(true)}>
-                                    <div className='flex flex-row'>
-                                        <Pencil className="mr-2 h-4 w-4" /> Edit</div >
-                                </Button>
+                        <CardContent className="space-y-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="full-name">Full Name</Label>
+                                <Input
+                                    id="full-name"
+                                    value={fullName}
+                                    onChange={(e) => setFullName(e.target.value)}
+                                />
                             </div>
-                            {isEditing && (
-                                <div className='flex flex-row gap-2'>
-                                    <Button variant="default" className='w-1/2 mt-4' onClick={() => changeRole()}>
-                                        <div > Change Role </div>
-
-                                    </Button>
-                                    <Button variant="outline" className='w-1/2 mt-4' onClick={() => setIsEditing(false)}>
-                                        <div > Cancel </div>
-
-                                    </Button>
+                            <div className="space-y-2">
+                                <Label htmlFor="employee-id">Employee ID</Label>
+                                <Input
+                                    id="employee-id"
+                                    value={employeeId}
+                                    onChange={(e) => setEmployeeId(e.target.value)}
+                                    placeholder="e.g. EMP-001"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="position">Position</Label>
+                                <Input
+                                    id="position"
+                                    value={position}
+                                    onChange={(e) => setPosition(e.target.value)}
+                                    placeholder="e.g. Software Engineer"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="role">Role</Label>
+                                <Select value={role} onValueChange={(v) => setRole(v as 'admin' | 'employee')}>
+                                    <SelectTrigger>
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="employee">Employee</SelectItem>
+                                        <SelectItem value="admin">Admin</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label htmlFor="rate-hourly">Hourly Rate</Label>
+                                    <Input
+                                        id="rate-hourly"
+                                        type="number"
+                                        step="0.01"
+                                        min="0"
+                                        value={rateHourly}
+                                        onChange={(e) => setRateHourly(e.target.value)}
+                                        placeholder="0.00"
+                                    />
                                 </div>
-                            )}
+                                <div className="space-y-2">
+                                    <Label htmlFor="rate-daily">Daily Rate</Label>
+                                    <Input
+                                        id="rate-daily"
+                                        type="number"
+                                        step="0.01"
+                                        min="0"
+                                        value={rateDaily}
+                                        onChange={(e) => setRateDaily(e.target.value)}
+                                        placeholder="0.00"
+                                    />
+                                </div>
+                            </div>
+                            <Button className="w-full" onClick={handleSaveProfile} disabled={isPending}>
+                                {isPending ? 'Saving...' : 'Save Changes'}
+                            </Button>
 
-                            <div className="pt-4 border-t mt-4">
+                            <div className="pt-4 border-t">
                                 <Button variant="outline" size="sm" className="w-full border-amber-300 text-amber-700 hover:bg-amber-50 hover:text-amber-800" onClick={() => setDeactivateOpen(true)}>
                                     <ShieldOff className="mr-2 h-4 w-4" /> Revoke All Access
                                 </Button>
                             </div>
-
                         </CardContent>
                     </Card>
                 </div>

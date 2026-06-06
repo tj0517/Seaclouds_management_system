@@ -95,6 +95,10 @@ export async function inviteUser(formData: FormData) {
     const password = formData.get('password') as string
     const full_name = (formData.get('full_name') as string) || null
     const role = ((formData.get('role') as string) || 'employee') as 'admin' | 'employee'
+    const employee_id = (formData.get('employee_id') as string) || null
+    const position = (formData.get('position') as string) || null
+    const rate_hourly = formData.get('rate_hourly') ? Number(formData.get('rate_hourly')) : null
+    const rate_daily = formData.get('rate_daily') ? Number(formData.get('rate_daily')) : null
 
     if (!email) return { error: 'Email is required' }
     if (!password || password.length < 6) return { error: 'Password must be at least 6 characters' }
@@ -111,10 +115,49 @@ export async function inviteUser(formData: FormData) {
 
     const { error: profileError } = await getSupabaseAdmin()
         .from('profiles')
-        .upsert({ id: userId, full_name, role }, { onConflict: 'id' })
+        .upsert({
+            id: userId,
+            full_name,
+            role,
+            employee_id,
+            position,
+            rate_hourly,
+            rate_daily,
+        } as any, { onConflict: 'id' })
 
     if (profileError) return { error: profileError.message }
 
+    revalidatePath('/admin/users')
+    return { success: true }
+}
+
+export async function updateUserProfile(userId: string, data: {
+    full_name: string | null
+    employee_id: string | null
+    position: string | null
+    role: 'admin' | 'employee'
+    rate_hourly: number | null
+    rate_daily: number | null
+}) {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return { error: 'No session' }
+
+    const { error } = await getSupabaseAdmin()
+        .from('profiles')
+        .update({
+            full_name: data.full_name,
+            employee_id: data.employee_id,
+            position: data.position,
+            role: data.role,
+            rate_hourly: data.rate_hourly,
+            rate_daily: data.rate_daily,
+        } as any)
+        .eq('id', userId)
+
+    if (error) return { error: error.message }
+
+    revalidatePath(`/admin/users/${userId}`)
     revalidatePath('/admin/users')
     return { success: true }
 }

@@ -17,20 +17,32 @@ export type Database = {
       profiles: {
         Row: {
           created_at: string
+          employee_id: string | null
           full_name: string | null
           id: string
+          position: string | null
+          rate_daily: number | null
+          rate_hourly: number | null
           role: Database["public"]["Enums"]["user_role"] | null
         }
         Insert: {
           created_at?: string
+          employee_id?: string | null
           full_name?: string | null
           id: string
+          position?: string | null
+          rate_daily?: number | null
+          rate_hourly?: number | null
           role?: Database["public"]["Enums"]["user_role"] | null
         }
         Update: {
           created_at?: string
+          employee_id?: string | null
           full_name?: string | null
           id?: string
+          position?: string | null
+          rate_daily?: number | null
+          rate_hourly?: number | null
           role?: Database["public"]["Enums"]["user_role"] | null
         }
         Relationships: []
@@ -141,6 +153,7 @@ export type Database = {
           description: string | null
           id: string
           is_active: boolean | null
+          is_deleted: boolean
           project_id: string
           tracking_type: string
         }
@@ -150,6 +163,7 @@ export type Database = {
           description?: string | null
           id?: string
           is_active?: boolean | null
+          is_deleted?: boolean
           project_id: string
           tracking_type?: string
         }
@@ -159,6 +173,7 @@ export type Database = {
           description?: string | null
           id?: string
           is_active?: boolean | null
+          is_deleted?: boolean
           project_id?: string
           tracking_type?: string
         }

@@ -150,6 +150,7 @@ export async function fetchSubProjects(projectId: string) {
         .from('sub_projects')
         .select('*')
         .eq('project_id', projectId)
+        .eq('is_deleted', false)
 
     return (data ?? []) as SubProject[]
 }
@@ -164,6 +165,7 @@ export async function getAllSubProjects(projectIds: string[]) {
         .select('*')
         .in('project_id', projectIds)
         .eq('is_active', true)
+        .eq('is_deleted', false)
 
     return (data ?? []) as SubProject[]
 }
@@ -333,6 +335,7 @@ export async function getMyAssignedSubProjects(projectIds: string[]) {
         .in('id', assignedSubProjectIds)
         .in('project_id', projectIds)
         .eq('is_active', true)
+        .eq('is_deleted', false)
 
     return (data ?? []) as SubProject[]
 }
@@ -359,35 +362,16 @@ export async function toggleSubProjectAssignment(subProjectId: string, userId: s
 export async function deleteSubProject(id: string, projectId: string) {
     const supabase = await createClient()
 
-    // Check for timesheet entries on this sub-project
-    const { count } = await supabase
-        .from('timesheet_entries')
-        .select('*', { count: 'exact', head: true })
-        .eq('sub_project_id', id)
-
-    if (count && count > 0) {
-        // Soft delete: deactivate instead of hard delete
-        const { error } = await supabase
-            .from('sub_projects')
-            .update({ is_active: false })
-            .eq('id', id)
-
-        if (error) return { error: error.message }
-
-        revalidatePath(`/admin/projects/${projectId}`)
-        return { success: true, softDeleted: true }
-    }
-
-    // Hard delete if no entries exist
+    // Soft-delete: mark as deleted to hide from all UI but preserve DB records and connected data
     const { error } = await supabase
         .from('sub_projects')
-        .delete()
+        .update({ is_deleted: true } as any)
         .eq('id', id)
 
     if (error) return { error: error.message }
 
     revalidatePath(`/admin/projects/${projectId}`)
-    return { success: true, softDeleted: false }
+    return { success: true }
 }
 
 export async function toggleSubProjectStatus(id: string, projectId: string, isActive: boolean) {

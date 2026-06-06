@@ -32,7 +32,11 @@ export type ProjectData = {
   code: string | null
   subProjects: SubProjectData[]
   weekTotal: number
+  weekTotalHours: number
+  weekTotalDays: number
   dailyTotals: Record<string, number>
+  dailyTotalsHours: Record<string, number>
+  dailyTotalsDays: Record<string, number>
 }
 
 export type WeekData = {
@@ -42,6 +46,8 @@ export type WeekData = {
   days: { key: string; dayName: string; dateLabel: string; isWeekend: boolean }[]
   projects: ProjectData[]
   weekTotal: number
+  weekTotalHours: number
+  weekTotalDays: number
 }
 
 type ViewMode = 'day' | 'week'
@@ -66,7 +72,11 @@ type AggregatedProject = {
   code: string | null
   subProjects: AggregatedSubProject[]
   weeklyTotals: Record<string, number> // weekStart -> hours
+  weeklyTotalsHours: Record<string, number>
+  weeklyTotalsDays: Record<string, number>
   total: number
+  totalHours: number
+  totalDays: number
 }
 
 function buildAggregatedProjects(weeks: WeekData[]): AggregatedProject[] {
@@ -78,18 +88,26 @@ function buildAggregatedProjects(weeks: WeekData[]): AggregatedProject[] {
       userMap: Map<string, { weeklyHours: Record<string, number>; total: number; isSubmitted: boolean }>
     }>
     weeklyTotals: Record<string, number>
+    weeklyTotalsHours: Record<string, number>
+    weeklyTotalsDays: Record<string, number>
     total: number
+    totalHours: number
+    totalDays: number
   }>()
 
   for (const week of weeks) {
     for (const project of week.projects) {
       let pEntry = projectMap.get(project.name)
       if (!pEntry) {
-        pEntry = { code: project.code, subProjectMap: new Map(), weeklyTotals: {}, total: 0 }
+        pEntry = { code: project.code, subProjectMap: new Map(), weeklyTotals: {}, weeklyTotalsHours: {}, weeklyTotalsDays: {}, total: 0, totalHours: 0, totalDays: 0 }
         projectMap.set(project.name, pEntry)
       }
       pEntry.weeklyTotals[week.weekStart] = (pEntry.weeklyTotals[week.weekStart] ?? 0) + project.weekTotal
+      pEntry.weeklyTotalsHours[week.weekStart] = (pEntry.weeklyTotalsHours[week.weekStart] ?? 0) + project.weekTotalHours
+      pEntry.weeklyTotalsDays[week.weekStart] = (pEntry.weeklyTotalsDays[week.weekStart] ?? 0) + project.weekTotalDays
       pEntry.total += project.weekTotal
+      pEntry.totalHours += project.weekTotalHours
+      pEntry.totalDays += project.weekTotalDays
 
       for (const sp of project.subProjects) {
         let spEntry = pEntry.subProjectMap.get(sp.code)
@@ -116,7 +134,11 @@ function buildAggregatedProjects(weeks: WeekData[]): AggregatedProject[] {
     name,
     code: p.code,
     total: p.total,
+    totalHours: p.totalHours,
+    totalDays: p.totalDays,
     weeklyTotals: p.weeklyTotals,
+    weeklyTotalsHours: p.weeklyTotalsHours,
+    weeklyTotalsDays: p.weeklyTotalsDays,
     subProjects: Array.from(p.subProjectMap.entries()).map(([code, sp]) => ({
       code,
       description: sp.description,
@@ -170,6 +192,13 @@ function StatusCell({ userRow, weekStart }: { userRow: UserRow; weekStart: strin
   )
 }
 
+function formatMixedTotal(hours: number, days: number): string {
+  const parts: string[] = []
+  if (hours > 0) parts.push(`${hours}h`)
+  if (days > 0) parts.push(`${days}d`)
+  return parts.length > 0 ? parts.join(' / ') : '—'
+}
+
 export default function WeeklyReportSlider({ weeks }: { weeks: WeekData[] }) {
   const [currentWeekIndex, setCurrentWeekIndex] = useState(0)
   const [viewMode, setViewMode] = useState<ViewMode>('day')
@@ -187,7 +216,8 @@ export default function WeeklyReportSlider({ weeks }: { weeks: WeekData[] }) {
   }
 
   const week = weeks[currentWeekIndex]
-  const totalHoursAllWeeks = weeks.reduce((s, w) => s + w.weekTotal, 0)
+  const totalHoursAllWeeks = weeks.reduce((s, w) => s + w.weekTotalHours, 0)
+  const totalDaysAllWeeks = weeks.reduce((s, w) => s + w.weekTotalDays, 0)
 
   return (
     <div className="space-y-4">
@@ -221,7 +251,7 @@ export default function WeeklyReportSlider({ weeks }: { weeks: WeekData[] }) {
                 ({currentWeekIndex + 1} of {weeks.length})
               </span>
               <Badge variant="outline" className="font-mono text-xs ml-1">
-                {week.weekTotal}h total
+                {formatMixedTotal(week.weekTotalHours, week.weekTotalDays)} total
               </Badge>
             </>
           )}
@@ -231,7 +261,7 @@ export default function WeeklyReportSlider({ weeks }: { weeks: WeekData[] }) {
                 Summary — {weeks[0].weekStartLabel} to {weeks[weeks.length - 1].weekEndLabel}
               </h3>
               <Badge variant="outline" className="font-mono text-xs ml-1">
-                {totalHoursAllWeeks}h total
+                {formatMixedTotal(totalHoursAllWeeks, totalDaysAllWeeks)} total
               </Badge>
             </>
           )}
@@ -339,15 +369,16 @@ export default function WeeklyReportSlider({ weeks }: { weeks: WeekData[] }) {
                     <tr className="bg-gray-50 font-semibold border-t-2 border-gray-200">
                       <td colSpan={3} className="px-3 py-2 text-right text-xs text-gray-500 uppercase tracking-wide">Project Total</td>
                       {week.days.map(d => {
-                        const t = project.dailyTotals[d.key] ?? 0
+                        const h = project.dailyTotalsHours[d.key] ?? 0
+                        const dd = project.dailyTotalsDays[d.key] ?? 0
                         return (
                           <td key={d.key} className="px-2 py-2 text-center text-sm">
-                            {t > 0 ? <span className="font-bold">{t}h</span> : <span className="text-gray-300">—</span>}
+                            {(h > 0 || dd > 0) ? <span className="font-bold">{formatMixedTotal(h, dd)}</span> : <span className="text-gray-300">—</span>}
                           </td>
                         )
                       })}
                       <td className="px-3 py-2 text-center text-blue-700 bg-blue-50">
-                        {project.weekTotal}h
+                        {formatMixedTotal(project.weekTotalHours, project.weekTotalDays)}
                       </td>
                       <td />
                     </tr>
@@ -437,15 +468,16 @@ export default function WeeklyReportSlider({ weeks }: { weeks: WeekData[] }) {
                     <tr className="bg-gray-50 font-semibold border-t-2 border-gray-200">
                       <td colSpan={3} className="px-3 py-2 text-right text-xs text-gray-500 uppercase tracking-wide">Project Total</td>
                       {weeks.map(w => {
-                        const t = project.weeklyTotals[w.weekStart] ?? 0
+                        const h = project.weeklyTotalsHours[w.weekStart] ?? 0
+                        const dd = project.weeklyTotalsDays[w.weekStart] ?? 0
                         return (
                           <td key={w.weekStart} className="px-2 py-2 text-center text-sm">
-                            {t > 0 ? <span className="font-bold">{t}h</span> : <span className="text-gray-300">—</span>}
+                            {(h > 0 || dd > 0) ? <span className="font-bold">{formatMixedTotal(h, dd)}</span> : <span className="text-gray-300">—</span>}
                           </td>
                         )
                       })}
                       <td className="px-3 py-2 text-center text-blue-700 bg-blue-50">
-                        {project.total}h
+                        {formatMixedTotal(project.totalHours, project.totalDays)}
                       </td>
                       <td />
                     </tr>
