@@ -17,6 +17,7 @@ export type UserRow = {
   trackingType?: 'hours' | 'days'
   dailyHours: Record<string, number>
   weekTotal: number
+  earnings: number
 }
 
 export type SubProjectData = {
@@ -58,6 +59,7 @@ type AggregatedUser = {
   weeklyHours: Record<string, number> // weekStart -> hours
   total: number
   isSubmitted: boolean
+  earnings: number
 }
 
 type AggregatedSubProject = {
@@ -85,7 +87,7 @@ function buildAggregatedProjects(weeks: WeekData[]): AggregatedProject[] {
     subProjectMap: Map<string, {
       description: string | null
       trackingType?: 'hours' | 'days'
-      userMap: Map<string, { weeklyHours: Record<string, number>; total: number; isSubmitted: boolean }>
+      userMap: Map<string, { weeklyHours: Record<string, number>; total: number; isSubmitted: boolean; earnings: number }>
     }>
     weeklyTotals: Record<string, number>
     weeklyTotalsHours: Record<string, number>
@@ -119,11 +121,12 @@ function buildAggregatedProjects(weeks: WeekData[]): AggregatedProject[] {
         for (const user of sp.users) {
           let uEntry = spEntry.userMap.get(user.userName)
           if (!uEntry) {
-            uEntry = { weeklyHours: {}, total: 0, isSubmitted: true }
+            uEntry = { weeklyHours: {}, total: 0, isSubmitted: true, earnings: 0 }
             spEntry.userMap.set(user.userName, uEntry)
           }
           uEntry.weeklyHours[week.weekStart] = (uEntry.weeklyHours[week.weekStart] ?? 0) + user.weekTotal
           uEntry.total += user.weekTotal
+          uEntry.earnings += user.earnings
           if (!user.isSubmitted) uEntry.isSubmitted = false
         }
       }
@@ -148,6 +151,7 @@ function buildAggregatedProjects(weeks: WeekData[]): AggregatedProject[] {
         weeklyHours: u.weeklyHours,
         total: u.total,
         isSubmitted: u.isSubmitted,
+        earnings: u.earnings,
       })),
     })),
   }))
@@ -323,6 +327,7 @@ export default function WeeklyReportSlider({ weeks }: { weeks: WeekData[] }) {
                         </th>
                       ))}
                       <th className="text-center px-3 py-2 font-bold text-gray-800 bg-gray-100 w-16">Σ</th>
+                      <th className="text-center px-3 py-2 font-medium text-gray-600 w-24">Earnings</th>
                       <th className="text-center px-3 py-2 font-medium text-gray-600 w-28">Status</th>
                     </tr>
                   </thead>
@@ -359,6 +364,9 @@ export default function WeeklyReportSlider({ weeks }: { weeks: WeekData[] }) {
                             )
                           })}
                           <td className="px-3 py-2 text-center font-bold text-blue-600 bg-gray-50">{userRow.weekTotal}{(userRow.trackingType ?? sp.trackingType) === 'days' ? 'd' : 'h'}</td>
+                          <td className="px-3 py-2 text-center font-medium text-emerald-700">
+                            {userRow.earnings > 0 ? `${userRow.earnings.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} PLN` : <span className="text-gray-300">—</span>}
+                          </td>
                           <td className="px-3 py-2 text-center">
                             <StatusCell userRow={userRow} weekStart={week.weekStart} />
                           </td>
@@ -379,6 +387,9 @@ export default function WeeklyReportSlider({ weeks }: { weeks: WeekData[] }) {
                       })}
                       <td className="px-3 py-2 text-center text-blue-700 bg-blue-50">
                         {formatMixedTotal(project.weekTotalHours, project.weekTotalDays)}
+                      </td>
+                      <td className="px-3 py-2 text-center text-emerald-700 bg-emerald-50 font-bold">
+                        {project.subProjects.reduce((s, sp) => s + sp.users.reduce((us, u) => us + u.earnings, 0), 0).toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} PLN
                       </td>
                       <td />
                     </tr>
@@ -415,6 +426,7 @@ export default function WeeklyReportSlider({ weeks }: { weeks: WeekData[] }) {
                         </th>
                       ))}
                       <th className="text-center px-3 py-2 font-bold text-gray-800 bg-gray-100 w-16">Σ</th>
+                      <th className="text-center px-3 py-2 font-medium text-gray-600 w-24">Earnings</th>
                       <th className="text-center px-3 py-2 font-medium text-gray-600 w-28">Status</th>
                     </tr>
                   </thead>
@@ -452,6 +464,9 @@ export default function WeeklyReportSlider({ weeks }: { weeks: WeekData[] }) {
                             )
                           })}
                           <td className="px-3 py-2 text-center font-bold text-blue-600 bg-gray-50">{user.total}{sp.trackingType === 'days' ? 'd' : 'h'}</td>
+                          <td className="px-3 py-2 text-center font-medium text-emerald-700">
+                            {user.earnings > 0 ? `${user.earnings.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} PLN` : <span className="text-gray-300">—</span>}
+                          </td>
                           <td className="px-3 py-2 text-center">
                             {user.isSubmitted ? (
                               <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-100">
@@ -478,6 +493,9 @@ export default function WeeklyReportSlider({ weeks }: { weeks: WeekData[] }) {
                       })}
                       <td className="px-3 py-2 text-center text-blue-700 bg-blue-50">
                         {formatMixedTotal(project.totalHours, project.totalDays)}
+                      </td>
+                      <td className="px-3 py-2 text-center text-emerald-700 bg-emerald-50 font-bold">
+                        {project.subProjects.reduce((s, sp) => s + sp.users.reduce((us, u) => us + u.earnings, 0), 0).toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} PLN
                       </td>
                       <td />
                     </tr>

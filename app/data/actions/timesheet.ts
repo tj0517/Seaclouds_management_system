@@ -115,6 +115,73 @@ export async function submitWeek(weekStart: string, subprojectId: string) {
     return { success: true }
 }
 
+export async function submitWeekAll(weekStart: string, subprojectIds: string[]) {
+    const supabase = await createClient()
+
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return { error: 'No session' }
+
+    // Check which are already submitted
+    const { data: existing } = await supabase
+        .from('timesheet_submissions')
+        .select('sub_project_id')
+        .eq('user_id', user.id)
+        .eq('week_start', weekStart)
+        .in('sub_project_id', subprojectIds)
+
+    const alreadySubmitted = new Set(existing?.map(e => e.sub_project_id) ?? [])
+    const toSubmit = subprojectIds.filter(id => !alreadySubmitted.has(id))
+
+    if (toSubmit.length === 0) {
+        return { error: 'All projects are already submitted.' }
+    }
+
+    const rows = toSubmit.map(subprojectId => ({
+        user_id: user.id,
+        sub_project_id: subprojectId,
+        week_start: weekStart,
+        status: 'submitted' as const,
+    }))
+
+    const { error } = await supabase
+        .from('timesheet_submissions')
+        .insert(rows as any)
+
+    if (error) {
+        return { error: error.message }
+    }
+
+    // Fire-and-forget email notifications
+    const notifyAdmins = async () => {
+        try {
+            const { data: profile } = await supabase
+                .from('profiles')
+                .select('full_name')
+                .eq('id', user.id)
+                .single()
+
+            const { data: subProjectData } = await supabase
+                .from('sub_projects')
+                .select('code')
+                .in('id', toSubmit)
+
+            const codes = subProjectData?.map(sp => sp.code).join(', ') ?? 'multiple projects'
+
+            await sendAdminNotification({
+                employeeName: profile?.full_name ?? 'Unknown',
+                subProjectCode: codes,
+                weekStart,
+            })
+        } catch (e) {
+            console.error('Failed to send admin notification:', e)
+        }
+    }
+    notifyAdmins()
+
+    revalidatePath('/')
+    return { success: true, submitted: toSubmit }
+}
+
 export async function adminWithdrawSubmission(userId: string, weekStart: string, subprojectId: string) {
     const supabase = await createClient()
 
@@ -173,12 +240,15 @@ export type GroupedReportRow = {
     totalHours: number
     dailyBreakdown: Record<string, number> // work_date -> hours
     isSubmitted: boolean
+    rateHourly: number | null
+    rateDaily: number | null
+    earnings: number // calculated: totalHours * rate
 }
 
 export async function getGroupedReportData(
     startDate: string,
     endDate: string,
-    filters?: { userName?: string; subProjectCode?: string; projectName?: string }
+    filters?: { userName?: string; subProjectCode?: string; projectName?: string; userId?: string }
 ): Promise<GroupedReportRow[]> {
     const supabase = await createClient()
 
@@ -186,7 +256,7 @@ export async function getGroupedReportData(
     if (!user) return []
 
     // Fetch timesheet entries with full context
-    const { data: entries, error } = await supabase
+    let query = supabase
         .from('timesheet_entries')
         .select(`
             id,
@@ -194,11 +264,17 @@ export async function getGroupedReportData(
             hours,
             user_id,
             sub_project_id,
-            profiles:user_id ( full_name ),
+            profiles:user_id ( full_name, rate_hourly, rate_daily ),
             sub_projects:sub_project_id ( code, description, tracking_type, projects:project_id ( name, project_code ) )
         `)
         .gte('work_date', startDate)
         .lte('work_date', endDate)
+
+    if (filters?.userId) {
+        query = query.eq('user_id', filters.userId)
+    }
+
+    const { data: entries, error } = await query
 
     if (error || !entries) return []
 
@@ -232,7 +308,10 @@ export async function getGroupedReportData(
         const subCode = sp?.code ?? '?'
         const subDesc = sp?.description ?? null
         const trackingType = (sp?.tracking_type === 'days' ? 'days' : 'hours') as 'hours' | 'days'
-        const userName = (entry.profiles as any)?.full_name ?? 'Unknown user'
+        const profile = entry.profiles as any
+        const userName = profile?.full_name ?? 'Unknown user'
+        const rateHourly = profile?.rate_hourly ?? null
+        const rateDaily = profile?.rate_daily ?? null
         const weekStart = getWeekStart(entry.work_date)
         const key = `${projectName}||${subCode}||${userName}`
 
@@ -249,6 +328,9 @@ export async function getGroupedReportData(
                 totalHours: 0,
                 dailyBreakdown: {},
                 isSubmitted: false,
+                rateHourly,
+                rateDaily,
+                earnings: 0,
             })
         }
 
@@ -256,6 +338,9 @@ export async function getGroupedReportData(
         const hours = entry.hours ?? 0
         row.totalHours += hours
         row.dailyBreakdown[entry.work_date] = (row.dailyBreakdown[entry.work_date] ?? 0) + hours
+        // Calculate earnings based on tracking type and rate
+        const rate = trackingType === 'days' ? rateDaily : rateHourly
+        if (rate) row.earnings += hours * rate
 
         // Mark as submitted if ANY week for this user/subproject is submitted
         const isThisWeekSubmitted = submissionSet.has(`${entry.user_id}__${entry.sub_project_id}__${weekStart}`)
@@ -307,6 +392,55 @@ export async function getReportFilterOptions(startDate: string, endDate: string)
         subProjectCodes: [...codesSet].sort(),
         projectNames: [...projectsSet].sort(),
     }
+}
+
+// Contract codes per project per week
+export async function getWeeklyContractCodes(userId: string, weekStart: string) {
+    const supabase = await createClient()
+
+    const { data, error } = await supabase
+        .from('weekly_contract_codes')
+        .select('project_id, contract_code')
+        .eq('user_id', userId)
+        .eq('week_start', weekStart)
+
+    if (error) return {}
+
+    const result: Record<string, string> = {}
+    for (const row of data || []) {
+        result[row.project_id] = row.contract_code
+    }
+    return result
+}
+
+export async function saveContractCode(projectId: string, weekStart: string, code: string) {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return { error: 'No session' }
+
+    if (code.trim() === '') {
+        // Delete instead of storing empty string
+        await supabase
+            .from('weekly_contract_codes')
+            .delete()
+            .match({ user_id: user.id, project_id: projectId, week_start: weekStart })
+        return { success: true }
+    }
+
+    const { error } = await supabase
+        .from('weekly_contract_codes')
+        .upsert(
+            {
+                user_id: user.id,
+                project_id: projectId,
+                week_start: weekStart,
+                contract_code: code.trim(),
+            } as any,
+            { onConflict: 'user_id, project_id, week_start' }
+        )
+
+    if (error) return { error: error.message }
+    return { success: true }
 }
 
 export async function copyWeek(currentWeekStart: string) {

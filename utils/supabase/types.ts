@@ -14,6 +14,38 @@ export type Database = {
   }
   public: {
     Tables: {
+      pdf_exports: {
+        Row: {
+          created_at: string | null
+          id: string
+          month: string
+          storage_path: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          month: string
+          storage_path: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          month?: string
+          storage_path?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pdf_exports_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           created_at: string
@@ -260,6 +292,41 @@ export type Database = {
             columns: ["sub_project_id"]
             isOneToOne: false
             referencedRelation: "sub_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      weekly_contract_codes: {
+        Row: {
+          contract_code: string
+          id: string
+          project_id: string
+          updated_at: string | null
+          user_id: string
+          week_start: string
+        }
+        Insert: {
+          contract_code?: string
+          id?: string
+          project_id: string
+          updated_at?: string | null
+          user_id: string
+          week_start: string
+        }
+        Update: {
+          contract_code?: string
+          id?: string
+          project_id?: string
+          updated_at?: string | null
+          user_id?: string
+          week_start?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "weekly_contract_codes_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
             referencedColumns: ["id"]
           },
         ]

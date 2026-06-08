@@ -1,7 +1,7 @@
 import { getGroupedReportData, getReportFilterOptions } from '@/app/data/actions/timesheet'
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, eachWeekOfInterval, addDays, parseISO, startOfWeek, min, max } from 'date-fns'
 import { enUS } from 'date-fns/locale'
-import { Filter, FileText, Calendar, CheckCircle2, Clock, Users, X, CalendarDays } from 'lucide-react'
+import { Filter, FileText, Calendar, CheckCircle2, Clock, Users, X, CalendarDays, DollarSign } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -63,6 +63,7 @@ export default async function ReportsPage(props: Props) {
   const uniqueUsers = new Set(rows.map(r => r.userName)).size
   const uniqueProjects = new Set(rows.map(r => r.projectName)).size
   const totalSubmitted = rows.filter(r => r.isSubmitted).length
+  const totalEarnings = rows.reduce((s, r) => s + r.earnings, 0)
 
   // Active filter count (excluding dates)
   const activeFilters = [filterUser, filterCode, filterProject].filter(Boolean).length
@@ -99,15 +100,21 @@ export default async function ReportsPage(props: Props) {
               const spTrackingType = spData.users[0]?.trackingType ?? 'hours'
               const usersWithHours = spData.users
                 .filter(u => week.days.some(d => (u.dailyBreakdown[d] ?? 0) > 0))
-                .map(u => ({
-                  userId: u.userId,
-                  userName: u.userName,
-                  subProjectId: u.subProjectId,
-                  isSubmitted: u.isSubmitted,
-                  trackingType: u.trackingType,
-                  dailyHours: Object.fromEntries(week.days.map(d => [d, u.dailyBreakdown[d] ?? 0])),
-                  weekTotal: week.days.reduce((s, d) => s + (u.dailyBreakdown[d] ?? 0), 0),
-                }))
+                .map(u => {
+                  const weekTotal = week.days.reduce((s, d) => s + (u.dailyBreakdown[d] ?? 0), 0)
+                  const rate = u.trackingType === 'days' ? u.rateDaily : u.rateHourly
+                  const earnings = rate ? weekTotal * rate : 0
+                  return {
+                    userId: u.userId,
+                    userName: u.userName,
+                    subProjectId: u.subProjectId,
+                    isSubmitted: u.isSubmitted,
+                    trackingType: u.trackingType,
+                    dailyHours: Object.fromEntries(week.days.map(d => [d, u.dailyBreakdown[d] ?? 0])),
+                    weekTotal,
+                    earnings,
+                  }
+                })
               return { code: spCode, subProjectId: spData.users[0]?.subProjectId ?? '', description: spData.description, trackingType: spTrackingType, users: usersWithHours }
             })
             .filter(sp => sp.users.length > 0)
@@ -259,10 +266,11 @@ export default async function ReportsPage(props: Props) {
       </Card>
 
       {/* SUMMARY CARDS */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
         {[
           { label: 'Total Hours', value: `${totalHours}h`, icon: Clock },
           { label: 'Total Days', value: `${totalDays}d`, icon: CalendarDays },
+          { label: 'Earnings', value: `${totalEarnings.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} PLN`, icon: DollarSign },
           { label: 'Employees', value: uniqueUsers, icon: Users },
           { label: 'Projects', value: uniqueProjects, icon: FileText },
           { label: 'Submitted Rows', value: totalSubmitted, icon: CheckCircle2 },

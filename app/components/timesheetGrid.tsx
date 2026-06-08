@@ -5,8 +5,8 @@ import { useRouter } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import { format, addDays } from 'date-fns'
 import { enUS } from 'date-fns/locale'
-import { saveWorkEntry, copyWeek } from '@/app/data/actions'
-import { Loader2, AlertCircle, ChevronRight } from 'lucide-react'
+import { saveWorkEntry, copyWeek, submitWeekAll, saveContractCode } from '@/app/data/actions'
+import { Loader2, AlertCircle, ChevronRight, Send } from 'lucide-react'
 import { toast } from 'sonner'
 import { Fragment } from 'react'
 import SubmitWeekButton from './SubmitWeekButton'
@@ -22,13 +22,15 @@ export default function TimesheetGrid({
   subProjects,
   existingEntries,
   weekStart,
-  initialSubmissionStatus
+  initialSubmissionStatus,
+  initialContractCodes
 }: {
   projects: Project[],
   subProjects: SubProject[],
   existingEntries: Entry[],
   weekStart: Date,
-  initialSubmissionStatus: Record<string, boolean>
+  initialSubmissionStatus: Record<string, boolean>,
+  initialContractCodes: Record<string, string>
 }) {
   const router = useRouter()
   const [saving, setSaving] = useState(false)
@@ -97,6 +99,27 @@ export default function TimesheetGrid({
 
   const [submittedProjects, setSubmittedProjects] = useState<Record<string, boolean>>(initialSubmissionStatus)
 
+  const [contractCodes, setContractCodes] = useState<Record<string, string>>(initialContractCodes)
+
+  const handleContractCodeSave = async (projectId: string, code: string) => {
+    setContractCodes(prev => ({ ...prev, [projectId]: code }))
+    setSaving(true)
+    const result = await saveContractCode(projectId, format(weekStart, 'yyyy-MM-dd'), code)
+    if (result && 'error' in result) {
+      toast.error(result.error || 'Failed to save contract code')
+    }
+    setSaving(false)
+  }
+
+  const isProjectFullySubmitted = (projectId: string) => {
+    const pSubs = subProjects.filter(sp => sp.project_id === projectId)
+    return pSubs.length > 0 && pSubs.every(sp => submittedProjects[sp.id])
+  }
+
+  const unsubmittedIds = subProjects
+    .filter(sp => !submittedProjects[sp.id])
+    .map(sp => sp.id)
+
   const projectSubProjects = projects.reduce((acc, project) => {
     acc[project.id] = subProjects.filter(sp => sp.project_id === project.id)
     return acc
@@ -120,8 +143,8 @@ export default function TimesheetGrid({
         <table className="min-w-full divide-y divide-gray-200 text-sm">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-4 py-3 text-left font-medium text-gray-500 w-48 min-w-[150px]">Project</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500 w-20 min-w-[150px]">KOD</th>
+              <th className="px-4 py-3 text-left font-medium text-gray-500 w-48 min-w-[180px]">Project</th>
+              <th className="px-4 py-3 text-left font-medium text-gray-500 min-w-[140px]">Kod umowy</th>
               {weekDays.map(day => {
                 const isWeekend = day.getDay() === 0 || day.getDay() === 6
                 return (
@@ -161,11 +184,21 @@ export default function TimesheetGrid({
               return (
                 <Fragment key={project.id}>
                   <tr className="bg-gray-100/50 hover:bg-gray-100 cursor-pointer" onClick={() => toggleProject(project.id)}>
-                    <td colSpan={2} className="px-4 py-3 font-semibold text-gray-800 flex items-center gap-2">
+                    <td className="px-4 py-3 font-semibold text-gray-800 flex items-center gap-2">
                       <span className={`transform transition-transform ${isExpanded ? 'rotate-90' : ''}`}>▶</span>
                       {project.name}
                     </td>
-                    <th className="px-4 py-3 text-left font-medium text-gray-500 w-20 min-w-[150px]">{project.project_code}</th>
+                    <td className="px-4 py-2" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="text"
+                        placeholder="Kod umowy"
+                        disabled={isProjectFullySubmitted(project.id)}
+                        className="w-full h-8 px-2 text-xs rounded border border-gray-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
+                        value={contractCodes[project.id] || ''}
+                        onChange={(e) => setContractCodes(prev => ({ ...prev, [project.id]: e.target.value }))}
+                        onBlur={(e) => handleContractCodeSave(project.id, e.target.value)}
+                      />
+                    </td>
                     {projectDailyTotals.map((total, idx) => {
                       const days = projectDailyDays[idx]
                       const hasHours = total > 0
@@ -202,11 +235,11 @@ export default function TimesheetGrid({
 
                     return (
                       <tr key={subProject.id} className="hover:bg-gray-50 group transition-colors">
-                        <td className="px-4 py-2 pl-8 text-sm text-gray-600 truncate max-w-[200px]" title={subProject.description || ''}>
-                          {subProject.description || subProject.code || 'No description'}
+                        <td className="px-4 py-2 pl-8 text-sm text-gray-600" title={subProject.description || ''}>
+                          <span className="font-mono text-xs text-blue-700 font-semibold">{subProject.code}</span>
                         </td>
-                        <td className="px-4 py-2 text-xs font-mono text-gray-500 truncate max-w-[100px]">
-                          {subProject.code}
+                        <td className="px-4 py-2 text-xs text-gray-500 truncate max-w-[180px]" title={subProject.description || ''}>
+                          {subProject.description || 'No description'}
                         </td>
                         {weekDays.map(day => {
                           const dateStr = format(day, 'yyyy-MM-dd')
@@ -312,24 +345,50 @@ export default function TimesheetGrid({
                 {weeklyTotal > 0 ? weeklyTotal : '-'}
               </td>
               <td className="px-4 py-3 text-center border-l border-gray-200">
-                <Button
-                  onClick={async () => {
-                    setSaving(true)
-                    const result = await copyWeek(format(weekStart, 'yyyy-MM-dd'))
-                    if (result && 'error' in result) {
-                      toast.error(result.error)
-                    } else {
-                      toast.success('Copied entries from last week')
-                    }
-                    router.refresh()
-                    setSaving(false)
-                  }}
-                  variant="outline"
-                  className="bg-blue-50 hover:bg-blue-100 text-blue-600 border-blue-200"
-                  disabled={saving}
-                >
-                  Copy<br /> <span className="text-xs">(last week)</span>
-                </Button>
+                <div className="flex flex-col gap-2 items-center">
+                  {unsubmittedIds.length > 0 && (
+                    <Button
+                      onClick={async () => {
+                        setSaving(true)
+                        const result = await submitWeekAll(format(weekStart, 'yyyy-MM-dd'), unsubmittedIds)
+                        if (result && 'error' in result) {
+                          toast.error(result.error)
+                        } else {
+                          toast.success('Week submitted for all projects')
+                          const newStatus = { ...submittedProjects }
+                          unsubmittedIds.forEach(id => { newStatus[id] = true })
+                          setSubmittedProjects(newStatus)
+                        }
+                        router.refresh()
+                        setSaving(false)
+                      }}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                      disabled={saving}
+                      size="sm"
+                    >
+                      <Send className="mr-1 h-3 w-3" /> Submit All
+                    </Button>
+                  )}
+                  <Button
+                    onClick={async () => {
+                      setSaving(true)
+                      const result = await copyWeek(format(weekStart, 'yyyy-MM-dd'))
+                      if (result && 'error' in result) {
+                        toast.error(result.error)
+                      } else {
+                        toast.success('Copied entries from last week')
+                      }
+                      router.refresh()
+                      setSaving(false)
+                    }}
+                    variant="outline"
+                    className="bg-blue-50 hover:bg-blue-100 text-blue-600 border-blue-200"
+                    disabled={saving}
+                    size="sm"
+                  >
+                    Copy<br /> <span className="text-xs">(last week)</span>
+                  </Button>
+                </div>
               </td>
             </tr>
           </tfoot>
@@ -384,9 +443,21 @@ export default function TimesheetGrid({
                 </span>
               </button>
 
-              {/* Sub-project cards */}
+              {/* Contract code + Sub-project cards */}
               {isExpanded && (
                 <div className="mt-2 space-y-2 pl-2">
+                  <div className="bg-white rounded-lg shadow-sm border border-gray-200 px-3 py-2 flex items-center gap-2">
+                    <label className="text-xs text-gray-500 whitespace-nowrap">Kod umowy:</label>
+                    <input
+                      type="text"
+                      placeholder="Wpisz kod umowy"
+                      disabled={isProjectFullySubmitted(project.id)}
+                      className="flex-1 h-8 px-2 text-sm rounded border border-gray-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
+                      value={contractCodes[project.id] || ''}
+                      onChange={(e) => setContractCodes(prev => ({ ...prev, [project.id]: e.target.value }))}
+                      onBlur={(e) => handleContractCodeSave(project.id, e.target.value)}
+                    />
+                  </div>
                   {pSubProjects.map(subProject => {
                     const isDisabled = submittedProjects[subProject.id]
                     const mobileIsDays = subProject.tracking_type === 'days'
@@ -490,30 +561,56 @@ export default function TimesheetGrid({
           )
         })}
 
-        {/* Mobile footer: total + copy */}
+        {/* Mobile footer: total + actions */}
         <div className="bg-white rounded-lg shadow border border-gray-200 px-4 py-3 flex items-center justify-between">
           <div>
             <span className="text-xs text-gray-500 uppercase tracking-wide">Week total</span>
             <div className="text-xl font-bold text-blue-700">{weeklyTotal > 0 ? `${weeklyTotal}h` : '-'}</div>
           </div>
-          <Button
-            onClick={async () => {
-              setSaving(true)
-              const result = await copyWeek(format(weekStart, 'yyyy-MM-dd'))
-              if (result && 'error' in result) {
-                toast.error(result.error)
-              } else {
-                toast.success('Copied entries from last week')
-              }
-              router.refresh()
-              setSaving(false)
-            }}
-            variant="outline"
-            className="bg-blue-50 hover:bg-blue-100 text-blue-600 border-blue-200"
-            disabled={saving}
-          >
-            Copy (last week)
-          </Button>
+          <div className="flex gap-2">
+            {unsubmittedIds.length > 0 && (
+              <Button
+                onClick={async () => {
+                  setSaving(true)
+                  const result = await submitWeekAll(format(weekStart, 'yyyy-MM-dd'), unsubmittedIds)
+                  if (result && 'error' in result) {
+                    toast.error(result.error)
+                  } else {
+                    toast.success('Week submitted for all projects')
+                    const newStatus = { ...submittedProjects }
+                    unsubmittedIds.forEach(id => { newStatus[id] = true })
+                    setSubmittedProjects(newStatus)
+                  }
+                  router.refresh()
+                  setSaving(false)
+                }}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                disabled={saving}
+                size="sm"
+              >
+                <Send className="mr-1 h-3 w-3" /> Submit All
+              </Button>
+            )}
+            <Button
+              onClick={async () => {
+                setSaving(true)
+                const result = await copyWeek(format(weekStart, 'yyyy-MM-dd'))
+                if (result && 'error' in result) {
+                  toast.error(result.error)
+                } else {
+                  toast.success('Copied entries from last week')
+                }
+                router.refresh()
+                setSaving(false)
+              }}
+              variant="outline"
+              className="bg-blue-50 hover:bg-blue-100 text-blue-600 border-blue-200"
+              disabled={saving}
+              size="sm"
+            >
+              Copy (last week)
+            </Button>
+          </div>
         </div>
       </div>
     </div>
