@@ -14,6 +14,110 @@ export type Database = {
   }
   public: {
     Tables: {
+      expense_entries: {
+        Row: {
+          amount: number
+          created_at: string
+          currency: Database["public"]["Enums"]["expense_currency"]
+          description: string | null
+          expense_date: string
+          expense_date_end: string | null
+          expense_table_id: string
+          expense_type: Database["public"]["Enums"]["expense_type"]
+          id: string
+          km: number | null
+          km_rate: number | null
+          location: string | null
+          receipt_path: string | null
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          currency?: Database["public"]["Enums"]["expense_currency"]
+          description?: string | null
+          expense_date: string
+          expense_date_end?: string | null
+          expense_table_id: string
+          expense_type: Database["public"]["Enums"]["expense_type"]
+          id?: string
+          km?: number | null
+          km_rate?: number | null
+          location?: string | null
+          receipt_path?: string | null
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          currency?: Database["public"]["Enums"]["expense_currency"]
+          description?: string | null
+          expense_date?: string
+          expense_date_end?: string | null
+          expense_table_id?: string
+          expense_type?: Database["public"]["Enums"]["expense_type"]
+          id?: string
+          km?: number | null
+          km_rate?: number | null
+          location?: string | null
+          receipt_path?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expense_entries_expense_table_id_fkey"
+            columns: ["expense_table_id"]
+            isOneToOne: false
+            referencedRelation: "expense_tables"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      expense_tables: {
+        Row: {
+          created_at: string
+          end_date: string
+          id: string
+          project_id: string
+          purpose: string | null
+          start_date: string
+          user_id: string
+          work_order: string | null
+        }
+        Insert: {
+          created_at?: string
+          end_date: string
+          id?: string
+          project_id: string
+          purpose?: string | null
+          start_date: string
+          user_id: string
+          work_order?: string | null
+        }
+        Update: {
+          created_at?: string
+          end_date?: string
+          id?: string
+          project_id?: string
+          purpose?: string | null
+          start_date?: string
+          user_id?: string
+          work_order?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expense_tables_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expense_tables_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pdf_exports: {
         Row: {
           created_at: string | null
@@ -349,6 +453,16 @@ export type Database = {
           }
     }
     Enums: {
+      expense_currency: "PLN" | "EUR" | "USD" | "GBP"
+      expense_type:
+        | "taxi"
+        | "hotel"
+        | "meals"
+        | "flight"
+        | "parking"
+        | "office_supplies"
+        | "personal_car"
+        | "other"
       user_role: "admin" | "employee"
     }
     CompositeTypes: {
@@ -477,6 +591,17 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      expense_currency: ["PLN", "EUR", "USD", "GBP"],
+      expense_type: [
+        "taxi",
+        "hotel",
+        "meals",
+        "flight",
+        "parking",
+        "office_supplies",
+        "personal_car",
+        "other",
+      ],
       user_role: ["admin", "employee"],
     },
   },
