@@ -6,7 +6,7 @@ import { format } from 'date-fns'
 import { toast } from 'sonner'
 import {
     Plus, Trash2, Edit2, ChevronDown, ChevronUp,
-    Receipt, Upload, X, Car, Loader2, FileText
+    Receipt, Upload, X, Car, Loader2, FileText, Check, Undo2
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -21,6 +21,7 @@ import {
     createExpenseTable, updateExpenseTable, deleteExpenseTable,
     saveExpenseEntry, updateExpenseEntry, deleteExpenseEntry,
     uploadReceipt, getReceiptUrl, deleteReceipt,
+    submitExpenseTable, withdrawExpenseSubmission,
 } from '@/app/data/actions'
 import type { ExpenseTableWithProject, ExpenseEntry } from '@/app/data/actions/expenses'
 
@@ -100,8 +101,8 @@ function CreateTableDialog({ projects }: { projects: Project[] }) {
     const [endDate, setEndDate] = useState('')
 
     const handleCreate = async () => {
-        if (!projectId || !startDate || !endDate) {
-            toast.error('Project, start date, and end date are required')
+        if (!projectId || !startDate) {
+            toast.error('Project and start date are required')
             return
         }
         setLoading(true)
@@ -158,7 +159,7 @@ function CreateTableDialog({ projects }: { projects: Project[] }) {
                             <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
                         </div>
                         <div>
-                            <Label>End Date *</Label>
+                            <Label>End Date</Label>
                             <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
                         </div>
                     </div>
@@ -190,6 +191,13 @@ function ExpenseTableCard({
 }) {
     const router = useRouter()
     const [deleting, setDeleting] = useState(false)
+    const [submitting, setSubmitting] = useState(false)
+    const [withdrawing, setWithdrawing] = useState(false)
+
+    const isSubmitted = table.status === 'submitted'
+    const isApproved = table.status === 'approved'
+    const isDeclined = table.status === 'declined'
+    const isLocked = isSubmitted || isApproved
 
     const handleDelete = async () => {
         if (!confirm('Delete this expense table and all its entries?')) return
@@ -204,6 +212,32 @@ function ExpenseTableCard({
         }
     }
 
+    const handleSubmit = async () => {
+        if (!confirm('Submit this expense table? It will become read-only.')) return
+        setSubmitting(true)
+        const result = await submitExpenseTable(table.id)
+        setSubmitting(false)
+        if ('error' in result) {
+            toast.error(result.error)
+        } else {
+            toast.success('Expense table submitted')
+            router.refresh()
+        }
+    }
+
+    const handleWithdraw = async () => {
+        if (!confirm('Withdraw submission? The table will become editable again.')) return
+        setWithdrawing(true)
+        const result = await withdrawExpenseSubmission(table.id)
+        setWithdrawing(false)
+        if ('error' in result) {
+            toast.error(result.error)
+        } else {
+            toast.success('Submission withdrawn')
+            router.refresh()
+        }
+    }
+
     // Calculate totals by currency
     const totalsByCurrency: Record<string, number> = {}
     for (const entry of table.entries) {
@@ -211,16 +245,33 @@ function ExpenseTableCard({
     }
 
     return (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+        <div className={`bg-white rounded-lg shadow-sm border overflow-hidden ${isApproved ? 'border-green-200' : isDeclined ? 'border-red-200' : isSubmitted ? 'border-yellow-200' : 'border-gray-200'}`}>
             {/* Header */}
             <div
-                className="flex items-center justify-between px-4 py-3 bg-gray-50 cursor-pointer hover:bg-gray-100 transition"
+                className={`flex items-center justify-between px-4 py-3 cursor-pointer transition ${isApproved ? 'bg-green-50 hover:bg-green-100' : isDeclined ? 'bg-red-50 hover:bg-red-100' : isSubmitted ? 'bg-yellow-50 hover:bg-yellow-100' : 'bg-gray-50 hover:bg-gray-100'}`}
                 onClick={onToggle}
             >
                 <div className="flex items-center gap-3 min-w-0">
                     {expanded ? <ChevronUp size={18} className="text-gray-400 shrink-0" /> : <ChevronDown size={18} className="text-gray-400 shrink-0" />}
                     <div className="min-w-0">
-                        <div className="font-semibold text-gray-900 truncate">{table.project_name}</div>
+                        <div className="font-semibold text-gray-900 truncate flex items-center gap-2">
+                            {table.project_name}
+                            {isApproved && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                                    <Check size={12} /> Approved
+                                </span>
+                            )}
+                            {isSubmitted && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700">
+                                    <Check size={12} /> Submitted
+                                </span>
+                            )}
+                            {isDeclined && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
+                                    <X size={12} /> Declined
+                                </span>
+                            )}
+                        </div>
                         <div className="text-xs text-gray-500 flex flex-wrap gap-x-3 gap-y-1">
                             <span>{table.start_date} — {table.end_date}</span>
                             {table.work_order && <span>WO: {table.work_order}</span>}
@@ -229,10 +280,19 @@ function ExpenseTableCard({
                     </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0" onClick={e => e.stopPropagation()}>
-                    <EditTableDialog table={table} projects={projects} />
-                    <Button variant="ghost" size="icon" onClick={handleDelete} disabled={deleting} className="text-red-500 hover:text-red-700 hover:bg-red-50">
-                        {deleting ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
-                    </Button>
+                    {isApproved ? null : (isSubmitted || isDeclined) ? (
+                        <Button variant="outline" size="sm" onClick={handleWithdraw} disabled={withdrawing} className="text-amber-600 border-amber-300 hover:bg-amber-50">
+                            {withdrawing ? <Loader2 size={14} className="mr-1 animate-spin" /> : <Undo2 size={14} className="mr-1" />}
+                            Withdraw
+                        </Button>
+                    ) : (
+                        <>
+                            <EditTableDialog table={table} projects={projects} />
+                            <Button variant="ghost" size="icon" onClick={handleDelete} disabled={deleting} className="text-red-500 hover:text-red-700 hover:bg-red-50">
+                                {deleting ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                            </Button>
+                        </>
+                    )}
                 </div>
             </div>
 
@@ -251,16 +311,16 @@ function ExpenseTableCard({
                                     <th className="pb-2 pr-2 font-medium">Currency</th>
                                     <th className="pb-2 pr-2 font-medium text-right">Amount</th>
                                     <th className="pb-2 pr-2 font-medium">Receipt</th>
-                                    <th className="pb-2 font-medium w-20">Actions</th>
+                                    {!isLocked && <th className="pb-2 font-medium w-20">Actions</th>}
                                 </tr>
                             </thead>
                             <tbody>
                                 {table.entries.map(entry => (
-                                    <EntryRow key={entry.id} entry={entry} />
+                                    <EntryRow key={entry.id} entry={entry} readOnly={isLocked} />
                                 ))}
                                 {table.entries.length === 0 && (
                                     <tr>
-                                        <td colSpan={8} className="text-center py-6 text-gray-400">No expenses yet</td>
+                                        <td colSpan={isLocked ? 7 : 8} className="text-center py-6 text-gray-400">No expenses yet</td>
                                     </tr>
                                 )}
                             </tbody>
@@ -270,14 +330,14 @@ function ExpenseTableCard({
                     {/* Mobile cards */}
                     <div className="md:hidden space-y-3">
                         {table.entries.map(entry => (
-                            <MobileEntryCard key={entry.id} entry={entry} />
+                            <MobileEntryCard key={entry.id} entry={entry} readOnly={isLocked} />
                         ))}
                         {table.entries.length === 0 && (
                             <p className="text-center py-6 text-gray-400 text-sm">No expenses yet</p>
                         )}
                     </div>
 
-                    {/* Footer: totals + add button */}
+                    {/* Footer: totals + add/submit button */}
                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mt-4 pt-3 border-t">
                         <div className="text-sm font-medium text-gray-700">
                             {Object.keys(totalsByCurrency).length > 0 ? (
@@ -286,7 +346,20 @@ function ExpenseTableCard({
                                 <span className="text-gray-400">No entries</span>
                             )}
                         </div>
-                        <AddEntryDialog tableId={table.id} />
+                        {!isLocked && (
+                            <div className="flex items-center gap-2">
+                                <AddEntryDialog tableId={table.id} />
+                                <Button
+                                    size="sm"
+                                    onClick={handleSubmit}
+                                    disabled={submitting || table.entries.length === 0}
+                                    className="bg-green-600 hover:bg-green-700"
+                                >
+                                    {submitting ? <Loader2 size={14} className="mr-1 animate-spin" /> : <Check size={14} className="mr-1" />}
+                                    Submit
+                                </Button>
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
@@ -296,7 +369,7 @@ function ExpenseTableCard({
 
 // ─── Entry Row (Desktop) ───
 
-function EntryRow({ entry }: { entry: ExpenseEntry }) {
+function EntryRow({ entry, readOnly = false }: { entry: ExpenseEntry; readOnly?: boolean }) {
     const router = useRouter()
     const [deleting, setDeleting] = useState(false)
 
@@ -339,23 +412,25 @@ function EntryRow({ entry }: { entry: ExpenseEntry }) {
             <td className="py-2 pr-2">{entry.currency}</td>
             <td className="py-2 pr-2 text-right font-medium">{formatCurrency(Number(entry.amount), entry.currency)}</td>
             <td className="py-2 pr-2">
-                <ReceiptActions entryId={entry.id} hasReceipt={!!entry.receipt_path} />
+                <ReceiptActions entryId={entry.id} hasReceipt={!!entry.receipt_path} readOnly={readOnly} />
             </td>
-            <td className="py-2">
-                <div className="flex items-center gap-1">
-                    <EditEntryDialog entry={entry} />
-                    <Button variant="ghost" size="icon" onClick={handleDelete} disabled={deleting} className="h-7 w-7 text-red-500 hover:text-red-700">
-                        {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-                    </Button>
-                </div>
-            </td>
+            {!readOnly && (
+                <td className="py-2">
+                    <div className="flex items-center gap-1">
+                        <EditEntryDialog entry={entry} />
+                        <Button variant="ghost" size="icon" onClick={handleDelete} disabled={deleting} className="h-7 w-7 text-red-500 hover:text-red-700">
+                            {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                        </Button>
+                    </div>
+                </td>
+            )}
         </tr>
     )
 }
 
 // ─── Mobile Entry Card ───
 
-function MobileEntryCard({ entry }: { entry: ExpenseEntry }) {
+function MobileEntryCard({ entry, readOnly = false }: { entry: ExpenseEntry; readOnly?: boolean }) {
     const router = useRouter()
     const [deleting, setDeleting] = useState(false)
 
@@ -399,13 +474,15 @@ function MobileEntryCard({ entry }: { entry: ExpenseEntry }) {
                 <div className="text-xs text-gray-600">{entry.description}</div>
             )}
             <div className="flex items-center gap-2 pt-1">
-                <ReceiptActions entryId={entry.id} hasReceipt={!!entry.receipt_path} />
-                <div className="ml-auto flex items-center gap-1">
-                    <EditEntryDialog entry={entry} />
-                    <Button variant="ghost" size="icon" onClick={handleDelete} disabled={deleting} className="h-7 w-7 text-red-500 hover:text-red-700">
-                        {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-                    </Button>
-                </div>
+                <ReceiptActions entryId={entry.id} hasReceipt={!!entry.receipt_path} readOnly={readOnly} />
+                {!readOnly && (
+                    <div className="ml-auto flex items-center gap-1">
+                        <EditEntryDialog entry={entry} />
+                        <Button variant="ghost" size="icon" onClick={handleDelete} disabled={deleting} className="h-7 w-7 text-red-500 hover:text-red-700">
+                            {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                        </Button>
+                    </div>
+                )}
             </div>
         </div>
     )
@@ -413,7 +490,7 @@ function MobileEntryCard({ entry }: { entry: ExpenseEntry }) {
 
 // ─── Receipt Actions ───
 
-function ReceiptActions({ entryId, hasReceipt }: { entryId: string; hasReceipt: boolean }) {
+function ReceiptActions({ entryId, hasReceipt, readOnly = false }: { entryId: string; hasReceipt: boolean; readOnly?: boolean }) {
     const router = useRouter()
     const fileRef = useRef<HTMLInputElement>(null)
     const [uploading, setUploading] = useState(false)
@@ -459,12 +536,16 @@ function ReceiptActions({ entryId, hasReceipt }: { entryId: string; hasReceipt: 
                 <Button variant="ghost" size="icon" onClick={handleView} disabled={loadingUrl} className="h-7 w-7 text-green-600" title="View receipt">
                     {loadingUrl ? <Loader2 size={14} className="animate-spin" /> : <FileText size={14} />}
                 </Button>
-                <Button variant="ghost" size="icon" onClick={handleDeleteReceipt} className="h-7 w-7 text-red-400" title="Remove receipt">
-                    <X size={14} />
-                </Button>
+                {!readOnly && (
+                    <Button variant="ghost" size="icon" onClick={handleDeleteReceipt} className="h-7 w-7 text-red-400" title="Remove receipt">
+                        <X size={14} />
+                    </Button>
+                )}
             </div>
         )
     }
+
+    if (readOnly) return null
 
     return (
         <>
@@ -663,8 +744,8 @@ function EditTableDialog({ table, projects }: { table: ExpenseTableWithProject; 
     const [endDate, setEndDate] = useState(table.end_date)
 
     const handleSave = async () => {
-        if (!projectId || !startDate || !endDate) {
-            toast.error('Project, start date, and end date are required')
+        if (!projectId || !startDate) {
+            toast.error('Project and start date are required')
             return
         }
         setLoading(true)
@@ -713,7 +794,7 @@ function EditTableDialog({ table, projects }: { table: ExpenseTableWithProject; 
                             <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
                         </div>
                         <div>
-                            <Label>End Date *</Label>
+                            <Label>End Date</Label>
                             <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
                         </div>
                     </div>
