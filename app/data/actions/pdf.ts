@@ -121,7 +121,7 @@ export async function generateMonthlyPdf(month: string) {
     doc.font('Helvetica-Bold').fontSize(8).fillColor('#000000')
     doc.text('Date', colX.date, y)
     doc.text('Code', colX.code, y)
-    doc.text('Kod umowy', colX.contract, y)
+    doc.text('Contract code', colX.contract, y)
     doc.text('Description', colX.desc, y)
     doc.text('Hours', colX.hours, y)
     doc.text('Earn (PLN)', colX.earn, y)

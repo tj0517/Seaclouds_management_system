@@ -5,7 +5,6 @@ import { startOfWeek, endOfWeek, format, addWeeks, subWeeks, parseISO, isValid }
 import Link from 'next/link'
 import { Shield, ChevronLeft, ChevronRight, Calendar } from 'lucide-react'
 import AccountMenu from './components/AccountMenu'
-import ExportPdfButton from './components/ExportPdfButton'
 
 // Definiujemy typ propsów z searchParams (w Next.js 15+ to Promise)
 type Props = {
@@ -101,7 +100,6 @@ export default async function Home(props: Props) {
 
           {/* PRAWA STRONA: Akcje użytkownika */}
           <div className="flex items-center gap-4">
-            <ExportPdfButton />
             {isAdmin && (
               <Link href="/admin" className="text-sm font-medium text-blue-600 hover:text-blue-800 flex items-center gap-1 bg-blue-50 px-3 py-2 rounded-lg">
                 <Shield size={16} /> <span className="hidden sm:inline">Admin Panel</span>
