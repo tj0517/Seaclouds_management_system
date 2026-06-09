@@ -243,6 +243,7 @@ export type GroupedReportRow = {
     rateHourly: number | null
     rateDaily: number | null
     earnings: number // calculated: totalHours * rate
+    contractCodes: Record<string, string> // weekStart -> contract_code
 }
 
 export async function getGroupedReportData(
@@ -265,7 +266,7 @@ export async function getGroupedReportData(
             user_id,
             sub_project_id,
             profiles:user_id ( full_name, rate_hourly, rate_daily ),
-            sub_projects:sub_project_id ( code, description, tracking_type, projects:project_id ( name, project_code ) )
+            sub_projects:sub_project_id ( code, description, tracking_type, projects:project_id ( id, name, project_code ) )
         `)
         .gte('work_date', startDate)
         .lte('work_date', endDate)
@@ -288,6 +289,19 @@ export async function getGroupedReportData(
     const submissionSet = new Set(
         (submissions || []).map(s => `${s.user_id}__${s.sub_project_id}__${s.week_start}`)
     )
+
+    // Fetch contract codes for the date range
+    const { data: contractCodesData } = await supabase
+        .from('weekly_contract_codes')
+        .select('user_id, project_id, week_start, contract_code')
+        .gte('week_start', startDate)
+        .lte('week_start', endDate)
+
+    // Map: userId__projectId__weekStart -> contract_code
+    const contractCodeMap = new Map<string, string>()
+    for (const cc of contractCodesData || []) {
+        contractCodeMap.set(`${cc.user_id}__${cc.project_id}__${cc.week_start}`, cc.contract_code)
+    }
 
     // Helper: get Mon of the week for a given date string
     function getWeekStart(dateStr: string): string {
@@ -331,6 +345,7 @@ export async function getGroupedReportData(
                 rateHourly,
                 rateDaily,
                 earnings: 0,
+                contractCodes: {},
             })
         }
 
@@ -341,6 +356,13 @@ export async function getGroupedReportData(
         // Calculate earnings based on tracking type and rate
         const rate = trackingType === 'days' ? rateDaily : rateHourly
         if (rate) row.earnings += hours * rate
+
+        // Look up contract code for this user/project/week
+        const projectId = project?.id
+        if (projectId && !row.contractCodes[weekStart]) {
+            const cc = contractCodeMap.get(`${entry.user_id}__${projectId}__${weekStart}`)
+            if (cc) row.contractCodes[weekStart] = cc
+        }
 
         // Mark as submitted if ANY week for this user/subproject is submitted
         const isThisWeekSubmitted = submissionSet.has(`${entry.user_id}__${entry.sub_project_id}__${weekStart}`)

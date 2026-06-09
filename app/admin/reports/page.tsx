@@ -113,6 +113,7 @@ export default async function ReportsPage(props: Props) {
                     dailyHours: Object.fromEntries(week.days.map(d => [d, u.dailyBreakdown[d] ?? 0])),
                     weekTotal,
                     earnings,
+                    contractCode: u.contractCodes[week.weekStart] ?? '',
                   }
                 })
               return { code: spCode, subProjectId: spData.users[0]?.subProjectId ?? '', description: spData.description, trackingType: spTrackingType, users: usersWithHours }

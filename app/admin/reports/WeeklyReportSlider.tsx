@@ -18,6 +18,7 @@ export type UserRow = {
   dailyHours: Record<string, number>
   weekTotal: number
   earnings: number
+  contractCode: string
 }
 
 export type SubProjectData = {
@@ -60,6 +61,7 @@ type AggregatedUser = {
   total: number
   isSubmitted: boolean
   earnings: number
+  contractCodes: Record<string, string> // weekStart -> contractCode
 }
 
 type AggregatedSubProject = {
@@ -87,7 +89,7 @@ function buildAggregatedProjects(weeks: WeekData[]): AggregatedProject[] {
     subProjectMap: Map<string, {
       description: string | null
       trackingType?: 'hours' | 'days'
-      userMap: Map<string, { weeklyHours: Record<string, number>; total: number; isSubmitted: boolean; earnings: number }>
+      userMap: Map<string, { weeklyHours: Record<string, number>; total: number; isSubmitted: boolean; earnings: number; contractCodes: Record<string, string> }>
     }>
     weeklyTotals: Record<string, number>
     weeklyTotalsHours: Record<string, number>
@@ -121,13 +123,14 @@ function buildAggregatedProjects(weeks: WeekData[]): AggregatedProject[] {
         for (const user of sp.users) {
           let uEntry = spEntry.userMap.get(user.userName)
           if (!uEntry) {
-            uEntry = { weeklyHours: {}, total: 0, isSubmitted: true, earnings: 0 }
+            uEntry = { weeklyHours: {}, total: 0, isSubmitted: true, earnings: 0, contractCodes: {} }
             spEntry.userMap.set(user.userName, uEntry)
           }
           uEntry.weeklyHours[week.weekStart] = (uEntry.weeklyHours[week.weekStart] ?? 0) + user.weekTotal
           uEntry.total += user.weekTotal
           uEntry.earnings += user.earnings
           if (!user.isSubmitted) uEntry.isSubmitted = false
+          if (user.contractCode) uEntry.contractCodes[week.weekStart] = user.contractCode
         }
       }
     }
@@ -152,6 +155,7 @@ function buildAggregatedProjects(weeks: WeekData[]): AggregatedProject[] {
         total: u.total,
         isSubmitted: u.isSubmitted,
         earnings: u.earnings,
+        contractCodes: u.contractCodes,
       })),
     })),
   }))
@@ -317,6 +321,7 @@ export default function WeeklyReportSlider({ weeks }: { weeks: WeekData[] }) {
                       <th className="text-left px-3 py-2 font-medium text-gray-600 w-32">Code</th>
                       <th className="text-left px-3 py-2 font-medium text-gray-600 w-40">Description</th>
                       <th className="text-left px-3 py-2 font-medium text-gray-600">Employee</th>
+                      <th className="text-left px-3 py-2 font-medium text-gray-600 w-36">Contract code</th>
                       {week.days.map(d => (
                         <th
                           key={d.key}
@@ -353,6 +358,9 @@ export default function WeeklyReportSlider({ weeks }: { weeks: WeekData[] }) {
                               {userRow.userName}
                             </div>
                           </td>
+                          <td className="px-3 py-2 text-xs text-gray-600 font-mono">
+                            {userRow.contractCode || <span className="text-gray-300">—</span>}
+                          </td>
                           {week.days.map(d => {
                             const unit = (userRow.trackingType ?? sp.trackingType) === 'days' ? 'd' : 'h'
                             return (
@@ -375,7 +383,7 @@ export default function WeeklyReportSlider({ weeks }: { weeks: WeekData[] }) {
                     )}
                     {/* Project subtotal */}
                     <tr className="bg-gray-50 font-semibold border-t-2 border-gray-200">
-                      <td colSpan={3} className="px-3 py-2 text-right text-xs text-gray-500 uppercase tracking-wide">Project Total</td>
+                      <td colSpan={4} className="px-3 py-2 text-right text-xs text-gray-500 uppercase tracking-wide">Project Total</td>
                       {week.days.map(d => {
                         const h = project.dailyTotalsHours[d.key] ?? 0
                         const dd = project.dailyTotalsDays[d.key] ?? 0
@@ -419,6 +427,7 @@ export default function WeeklyReportSlider({ weeks }: { weeks: WeekData[] }) {
                       <th className="text-left px-3 py-2 font-medium text-gray-600 w-32">Code</th>
                       <th className="text-left px-3 py-2 font-medium text-gray-600 w-40">Description</th>
                       <th className="text-left px-3 py-2 font-medium text-gray-600">Employee</th>
+                      <th className="text-left px-3 py-2 font-medium text-gray-600 w-36">Contract code</th>
                       {weeks.map(w => (
                         <th key={w.weekStart} className="text-center px-2 py-2 font-medium text-gray-600 whitespace-nowrap">
                           <div className="text-xs">{w.weekStartLabel}</div>
@@ -452,6 +461,12 @@ export default function WeeklyReportSlider({ weeks }: { weeks: WeekData[] }) {
                               {user.userName}
                             </div>
                           </td>
+                          <td className="px-3 py-2 text-xs text-gray-600 font-mono">
+                            {(() => {
+                              const codes = [...new Set(Object.values(user.contractCodes))]
+                              return codes.length > 0 ? codes.join(', ') : <span className="text-gray-300">—</span>
+                            })()}
+                          </td>
                           {weeks.map(w => {
                             const h = user.weeklyHours[w.weekStart] ?? 0
                             const wUnit = sp.trackingType === 'days' ? 'd' : 'h'
@@ -481,7 +496,7 @@ export default function WeeklyReportSlider({ weeks }: { weeks: WeekData[] }) {
                     )}
                     {/* Project subtotal */}
                     <tr className="bg-gray-50 font-semibold border-t-2 border-gray-200">
-                      <td colSpan={3} className="px-3 py-2 text-right text-xs text-gray-500 uppercase tracking-wide">Project Total</td>
+                      <td colSpan={4} className="px-3 py-2 text-right text-xs text-gray-500 uppercase tracking-wide">Project Total</td>
                       {weeks.map(w => {
                         const h = project.weeklyTotalsHours[w.weekStart] ?? 0
                         const dd = project.weeklyTotalsDays[w.weekStart] ?? 0
