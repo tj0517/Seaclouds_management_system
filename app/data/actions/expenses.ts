@@ -3,6 +3,7 @@
 import { createClient } from '@/utils/supabase/server'
 import { getSupabaseAdmin } from '@/utils/supabase/admin'
 import { revalidatePath } from 'next/cache'
+import { fetchNbpRate } from './nbp'
 
 async function getTableStatus(supabase: any, tableId: string, userId: string): Promise<{ status: string } | null> {
     const { data } = await (supabase as any)
@@ -17,7 +18,7 @@ async function getTableStatus(supabase: any, tableId: string, userId: string): P
 async function getTableStatusForEntry(supabase: any, entryId: string): Promise<string | null> {
     const { data } = await (supabase as any)
         .from('expense_entries')
-        .select('expense_table_id, expense_tables:expense_table_id ( status )')
+        .select('expense_table_id, expense_tables ( status )')
         .eq('id', entryId)
         .single()
     return (data as any)?.expense_tables?.status ?? null
@@ -49,6 +50,8 @@ export type ExpenseEntry = {
     km: number | null
     km_rate: number | null
     receipt_path: string | null
+    exchange_rate: number | null
+    amount_pln: number | null
     created_at: string
 }
 
@@ -59,7 +62,7 @@ export async function getExpenseTables(): Promise<ExpenseTableWithProject[]> {
 
     const { data, error } = await (supabase as any)
         .from('expense_tables')
-        .select('*, projects:project_id ( name )')
+        .select('*, projects ( name )')
         .eq('user_id', user.id)
         .order('start_date', { ascending: false })
 
@@ -89,6 +92,11 @@ export async function createExpenseTable(data: {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return { error: 'No session' }
+
+    // Validate dates are within the same month
+    if (data.endDate && data.startDate.slice(0, 7) !== data.endDate.slice(0, 7)) {
+        return { error: 'Start and end dates must be within the same month' }
+    }
 
     const { data: inserted, error } = await (supabase as any)
         .from('expense_tables')
@@ -122,6 +130,13 @@ export async function updateExpenseTable(id: string, data: {
 
     const tableCheck = await getTableStatus(supabase, id, user.id)
     if (tableCheck?.status === 'submitted' || tableCheck?.status === 'approved') return { error: 'Cannot edit a submitted or approved expense table' }
+
+    // Validate dates are within the same month
+    const startMonth = data.startDate?.slice(0, 7)
+    const endMonth = data.endDate?.slice(0, 7)
+    if (startMonth && endMonth && startMonth !== endMonth) {
+        return { error: 'Start and end dates must be within the same month' }
+    }
 
     const updateData: any = {}
     if (data.projectId !== undefined) updateData.project_id = data.projectId
@@ -215,6 +230,20 @@ export async function saveExpenseEntry(data: {
     const tableCheck = await getTableStatus(supabase, data.tableId, user.id)
     if (tableCheck?.status === 'submitted' || tableCheck?.status === 'approved') return { error: 'Cannot modify a submitted or approved expense table' }
 
+    // Fetch NBP exchange rate for PLN conversion
+    let exchange_rate = 1.0
+    let amount_pln = data.amount
+    try {
+        exchange_rate = await fetchNbpRate(data.currency, data.date)
+        amount_pln = Math.round(data.amount * exchange_rate * 100) / 100
+    } catch {
+        // If rate fetch fails for non-PLN, still save but without conversion
+        if (data.currency !== 'PLN') {
+            exchange_rate = null as any
+            amount_pln = null as any
+        }
+    }
+
     const { data: inserted, error } = await (supabase as any)
         .from('expense_entries')
         .insert({
@@ -228,6 +257,8 @@ export async function saveExpenseEntry(data: {
             amount: data.amount,
             km: data.km ?? null,
             km_rate: data.kmRate ?? null,
+            exchange_rate,
+            amount_pln,
         })
         .select('id')
         .single()
@@ -266,6 +297,37 @@ export async function updateExpenseEntry(id: string, data: {
     if (data.amount !== undefined) updateData.amount = data.amount
     if (data.km !== undefined) updateData.km = data.km
     if (data.kmRate !== undefined) updateData.km_rate = data.kmRate
+
+    // Re-fetch exchange rate if amount, currency, or date changed
+    const needsRateUpdate = data.amount !== undefined || data.currency !== undefined || data.date !== undefined
+    if (needsRateUpdate) {
+        // Get current entry values to merge with updates
+        const { data: current } = await (supabase as any)
+            .from('expense_entries')
+            .select('currency, amount, expense_date')
+            .eq('id', id)
+            .single()
+
+        if (current) {
+            const currency = data.currency ?? current.currency
+            const amount = data.amount ?? Number(current.amount)
+            const date = data.date ?? current.expense_date
+
+            try {
+                const rate = await fetchNbpRate(currency, date)
+                updateData.exchange_rate = rate
+                updateData.amount_pln = Math.round(amount * rate * 100) / 100
+            } catch {
+                if (currency === 'PLN') {
+                    updateData.exchange_rate = 1.0
+                    updateData.amount_pln = amount
+                } else {
+                    updateData.exchange_rate = null
+                    updateData.amount_pln = null
+                }
+            }
+        }
+    }
 
     const { error } = await (supabase as any)
         .from('expense_entries')
@@ -442,7 +504,7 @@ export async function withdrawExpenseSubmission(id: string) {
 
     const tableCheck = await getTableStatus(supabase, id, user.id)
     if (!tableCheck) return { error: 'Table not found' }
-    if (tableCheck.status !== 'submitted' && tableCheck.status !== 'declined') return { error: 'Table is not submitted or declined' }
+    if (tableCheck.status !== 'declined') return { error: 'Cannot withdraw — only declined expenses can be withdrawn' }
 
     const { error } = await (supabase as any)
         .from('expense_tables')
@@ -480,30 +542,40 @@ export async function getAdminExpenseTables(): Promise<AdminExpenseTable[]> {
 
     const { data, error } = await (supabase as any)
         .from('expense_tables')
-        .select('*, projects:project_id ( name ), profiles:user_id ( full_name, email )')
+        .select('*, projects ( name )')
         .order('created_at', { ascending: false })
 
     if (error || !data) return []
 
-    // Get entry counts and totals
+    // Fetch profiles separately (no FK from expense_tables to profiles)
+    const userIds = [...new Set((data as any[]).map((r: any) => r.user_id))]
+    const { data: profileRows } = await supabase
+        .from('profiles')
+        .select('id, full_name')
+        .in('id', userIds)
+    const profileMap = new Map(
+        (profileRows || []).map((p: any) => [p.id, p])
+    )
+
+    // Get entry counts and totals (using amount_pln for unified PLN total)
     const tableIds = (data as any[]).map((r: any) => r.id)
     const { data: entries } = await (supabase as any)
         .from('expense_entries')
-        .select('expense_table_id, amount')
+        .select('expense_table_id, amount, amount_pln')
         .in('expense_table_id', tableIds)
 
     const entryStats: Record<string, { count: number; total: number }> = {}
     for (const e of (entries || []) as any[]) {
         if (!entryStats[e.expense_table_id]) entryStats[e.expense_table_id] = { count: 0, total: 0 }
         entryStats[e.expense_table_id].count++
-        entryStats[e.expense_table_id].total += Number(e.amount)
+        entryStats[e.expense_table_id].total += Number(e.amount_pln ?? e.amount)
     }
 
     return (data as any[]).map((row: any) => ({
         id: row.id,
         user_id: row.user_id,
-        user_name: row.profiles?.full_name ?? 'Unknown',
-        user_email: row.profiles?.email ?? '',
+        user_name: profileMap.get(row.user_id)?.full_name ?? 'Unknown',
+        user_email: '',
         project_id: row.project_id,
         project_name: row.projects?.name ?? 'Unknown',
         work_order: row.work_order,
@@ -522,17 +594,24 @@ export async function getAdminExpenseTableDetail(id: string) {
 
     const { data, error } = await (supabase as any)
         .from('expense_tables')
-        .select('*, projects:project_id ( name ), profiles:user_id ( full_name, email )')
+        .select('*, projects ( name )')
         .eq('id', id)
         .single()
 
     if (error || !data) return null
 
+    // Fetch profile separately
+    const { data: profile } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', (data as any).user_id)
+        .single()
+
     return {
         id: (data as any).id,
         user_id: (data as any).user_id,
-        user_name: (data as any).profiles?.full_name ?? 'Unknown',
-        user_email: (data as any).profiles?.email ?? '',
+        user_name: profile?.full_name ?? 'Unknown',
+        user_email: '',
         project_id: (data as any).project_id,
         project_name: (data as any).projects?.name ?? 'Unknown',
         work_order: (data as any).work_order,

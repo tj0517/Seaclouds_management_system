@@ -1,10 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { toast } from 'sonner'
-import { Check, X, Eye, Loader2 } from 'lucide-react'
+import { Check, X, Eye, Loader2, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -41,9 +41,47 @@ function formatCurrency(amount: number) {
 }
 
 export default function AdminExpensesTable({ tables }: { tables: AdminExpenseTable[] }) {
-    const [filter, setFilter] = useState('all')
+    const [statusFilter, setStatusFilter] = useState('all')
+    const [employeeFilter, setEmployeeFilter] = useState('all')
+    const [projectFilter, setProjectFilter] = useState('all')
+    const [monthFilter, setMonthFilter] = useState('all')
+    const [search, setSearch] = useState('')
 
-    const filtered = filter === 'all' ? tables : tables.filter(t => t.status === filter)
+    const employees = useMemo(() => {
+        const names = [...new Set(tables.map(t => t.user_name))].sort()
+        return names
+    }, [tables])
+
+    const projects = useMemo(() => {
+        const names = [...new Set(tables.map(t => t.project_name))].sort()
+        return names
+    }, [tables])
+
+    const months = useMemo(() => {
+        const set = new Set<string>()
+        for (const t of tables) {
+            if (t.start_date) set.add(t.start_date.slice(0, 7))
+        }
+        return [...set].sort().reverse()
+    }, [tables])
+
+    const filtered = useMemo(() => {
+        let result = tables
+        if (statusFilter !== 'all') result = result.filter(t => t.status === statusFilter)
+        if (employeeFilter !== 'all') result = result.filter(t => t.user_name === employeeFilter)
+        if (projectFilter !== 'all') result = result.filter(t => t.project_name === projectFilter)
+        if (monthFilter !== 'all') result = result.filter(t => t.start_date?.startsWith(monthFilter))
+        if (search.trim()) {
+            const q = search.toLowerCase()
+            result = result.filter(t =>
+                t.user_name.toLowerCase().includes(q) ||
+                t.project_name.toLowerCase().includes(q) ||
+                (t.purpose || '').toLowerCase().includes(q) ||
+                (t.work_order || '').toLowerCase().includes(q)
+            )
+        }
+        return result
+    }, [tables, statusFilter, employeeFilter, projectFilter, monthFilter, search])
 
     const counts: Record<string, number> = { all: tables.length }
     for (const t of tables) {
@@ -52,14 +90,14 @@ export default function AdminExpensesTable({ tables }: { tables: AdminExpenseTab
 
     return (
         <div className="space-y-4">
-            {/* Filter tabs */}
+            {/* Status tabs */}
             <div className="flex gap-2 flex-wrap">
                 {STATUS_TABS.map(tab => (
                     <button
                         key={tab.value}
-                        onClick={() => setFilter(tab.value)}
+                        onClick={() => setStatusFilter(tab.value)}
                         className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
-                            filter === tab.value
+                            statusFilter === tab.value
                                 ? 'bg-primary text-primary-foreground'
                                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                         }`}
@@ -67,6 +105,58 @@ export default function AdminExpensesTable({ tables }: { tables: AdminExpenseTab
                         {tab.label} {counts[tab.value] ? `(${counts[tab.value]})` : ''}
                     </button>
                 ))}
+            </div>
+
+            {/* Filters row */}
+            <div className="flex gap-3 flex-wrap items-center">
+                <div className="relative">
+                    <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input
+                        type="text"
+                        placeholder="Search..."
+                        value={search}
+                        onChange={e => setSearch(e.target.value)}
+                        className="h-9 pl-8 pr-3 rounded-md border border-input bg-background text-sm w-48"
+                    />
+                </div>
+                <select
+                    value={employeeFilter}
+                    onChange={e => setEmployeeFilter(e.target.value)}
+                    className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+                >
+                    <option value="all">All employees</option>
+                    {employees.map(name => (
+                        <option key={name} value={name}>{name}</option>
+                    ))}
+                </select>
+                <select
+                    value={projectFilter}
+                    onChange={e => setProjectFilter(e.target.value)}
+                    className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+                >
+                    <option value="all">All projects</option>
+                    {projects.map(name => (
+                        <option key={name} value={name}>{name}</option>
+                    ))}
+                </select>
+                <select
+                    value={monthFilter}
+                    onChange={e => setMonthFilter(e.target.value)}
+                    className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+                >
+                    <option value="all">All months</option>
+                    {months.map(m => (
+                        <option key={m} value={m}>{new Date(m + '-01').toLocaleDateString('en-US', { year: 'numeric', month: 'long' })}</option>
+                    ))}
+                </select>
+                {(employeeFilter !== 'all' || projectFilter !== 'all' || monthFilter !== 'all' || search) && (
+                    <button
+                        onClick={() => { setEmployeeFilter('all'); setProjectFilter('all'); setMonthFilter('all'); setSearch('') }}
+                        className="text-xs text-gray-500 hover:text-gray-700 underline"
+                    >
+                        Clear filters
+                    </button>
+                )}
             </div>
 
             {/* Table */}

@@ -6,7 +6,7 @@ import { format } from 'date-fns'
 import { toast } from 'sonner'
 import {
     Plus, Trash2, Edit2, ChevronDown, ChevronUp,
-    Receipt, Upload, X, Car, Loader2, FileText, Check, Undo2
+    Receipt, Upload, X, Car, Loader2, FileText, Check, Undo2, FileDown
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -22,6 +22,7 @@ import {
     saveExpenseEntry, updateExpenseEntry, deleteExpenseEntry,
     uploadReceipt, getReceiptUrl, deleteReceipt,
     submitExpenseTable, withdrawExpenseSubmission,
+    generateExpensePdf,
 } from '@/app/data/actions'
 import type { ExpenseTableWithProject, ExpenseEntry } from '@/app/data/actions/expenses'
 
@@ -103,6 +104,10 @@ function CreateTableDialog({ projects }: { projects: Project[] }) {
     const handleCreate = async () => {
         if (!projectId || !startDate) {
             toast.error('Project and start date are required')
+            return
+        }
+        if (endDate && startDate.slice(0, 7) !== endDate.slice(0, 7)) {
+            toast.error('Start and end dates must be within the same month')
             return
         }
         setLoading(true)
@@ -193,6 +198,7 @@ function ExpenseTableCard({
     const [deleting, setDeleting] = useState(false)
     const [submitting, setSubmitting] = useState(false)
     const [withdrawing, setWithdrawing] = useState(false)
+    const [exporting, setExporting] = useState(false)
 
     const isSubmitted = table.status === 'submitted'
     const isApproved = table.status === 'approved'
@@ -238,11 +244,33 @@ function ExpenseTableCard({
         }
     }
 
-    // Calculate totals by currency
+    const handleExport = async () => {
+        setExporting(true)
+        const result = await generateExpensePdf(table.id)
+        setExporting(false)
+        if ('error' in result) {
+            toast.error(result.error)
+        } else if (result.url) {
+            window.open(result.url, '_blank')
+        }
+    }
+
+    // Calculate totals by currency and grand PLN total
     const totalsByCurrency: Record<string, number> = {}
+    const plnTotalsByCurrency: Record<string, number> = {}
+    let grandPlnTotal = 0
+    let hasAllPlnRates = true
     for (const entry of table.entries) {
         totalsByCurrency[entry.currency] = (totalsByCurrency[entry.currency] || 0) + Number(entry.amount)
+        if (entry.amount_pln != null) {
+            plnTotalsByCurrency[entry.currency] = (plnTotalsByCurrency[entry.currency] || 0) + Number(entry.amount_pln)
+            grandPlnTotal += Number(entry.amount_pln)
+        } else {
+            hasAllPlnRates = false
+            grandPlnTotal += Number(entry.amount)
+        }
     }
+    const hasMultipleCurrencies = Object.keys(totalsByCurrency).length > 1 || (Object.keys(totalsByCurrency).length === 1 && !totalsByCurrency['PLN'])
 
     return (
         <div className={`bg-white rounded-lg shadow-sm border overflow-hidden ${isApproved ? 'border-green-200' : isDeclined ? 'border-red-200' : isSubmitted ? 'border-yellow-200' : 'border-gray-200'}`}>
@@ -280,7 +308,12 @@ function ExpenseTableCard({
                     </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0" onClick={e => e.stopPropagation()}>
-                    {isApproved ? null : (isSubmitted || isDeclined) ? (
+                    {table.entries.length > 0 && (
+                        <Button variant="ghost" size="icon" onClick={handleExport} disabled={exporting} title="Export PDF">
+                            {exporting ? <Loader2 size={16} className="animate-spin" /> : <FileDown size={16} />}
+                        </Button>
+                    )}
+                    {isApproved || isSubmitted ? null : isDeclined ? (
                         <Button variant="outline" size="sm" onClick={handleWithdraw} disabled={withdrawing} className="text-amber-600 border-amber-300 hover:bg-amber-50">
                             {withdrawing ? <Loader2 size={14} className="mr-1 animate-spin" /> : <Undo2 size={14} className="mr-1" />}
                             Withdraw
@@ -341,7 +374,17 @@ function ExpenseTableCard({
                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mt-4 pt-3 border-t">
                         <div className="text-sm font-medium text-gray-700">
                             {Object.keys(totalsByCurrency).length > 0 ? (
-                                <span>Total: {Object.entries(totalsByCurrency).map(([cur, amt]) => formatCurrency(amt, cur)).join(' + ')}</span>
+                                <div className="space-y-0.5">
+                                    {hasMultipleCurrencies && Object.entries(totalsByCurrency).map(([cur, amt]) => (
+                                        <div key={cur} className="text-xs text-gray-500">
+                                            {formatCurrency(amt, cur)}
+                                            {cur !== 'PLN' && plnTotalsByCurrency[cur] != null && (
+                                                <span> → {formatCurrency(plnTotalsByCurrency[cur], 'PLN')}</span>
+                                            )}
+                                        </div>
+                                    ))}
+                                    <div>Total: {formatCurrency(grandPlnTotal, 'PLN')}</div>
+                                </div>
                             ) : (
                                 <span className="text-gray-400">No entries</span>
                             )}
@@ -410,7 +453,18 @@ function EntryRow({ entry, readOnly = false }: { entry: ExpenseEntry; readOnly?:
                 }
             </td>
             <td className="py-2 pr-2">{entry.currency}</td>
-            <td className="py-2 pr-2 text-right font-medium">{formatCurrency(Number(entry.amount), entry.currency)}</td>
+            <td className="py-2 pr-2 text-right">
+                {entry.currency !== 'PLN' && entry.amount_pln != null ? (
+                    <>
+                        <div className="font-medium">{formatCurrency(entry.amount_pln, 'PLN')}</div>
+                        <div className="text-xs text-gray-400">
+                            {formatCurrency(Number(entry.amount), entry.currency)} ×{entry.exchange_rate?.toFixed(4)}
+                        </div>
+                    </>
+                ) : (
+                    <div className="font-medium">{formatCurrency(Number(entry.amount), entry.currency)}</div>
+                )}
+            </td>
             <td className="py-2 pr-2">
                 <ReceiptActions entryId={entry.id} hasReceipt={!!entry.receipt_path} readOnly={readOnly} />
             </td>
@@ -463,8 +517,17 @@ function MobileEntryCard({ entry, readOnly = false }: { entry: ExpenseEntry; rea
                     </div>
                 </div>
                 <div className="text-right">
-                    <div className="font-semibold text-sm">{formatCurrency(Number(entry.amount), entry.currency)}</div>
-                    <div className="text-xs text-gray-500">{entry.currency}</div>
+                    {entry.currency !== 'PLN' && entry.amount_pln != null ? (
+                        <>
+                            <div className="font-semibold text-sm">{formatCurrency(entry.amount_pln, 'PLN')}</div>
+                            <div className="text-xs text-gray-400">{formatCurrency(Number(entry.amount), entry.currency)} ×{entry.exchange_rate?.toFixed(4)}</div>
+                        </>
+                    ) : (
+                        <>
+                            <div className="font-semibold text-sm">{formatCurrency(Number(entry.amount), entry.currency)}</div>
+                            <div className="text-xs text-gray-500">{entry.currency}</div>
+                        </>
+                    )}
                 </div>
             </div>
             {isPersonalCar && entry.km != null && entry.km_rate != null && (
@@ -746,6 +809,10 @@ function EditTableDialog({ table, projects }: { table: ExpenseTableWithProject; 
     const handleSave = async () => {
         if (!projectId || !startDate) {
             toast.error('Project and start date are required')
+            return
+        }
+        if (endDate && startDate.slice(0, 7) !== endDate.slice(0, 7)) {
+            toast.error('Start and end dates must be within the same month')
             return
         }
         setLoading(true)

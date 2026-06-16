@@ -10,16 +10,18 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.1"
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
       expense_entries: {
         Row: {
           amount: number
+          amount_pln: number | null
           created_at: string
           currency: Database["public"]["Enums"]["expense_currency"]
           description: string | null
+          exchange_rate: number | null
           expense_date: string
           expense_date_end: string | null
           expense_table_id: string
@@ -32,9 +34,11 @@ export type Database = {
         }
         Insert: {
           amount: number
+          amount_pln?: number | null
           created_at?: string
           currency?: Database["public"]["Enums"]["expense_currency"]
           description?: string | null
+          exchange_rate?: number | null
           expense_date: string
           expense_date_end?: string | null
           expense_table_id: string
@@ -47,9 +51,11 @@ export type Database = {
         }
         Update: {
           amount?: number
+          amount_pln?: number | null
           created_at?: string
           currency?: Database["public"]["Enums"]["expense_currency"]
           description?: string | null
+          exchange_rate?: number | null
           expense_date?: string
           expense_date_end?: string | null
           expense_table_id?: string
@@ -73,31 +79,40 @@ export type Database = {
       expense_tables: {
         Row: {
           created_at: string
-          end_date: string
+          end_date: string | null
           id: string
           project_id: string
           purpose: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
           start_date: string
+          status: string
           user_id: string
           work_order: string | null
         }
         Insert: {
           created_at?: string
-          end_date: string
+          end_date?: string | null
           id?: string
           project_id: string
           purpose?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
           start_date: string
+          status?: string
           user_id: string
           work_order?: string | null
         }
         Update: {
           created_at?: string
-          end_date?: string
+          end_date?: string | null
           id?: string
           project_id?: string
           purpose?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
           start_date?: string
+          status?: string
           user_id?: string
           work_order?: string | null
         }
@@ -356,13 +371,6 @@ export type Database = {
             referencedRelation: "sub_projects"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "timesheet_entries_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
         ]
       }
       timesheet_submissions: {
@@ -396,6 +404,67 @@ export type Database = {
             columns: ["sub_project_id"]
             isOneToOne: false
             referencedRelation: "sub_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_monthly_earnings: {
+        Row: {
+          amount: number
+          created_at: string
+          created_by: string
+          currency: string
+          id: string
+          notes: string | null
+          project_id: string | null
+          updated_at: string
+          user_id: string
+          year_month: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          created_by: string
+          currency?: string
+          id?: string
+          notes?: string | null
+          project_id?: string | null
+          updated_at?: string
+          user_id: string
+          year_month: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          created_by?: string
+          currency?: string
+          id?: string
+          notes?: string | null
+          project_id?: string | null
+          updated_at?: string
+          user_id?: string
+          year_month?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_monthly_earnings_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_monthly_earnings_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_monthly_earnings_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -442,7 +511,6 @@ export type Database = {
     Functions: {
       is_admin: { Args: never; Returns: boolean }
       is_week_locked:
-        | { Args: { entry_date: string; entry_user: string }; Returns: boolean }
         | {
             Args: {
               entry_date: string
@@ -451,6 +519,7 @@ export type Database = {
             }
             Returns: boolean
           }
+        | { Args: { entry_date: string; entry_user: string }; Returns: boolean }
     }
     Enums: {
       expense_currency: "PLN" | "EUR" | "USD" | "GBP"

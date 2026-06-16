@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { LayoutDashboard, FolderKanban, Users, LogOut, FileText, Clock, Menu, X, Download, Receipt } from 'lucide-react'
+import { LayoutDashboard, FolderKanban, Users, LogOut, FileText, Clock, Menu, X, Download, Receipt, TrendingUp } from 'lucide-react'
 
 const navLinks = [
     { href: '/admin', icon: LayoutDashboard, label: 'Dashboard' },
@@ -10,6 +10,7 @@ const navLinks = [
     { href: '/admin/users', icon: Users, label: 'Employees' },
     { href: '/admin/reports', icon: FileText, label: 'Reports' },
     { href: '/admin/expenses', icon: Receipt, label: 'Expenses' },
+    { href: '/admin/earnings', icon: TrendingUp, label: 'Earnings' },
     { href: '/admin/exports', icon: Download, label: 'PDF Exports' },
     { href: '/', icon: Clock, label: 'Log Hours' },
 ]

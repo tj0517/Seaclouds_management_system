@@ -4,6 +4,7 @@ import { createClient } from '@/utils/supabase/server'
 import { getSupabaseAdmin } from '@/utils/supabase/admin'
 import { format, startOfMonth, endOfMonth, parseISO, eachDayOfInterval, startOfWeek } from 'date-fns'
 import { getGroupedReportData, type GroupedReportRow } from './timesheet'
+import type { ExpenseEntry } from './expenses'
 
 export async function generateMonthlyPdf(month: string) {
     const supabase = await createClient()
@@ -24,8 +25,9 @@ export async function generateMonthlyPdf(month: string) {
     const startDate = format(startOfMonth(monthDate), 'yyyy-MM-dd')
     const endDate = format(endOfMonth(monthDate), 'yyyy-MM-dd')
 
-    // Fetch timesheet data for this user
-    const rows = await getGroupedReportData(startDate, endDate, { userId: user.id })
+    // Fetch timesheet data for this user (use admin client to bypass RLS on joined tables)
+    const adminClient = getSupabaseAdmin()
+    const rows = await getGroupedReportData(startDate, endDate, { userId: user.id }, adminClient)
 
     if (rows.length === 0) return { error: 'No timesheet data for this month' }
 
@@ -85,16 +87,14 @@ export async function generateMonthlyPdf(month: string) {
     // Calculate totals
     const totalHours = rows.filter(r => r.trackingType !== 'days').reduce((s, r) => s + r.totalHours, 0)
     const totalDays = rows.filter(r => r.trackingType === 'days').reduce((s, r) => s + r.totalHours, 0)
-    const totalEarnings = rows.reduce((s, r) => s + r.earnings, 0)
     const workedDaysCount = Object.keys(dailyData).length
 
     const PDFDocument = (await import('pdfkit')).default
     const monthLabel = format(monthDate, 'MMMM yyyy')
     const sortedDates = Object.keys(dailyData).sort()
-    const fmtPLN = (v: number) => v.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
     // Table column positions
-    const colX = { date: 40, code: 110, contract: 170, desc: 270, hours: 420, earn: 475 }
+    const colX = { date: 40, code: 110, contract: 170, desc: 270, hours: 430, days: 490 }
     const pageWidth = 595.28 // A4
     const rightMargin = 40
 
@@ -124,7 +124,7 @@ export async function generateMonthlyPdf(month: string) {
     doc.text('Kod umowy', colX.contract, y)
     doc.text('Description', colX.desc, y)
     doc.text('Hours', colX.hours, y)
-    doc.text('Earn (PLN)', colX.earn, y)
+    doc.text('Days', colX.days, y)
     y += 16
     doc.moveTo(40, y).lineTo(pageWidth - rightMargin, y).stroke('#cccccc')
     y += 6
@@ -135,30 +135,38 @@ export async function generateMonthlyPdf(month: string) {
         const entries = dailyData[date]
         const dayHours = entries.filter(e => e.trackingType !== 'days').reduce((s, e) => s + e.hours, 0)
         const dayDays = entries.filter(e => e.trackingType === 'days').reduce((s, e) => s + e.hours, 0)
-        const dayEarnings = entries.reduce((s, e) => s + e.earnings, 0)
 
         for (let i = 0; i < entries.length; i++) {
-            if (y > 760) { doc.addPage(); y = 40 }
             const entry = entries[i]
+            // Measure text heights to handle wrapping
+            doc.font('Helvetica').fontSize(8)
+            const codeHeight = doc.heightOfString(entry.code, { width: 55 })
+            const contractHeight = doc.heightOfString(entry.contractCode || ' ', { width: 95 })
+            const descHeight = doc.heightOfString(entry.description || ' ', { width: 145 })
+            const rowHeight = Math.max(14, codeHeight, contractHeight, descHeight) + 4
+
+            if (y + rowHeight > 760) { doc.addPage(); y = 40 }
             if (i === 0) doc.font('Helvetica-Bold').text(format(parseISO(date), 'dd.MM.yyyy'), colX.date, y)
             doc.font('Helvetica')
             doc.text(entry.code, colX.code, y, { width: 55 })
             doc.text(entry.contractCode, colX.contract, y, { width: 95 })
             doc.text(entry.description, colX.desc, y, { width: 145 })
-            doc.text(entry.trackingType === 'days' ? `${entry.hours}d` : `${entry.hours}h`, colX.hours, y)
-            doc.text(entry.earnings > 0 ? fmtPLN(entry.earnings) : '-', colX.earn, y)
-            y += 14
+            if (entry.trackingType === 'days') {
+                doc.text('-', colX.hours, y)
+                doc.text(String(entry.hours), colX.days, y)
+            } else {
+                doc.text(String(entry.hours), colX.hours, y)
+                doc.text('-', colX.days, y)
+            }
+            y += rowHeight
         }
 
         if (entries.length > 1) {
             if (y > 760) { doc.addPage(); y = 40 }
             doc.font('Helvetica-Oblique').fillColor('#555555')
             doc.text('Day total', colX.desc, y)
-            const dayTotalParts: string[] = []
-            if (dayHours > 0) dayTotalParts.push(`${dayHours}h`)
-            if (dayDays > 0) dayTotalParts.push(`${dayDays}d`)
-            doc.text(dayTotalParts.join(' + ') || '-', colX.hours, y)
-            doc.text(dayEarnings > 0 ? fmtPLN(dayEarnings) : '-', colX.earn, y)
+            doc.text(dayHours > 0 ? String(dayHours) : '-', colX.hours, y)
+            doc.text(dayDays > 0 ? String(dayDays) : '-', colX.days, y)
             doc.font('Helvetica').fillColor('#000000')
             y += 14
         }
@@ -173,11 +181,9 @@ export async function generateMonthlyPdf(month: string) {
     doc.moveTo(40, y).lineTo(pageWidth - rightMargin, y).stroke('#cccccc')
     y += 8
     doc.font('Helvetica-Bold').fontSize(10)
-    doc.text(`Total Hours: ${totalHours}h`, 40, y)
-    doc.text(`Total Days: ${totalDays}d`, 200, y)
+    doc.text(`Total Hours: ${totalHours}`, 40, y)
+    doc.text(`Total Days: ${totalDays}`, 200, y)
     doc.text(`Worked Days: ${workedDaysCount}`, 340, y)
-    y += 18
-    doc.fontSize(12).text(`Total Earnings: ${fmtPLN(totalEarnings)} PLN`, 40, y)
     y += 24
     doc.moveTo(40, y).lineTo(pageWidth - rightMargin, y).stroke('#cccccc')
     y += 8
@@ -192,7 +198,6 @@ export async function generateMonthlyPdf(month: string) {
 
     // Upload to Supabase Storage
     const storagePath = `exports/${user.id}/${month}.pdf`
-    const adminClient = getSupabaseAdmin()
 
     const { error: uploadError } = await adminClient
         .storage
@@ -271,13 +276,215 @@ export async function listPdfExports(filters?: { userId?: string }) {
     const adminClient = getSupabaseAdmin()
     let query = adminClient
         .from('pdf_exports')
-        .select('*, profiles:user_id ( full_name, employee_id )')
+        .select('*')
         .order('created_at', { ascending: false })
 
     if (filters?.userId) {
         query = query.eq('user_id', filters.userId)
     }
 
-    const { data } = await query
-    return data || []
+    const { data: exports } = await query
+    if (!exports?.length) return []
+
+    // Fetch profiles separately (no FK from pdf_exports to profiles)
+    const userIds = [...new Set(exports.map((e: any) => e.user_id))]
+    const { data: profileRows } = await adminClient
+        .from('profiles')
+        .select('id, full_name, employee_id')
+        .in('id', userIds)
+    const profileMap = new Map(
+        (profileRows || []).map((p: any) => [p.id, p])
+    )
+
+    return exports.map((e: any) => ({
+        ...e,
+        profiles: profileMap.get(e.user_id) || null,
+    }))
+}
+
+const EXPENSE_TYPE_LABELS: Record<string, string> = {
+    taxi: 'Taxi', hotel: 'Hotel', meals: 'Meals', flight: 'Flight',
+    parking: 'Parking', office_supplies: 'Office Supplies', personal_car: 'Personal Car', other: 'Other',
+}
+
+export async function generateExpensePdf(tableId: string) {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return { error: 'No session' }
+
+    // Fetch profile
+    const { data: profile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single()
+    if (!profile) return { error: 'Profile not found' }
+
+    // Check if admin (admins can export any table)
+    const { data: isAdmin } = await supabase.rpc('is_admin')
+
+    // Fetch expense table with project name
+    const adminClient = getSupabaseAdmin()
+    const { data: table, error: tableError } = await adminClient
+        .from('expense_tables')
+        .select('*, projects ( name )')
+        .eq('id', tableId)
+        .single()
+
+    if (tableError || !table) return { error: 'Expense table not found' }
+
+    // Verify ownership (unless admin)
+    if ((table as any).user_id !== user.id && !isAdmin) {
+        return { error: 'Unauthorized' }
+    }
+
+    // For admin exports, fetch the table owner's profile
+    let ownerProfile = profile
+    if ((table as any).user_id !== user.id) {
+        const { data: op } = await adminClient
+            .from('profiles')
+            .select('*')
+            .eq('id', (table as any).user_id)
+            .single()
+        if (op) ownerProfile = op as any
+    }
+
+    // Fetch entries
+    const { data: entries, error: entriesError } = await adminClient
+        .from('expense_entries')
+        .select('*')
+        .eq('expense_table_id', tableId)
+        .order('expense_date', { ascending: true })
+
+    if (entriesError) return { error: 'Failed to fetch entries' }
+    const typedEntries = (entries || []) as unknown as ExpenseEntry[]
+
+    if (typedEntries.length === 0) return { error: 'No entries in this expense table' }
+
+    // Calculate total in PLN
+    let totalPln = 0
+    for (const entry of typedEntries) {
+        totalPln += Number(entry.amount_pln ?? entry.amount)
+    }
+
+    const PDFDocument = (await import('pdfkit')).default
+    const pageWidth = 595.28
+    const rightMargin = 40
+    const colX = { date: 40, location: 115, type: 210, desc: 300, amount: 470 }
+
+    const doc = new PDFDocument({ size: 'A4', margin: 40 })
+    const chunks: Buffer[] = []
+    doc.on('data', (c: Buffer) => chunks.push(c))
+
+    // Header
+    doc.fontSize(16).font('Helvetica-Bold').text('Seaclouds - Expense Report', 40, 40)
+
+    // Info block
+    doc.moveDown(0.8)
+    let y = doc.y
+    doc.fontSize(9).fillColor('#000000').font('Helvetica')
+    doc.text(`Name: ${ownerProfile.full_name || 'N/A'}`, 40, y)
+    doc.text(`Employee ID: ${ownerProfile.employee_id || 'N/A'}`, 300, y)
+    y += 14
+    doc.text(`Position: ${ownerProfile.position || 'N/A'}`, 40, y)
+    doc.text(`Project: ${(table as any).projects?.name ?? 'Unknown'}`, 300, y)
+    y += 14
+    if ((table as any).work_order) {
+        doc.text(`Work Order: ${(table as any).work_order}`, 40, y)
+        y += 14
+    }
+    if ((table as any).purpose) {
+        doc.text(`Purpose: ${(table as any).purpose}`, 40, y)
+        y += 14
+    }
+    doc.text(`Date Range: ${(table as any).start_date}${(table as any).end_date ? ' — ' + (table as any).end_date : ''}`, 40, y)
+    const statusLabel = ((table as any).status ?? 'draft').charAt(0).toUpperCase() + ((table as any).status ?? 'draft').slice(1)
+    doc.text(`Status: ${statusLabel}`, 300, y)
+    y += 20
+
+    // Table header
+    doc.moveTo(40, y).lineTo(pageWidth - rightMargin, y).stroke('#cccccc')
+    y += 6
+    doc.font('Helvetica-Bold').fontSize(7).fillColor('#000000')
+    doc.text('Date', colX.date, y)
+    doc.text('Location', colX.location, y)
+    doc.text('Type', colX.type, y)
+    doc.text('Description', colX.desc, y)
+    doc.text('Amount (PLN)', colX.amount, y)
+    y += 14
+    doc.moveTo(40, y).lineTo(pageWidth - rightMargin, y).stroke('#cccccc')
+    y += 6
+
+    // Table rows
+    doc.font('Helvetica').fontSize(7)
+    for (const entry of typedEntries) {
+        const isPersonalCar = entry.expense_type === 'personal_car'
+        const typeLabel = EXPENSE_TYPE_LABELS[entry.expense_type] ?? entry.expense_type
+        const descText = isPersonalCar && entry.km != null && entry.km_rate != null
+            ? `${entry.km} km × ${entry.km_rate}/km`
+            : entry.description || '—'
+        const dateStr = entry.expense_date_end
+            ? `${entry.expense_date} — ${entry.expense_date_end}`
+            : entry.expense_date
+
+        // Measure heights
+        const descHeight = doc.heightOfString(descText, { width: 155 })
+        const rowHeight = Math.max(12, descHeight) + 4
+
+        if (y + rowHeight > 760) { doc.addPage(); y = 40 }
+
+        doc.text(dateStr, colX.date, y, { width: 70 })
+        doc.text(entry.location || '—', colX.location, y, { width: 90 })
+        doc.text(typeLabel, colX.type, y, { width: 85 })
+        doc.text(descText, colX.desc, y, { width: 155 })
+        const plnAmount = Number(entry.amount_pln ?? entry.amount)
+        doc.text(`${plnAmount.toFixed(2)}`, colX.amount, y, { width: 80 })
+
+        y += rowHeight
+        doc.moveTo(40, y).lineTo(pageWidth - rightMargin, y).stroke('#eeeeee')
+        y += 4
+    }
+
+    // Summary footer
+    y += 10
+    if (y > 720) { doc.addPage(); y = 40 }
+    doc.moveTo(40, y).lineTo(pageWidth - rightMargin, y).stroke('#cccccc')
+    y += 8
+    doc.font('Helvetica-Bold').fontSize(9)
+    doc.text(`Total (PLN): ${totalPln.toFixed(2)}`, 40, y)
+    y += 20
+
+    doc.moveTo(40, y).lineTo(pageWidth - rightMargin, y).stroke('#cccccc')
+    y += 8
+    doc.fontSize(7).font('Helvetica').fillColor('#666666')
+    doc.text(`Generated: ${format(new Date(), 'dd.MM.yyyy')}`, 40, y)
+
+    doc.end()
+
+    const pdfBuffer = await new Promise<Buffer>((resolve) => {
+        doc.on('end', () => resolve(Buffer.concat(chunks)))
+    })
+
+    // Upload to Supabase Storage (reuse timesheet-exports bucket)
+    const storagePath = `exports/${(table as any).user_id}/expense-${tableId}.pdf`
+
+    const { error: uploadError } = await adminClient
+        .storage
+        .from('timesheet-exports')
+        .upload(storagePath, pdfBuffer, {
+            contentType: 'application/pdf',
+            upsert: true,
+        })
+
+    if (uploadError) return { error: `Upload failed: ${uploadError.message}` }
+
+    // Generate signed URL
+    const { data: signedUrlData, error: signedUrlError } = await adminClient
+        .storage
+        .from('timesheet-exports')
+        .createSignedUrl(storagePath, 60 * 60)
+
+    if (signedUrlError || !signedUrlData) return { error: 'Failed to generate download URL' }
+
+    return { success: true, url: signedUrlData.signedUrl }
 }

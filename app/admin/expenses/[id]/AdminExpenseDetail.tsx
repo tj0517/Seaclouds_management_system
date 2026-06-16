@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { toast } from 'sonner'
-import { ArrowLeft, Check, X, Loader2, FileText, Car } from 'lucide-react'
+import { ArrowLeft, Check, X, Loader2, FileText, Car, FileDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -13,7 +13,7 @@ import {
     AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
     AlertDialogTrigger
 } from '@/components/ui/alert-dialog'
-import { approveExpenseTable, declineExpenseTable, getReceiptUrl } from '@/app/data/actions'
+import { approveExpenseTable, declineExpenseTable, getReceiptUrl, generateExpensePdf } from '@/app/data/actions'
 import type { ExpenseEntry } from '@/app/data/actions/expenses'
 
 type TableDetail = {
@@ -57,6 +57,7 @@ export default function AdminExpenseDetail({ table, entries }: { table: TableDet
     const router = useRouter()
     const [approving, setApproving] = useState(false)
     const [declining, setDeclining] = useState(false)
+    const [exporting, setExporting] = useState(false)
 
     const handleApprove = async () => {
         setApproving(true)
@@ -74,11 +75,28 @@ export default function AdminExpenseDetail({ table, entries }: { table: TableDet
         else { toast.success('Expense table declined'); router.refresh() }
     }
 
-    // Calculate totals by currency
+    const handleExport = async () => {
+        setExporting(true)
+        const result = await generateExpensePdf(table.id)
+        setExporting(false)
+        if ('error' in result) toast.error(result.error)
+        else if (result.url) window.open(result.url, '_blank')
+    }
+
+    // Calculate totals by currency and grand PLN total
     const totalsByCurrency: Record<string, number> = {}
+    const plnTotalsByCurrency: Record<string, number> = {}
+    let grandPlnTotal = 0
     for (const entry of entries) {
         totalsByCurrency[entry.currency] = (totalsByCurrency[entry.currency] || 0) + Number(entry.amount)
+        if (entry.amount_pln != null) {
+            plnTotalsByCurrency[entry.currency] = (plnTotalsByCurrency[entry.currency] || 0) + Number(entry.amount_pln)
+            grandPlnTotal += Number(entry.amount_pln)
+        } else {
+            grandPlnTotal += Number(entry.amount)
+        }
     }
+    const hasMultipleCurrencies = Object.keys(totalsByCurrency).length > 1 || (Object.keys(totalsByCurrency).length === 1 && !totalsByCurrency['PLN'])
 
     return (
         <div className="space-y-6">
@@ -93,8 +111,14 @@ export default function AdminExpenseDetail({ table, entries }: { table: TableDet
                         <p className="text-sm text-muted-foreground">{table.user_name} — {table.project_name}</p>
                     </div>
                 </div>
+                <div className="flex items-center gap-2">
+                    {entries.length > 0 && (
+                        <Button variant="outline" size="sm" onClick={handleExport} disabled={exporting}>
+                            {exporting ? <Loader2 size={16} className="mr-2 animate-spin" /> : <FileDown size={16} className="mr-2" />} Export PDF
+                        </Button>
+                    )}
                 {table.status === 'submitted' && (
-                    <div className="flex items-center gap-2">
+                    <>
                         <AlertDialog>
                             <AlertDialogTrigger asChild>
                                 <Button className="bg-green-600 hover:bg-green-700" disabled={approving}>
@@ -129,8 +153,9 @@ export default function AdminExpenseDetail({ table, entries }: { table: TableDet
                                 </AlertDialogFooter>
                             </AlertDialogContent>
                         </AlertDialog>
-                    </div>
+                    </>
                 )}
+                </div>
             </div>
 
             {/* Info card */}
@@ -166,12 +191,24 @@ export default function AdminExpenseDetail({ table, entries }: { table: TableDet
                             </div>
                         )}
                         <div>
-                            <span className="text-muted-foreground">Total</span>
+                            <span className="text-muted-foreground">Total (PLN)</span>
                             <div className="font-medium">
                                 {Object.keys(totalsByCurrency).length > 0
-                                    ? Object.entries(totalsByCurrency).map(([cur, amt]) => formatCurrency(amt, cur)).join(' + ')
+                                    ? formatCurrency(grandPlnTotal, 'PLN')
                                     : '—'}
                             </div>
+                            {hasMultipleCurrencies && (
+                                <div className="text-xs text-gray-500 mt-0.5">
+                                    {Object.entries(totalsByCurrency).map(([cur, amt]) => (
+                                        <div key={cur}>
+                                            {formatCurrency(amt, cur)}
+                                            {cur !== 'PLN' && plnTotalsByCurrency[cur] != null && (
+                                                <span> → {formatCurrency(plnTotalsByCurrency[cur], 'PLN')}</span>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     </div>
                 </CardContent>
@@ -255,7 +292,18 @@ function ReadOnlyEntryRow({ entry }: { entry: ExpenseEntry }) {
                     : entry.description || '—'}
             </td>
             <td className="py-2 pr-2">{entry.currency}</td>
-            <td className="py-2 pr-2 text-right font-medium">{formatCurrency(Number(entry.amount), entry.currency)}</td>
+            <td className="py-2 pr-2 text-right">
+                {entry.currency !== 'PLN' && entry.amount_pln != null ? (
+                    <>
+                        <div className="font-medium">{formatCurrency(entry.amount_pln, 'PLN')}</div>
+                        <div className="text-xs text-gray-400">
+                            {formatCurrency(Number(entry.amount), entry.currency)} ×{entry.exchange_rate?.toFixed(4)}
+                        </div>
+                    </>
+                ) : (
+                    <div className="font-medium">{formatCurrency(Number(entry.amount), entry.currency)}</div>
+                )}
+            </td>
             <td className="py-2">
                 {entry.receipt_path ? (
                     <Button variant="ghost" size="icon" onClick={handleView} disabled={loadingUrl} className="h-7 w-7 text-green-600" title="View receipt">
@@ -295,8 +343,17 @@ function MobileEntryCard({ entry }: { entry: ExpenseEntry }) {
                     </div>
                 </div>
                 <div className="text-right">
-                    <div className="font-semibold text-sm">{formatCurrency(Number(entry.amount), entry.currency)}</div>
-                    <div className="text-xs text-gray-500">{entry.currency}</div>
+                    {entry.currency !== 'PLN' && entry.amount_pln != null ? (
+                        <>
+                            <div className="font-semibold text-sm">{formatCurrency(entry.amount_pln, 'PLN')}</div>
+                            <div className="text-xs text-gray-400">{formatCurrency(Number(entry.amount), entry.currency)} ×{entry.exchange_rate?.toFixed(4)}</div>
+                        </>
+                    ) : (
+                        <>
+                            <div className="font-semibold text-sm">{formatCurrency(Number(entry.amount), entry.currency)}</div>
+                            <div className="text-xs text-gray-500">{entry.currency}</div>
+                        </>
+                    )}
                 </div>
             </div>
             {isPersonalCar && entry.km != null && entry.km_rate != null && (
