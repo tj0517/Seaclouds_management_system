@@ -13,6 +13,10 @@ import {
     AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
     AlertDialogTrigger
 } from '@/components/ui/alert-dialog'
+import {
+    Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger
+} from '@/components/ui/dialog'
+import { Textarea } from '@/components/ui/textarea'
 import { approveExpenseTable, declineExpenseTable, getReceiptUrl, generateExpensePdf } from '@/app/data/actions'
 import type { ExpenseEntry } from '@/app/data/actions/expenses'
 
@@ -34,8 +38,9 @@ type TableDetail = {
 }
 
 const EXPENSE_TYPES: Record<string, string> = {
-    taxi: 'Taxi', hotel: 'Hotel', meals: 'Meals', flight: 'Flight',
-    parking: 'Parking', office_supplies: 'Office Supplies', personal_car: 'Personal Car', other: 'Other',
+    plane_ticket: 'E_011 Plane ticket', taxi: 'E_012 Taxi', bus: 'E_013 Bus',
+    train: 'E_014 Train', mileage: 'E_015 Mileage', lodging: 'E_20 Lodging, Hotel',
+    meals: 'E_30 Meals', other: 'N/A',
 }
 
 function formatCurrency(amount: number, currency: string) {
@@ -58,6 +63,8 @@ export default function AdminExpenseDetail({ table, entries }: { table: TableDet
     const [approving, setApproving] = useState(false)
     const [declining, setDeclining] = useState(false)
     const [exporting, setExporting] = useState(false)
+    const [declineOpen, setDeclineOpen] = useState(false)
+    const [declineReason, setDeclineReason] = useState('')
 
     const handleApprove = async () => {
         setApproving(true)
@@ -68,11 +75,17 @@ export default function AdminExpenseDetail({ table, entries }: { table: TableDet
     }
 
     const handleDecline = async () => {
+        if (!declineReason.trim()) return
         setDeclining(true)
-        const result = await declineExpenseTable(table.id)
+        const result = await declineExpenseTable(table.id, declineReason.trim())
         setDeclining(false)
         if ('error' in result) toast.error(result.error)
-        else { toast.success('Expense table declined'); router.refresh() }
+        else {
+            toast.success('Expense table declined')
+            setDeclineOpen(false)
+            setDeclineReason('')
+            router.refresh()
+        }
     }
 
     const handleExport = async () => {
@@ -136,23 +149,31 @@ export default function AdminExpenseDetail({ table, entries }: { table: TableDet
                                 </AlertDialogFooter>
                             </AlertDialogContent>
                         </AlertDialog>
-                        <AlertDialog>
-                            <AlertDialogTrigger asChild>
+                        <Dialog open={declineOpen} onOpenChange={(open) => { setDeclineOpen(open); if (!open) setDeclineReason('') }}>
+                            <DialogTrigger asChild>
                                 <Button variant="outline" className="text-red-600 border-red-300 hover:bg-red-50" disabled={declining}>
                                     {declining ? <Loader2 size={16} className="mr-2 animate-spin" /> : <X size={16} className="mr-2" />} Decline
                                 </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                                <AlertDialogHeader>
-                                    <AlertDialogTitle>Decline expense table?</AlertDialogTitle>
-                                    <AlertDialogDescription>The employee can withdraw and resubmit after making changes.</AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                    <AlertDialogAction onClick={handleDecline} className="bg-red-600 hover:bg-red-700">Decline</AlertDialogAction>
-                                </AlertDialogFooter>
-                            </AlertDialogContent>
-                        </AlertDialog>
+                            </DialogTrigger>
+                            <DialogContent>
+                                <DialogHeader>
+                                    <DialogTitle>Decline expense table?</DialogTitle>
+                                    <DialogDescription>Provide a reason so the employee knows what to fix. They will receive an email notification.</DialogDescription>
+                                </DialogHeader>
+                                <Textarea
+                                    placeholder="Reason for declining..."
+                                    value={declineReason}
+                                    onChange={e => setDeclineReason(e.target.value)}
+                                    rows={3}
+                                />
+                                <DialogFooter>
+                                    <Button variant="outline" onClick={() => setDeclineOpen(false)}>Cancel</Button>
+                                    <Button onClick={handleDecline} disabled={!declineReason.trim() || declining} className="bg-red-600 hover:bg-red-700">
+                                        {declining && <Loader2 size={16} className="mr-2 animate-spin" />} Decline
+                                    </Button>
+                                </DialogFooter>
+                            </DialogContent>
+                        </Dialog>
                     </>
                 )}
                 </div>
@@ -262,7 +283,7 @@ export default function AdminExpenseDetail({ table, entries }: { table: TableDet
 
 function ReadOnlyEntryRow({ entry }: { entry: ExpenseEntry }) {
     const [loadingUrl, setLoadingUrl] = useState(false)
-    const isPersonalCar = entry.expense_type === 'personal_car'
+    const isPersonalCar = entry.expense_type === 'mileage'
 
     const handleView = async () => {
         setLoadingUrl(true)
@@ -319,7 +340,7 @@ function ReadOnlyEntryRow({ entry }: { entry: ExpenseEntry }) {
 
 function MobileEntryCard({ entry }: { entry: ExpenseEntry }) {
     const [loadingUrl, setLoadingUrl] = useState(false)
-    const isPersonalCar = entry.expense_type === 'personal_car'
+    const isPersonalCar = entry.expense_type === 'mileage'
 
     const handleView = async () => {
         setLoadingUrl(true)

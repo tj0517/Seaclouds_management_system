@@ -5,6 +5,18 @@ import { getSupabaseAdmin } from '@/utils/supabase/admin'
 import { format, startOfMonth, endOfMonth, parseISO, eachDayOfInterval, startOfWeek } from 'date-fns'
 import { getGroupedReportData, type GroupedReportRow } from './timesheet'
 import type { ExpenseEntry } from './expenses'
+import path from 'path'
+
+const FONT_DIR = path.join(process.cwd(), 'lib', 'fonts')
+const FONT_REGULAR = path.join(FONT_DIR, 'DejaVuSans.ttf')
+const FONT_BOLD = path.join(FONT_DIR, 'DejaVuSans-Bold.ttf')
+const FONT_OBLIQUE = path.join(FONT_DIR, 'DejaVuSans-Oblique.ttf')
+
+function registerFonts(doc: any) {
+    doc.registerFont('Sans', FONT_REGULAR)
+    doc.registerFont('Sans-Bold', FONT_BOLD)
+    doc.registerFont('Sans-Oblique', FONT_OBLIQUE)
+}
 
 export async function generateMonthlyPdf(month: string) {
     const supabase = await createClient()
@@ -62,14 +74,13 @@ export async function generateMonthlyPdf(month: string) {
 
     // Build daily breakdown: date -> array of { code, description, hours, earnings }
     const allDays = eachDayOfInterval({ start: parseISO(startDate), end: parseISO(endDate) })
-    type DayEntry = { code: string; description: string; hours: number; earnings: number; trackingType: string; contractCode: string }
+    type DayEntry = { code: string; description: string; hours: number; trackingType: string; contractCode: string }
     const dailyData: Record<string, DayEntry[]> = {}
 
     for (const row of rows) {
         for (const [date, hours] of Object.entries(row.dailyBreakdown)) {
             if (hours <= 0) continue
             if (!dailyData[date]) dailyData[date] = []
-            const rate = row.trackingType === 'days' ? row.rateDaily : row.rateHourly
             // Get contract code for this project + week
             const ws = format(startOfWeek(parseISO(date), { weekStartsOn: 1 }), 'yyyy-MM-dd')
             const cc = contractCodeMap[row.projectName]?.[ws] || ''
@@ -77,7 +88,6 @@ export async function generateMonthlyPdf(month: string) {
                 code: row.subProjectCode,
                 description: row.subProjectDescription || row.projectName,
                 hours,
-                earnings: rate ? hours * rate : 0,
                 trackingType: row.trackingType,
                 contractCode: cc,
             })
@@ -99,17 +109,18 @@ export async function generateMonthlyPdf(month: string) {
     const rightMargin = 40
 
     const doc = new PDFDocument({ size: 'A4', margin: 40 })
+    registerFonts(doc)
     const chunks: Buffer[] = []
     doc.on('data', (c: Buffer) => chunks.push(c))
 
     // Header
-    doc.fontSize(16).font('Helvetica-Bold').text('Seaclouds - Monthly Timesheet Report', 40, 40)
-    doc.fontSize(12).font('Helvetica').fillColor('#444444').text(`Month: ${monthLabel}`, 40, 62)
+    doc.fontSize(16).font('Sans-Bold').text('Seaclouds - Monthly Timesheet Report', 40, 40)
+    doc.fontSize(12).font('Sans').fillColor('#444444').text(`Month: ${monthLabel}`, 40, 62)
 
     // Employee info
     doc.moveDown(0.5)
     const infoY = doc.y
-    doc.fontSize(10).fillColor('#000000').font('Helvetica')
+    doc.fontSize(10).fillColor('#000000').font('Sans')
     doc.text(`Name: ${profile.full_name || 'N/A'}`, 40, infoY)
     doc.text(`Employee ID: ${profile.employee_id || 'N/A'}`, 300, infoY)
     doc.text(`Position: ${profile.position || 'N/A'}`, 40, infoY + 16)
@@ -118,10 +129,10 @@ export async function generateMonthlyPdf(month: string) {
     let y = infoY + 44
     doc.moveTo(40, y).lineTo(pageWidth - rightMargin, y).stroke('#cccccc')
     y += 6
-    doc.font('Helvetica-Bold').fontSize(8).fillColor('#000000')
+    doc.font('Sans-Bold').fontSize(8).fillColor('#000000')
     doc.text('Date', colX.date, y)
     doc.text('Code', colX.code, y)
-    doc.text('Kod umowy', colX.contract, y)
+    doc.text('Service Order', colX.contract, y)
     doc.text('Description', colX.desc, y)
     doc.text('Hours', colX.hours, y)
     doc.text('Days', colX.days, y)
@@ -130,7 +141,7 @@ export async function generateMonthlyPdf(month: string) {
     y += 6
 
     // Table rows
-    doc.font('Helvetica').fontSize(8)
+    doc.font('Sans').fontSize(8)
     for (const date of sortedDates) {
         const entries = dailyData[date]
         const dayHours = entries.filter(e => e.trackingType !== 'days').reduce((s, e) => s + e.hours, 0)
@@ -139,15 +150,15 @@ export async function generateMonthlyPdf(month: string) {
         for (let i = 0; i < entries.length; i++) {
             const entry = entries[i]
             // Measure text heights to handle wrapping
-            doc.font('Helvetica').fontSize(8)
+            doc.font('Sans').fontSize(8)
             const codeHeight = doc.heightOfString(entry.code, { width: 55 })
             const contractHeight = doc.heightOfString(entry.contractCode || ' ', { width: 95 })
             const descHeight = doc.heightOfString(entry.description || ' ', { width: 145 })
             const rowHeight = Math.max(14, codeHeight, contractHeight, descHeight) + 4
 
             if (y + rowHeight > 760) { doc.addPage(); y = 40 }
-            if (i === 0) doc.font('Helvetica-Bold').text(format(parseISO(date), 'dd.MM.yyyy'), colX.date, y)
-            doc.font('Helvetica')
+            if (i === 0) doc.font('Sans-Bold').text(format(parseISO(date), 'dd.MM.yyyy'), colX.date, y)
+            doc.font('Sans')
             doc.text(entry.code, colX.code, y, { width: 55 })
             doc.text(entry.contractCode, colX.contract, y, { width: 95 })
             doc.text(entry.description, colX.desc, y, { width: 145 })
@@ -163,11 +174,11 @@ export async function generateMonthlyPdf(month: string) {
 
         if (entries.length > 1) {
             if (y > 760) { doc.addPage(); y = 40 }
-            doc.font('Helvetica-Oblique').fillColor('#555555')
+            doc.font('Sans-Oblique').fillColor('#555555')
             doc.text('Day total', colX.desc, y)
             doc.text(dayHours > 0 ? String(dayHours) : '-', colX.hours, y)
             doc.text(dayDays > 0 ? String(dayDays) : '-', colX.days, y)
-            doc.font('Helvetica').fillColor('#000000')
+            doc.font('Sans').fillColor('#000000')
             y += 14
         }
 
@@ -175,19 +186,67 @@ export async function generateMonthlyPdf(month: string) {
         y += 4
     }
 
-    // Summary footer
+    // Per-project-code summary
+    y += 10
+    if (y > 680) { doc.addPage(); y = 40 }
+    doc.moveTo(40, y).lineTo(pageWidth - rightMargin, y).stroke('#cccccc')
+    y += 8
+    doc.font('Sans-Bold').fontSize(9).fillColor('#000000')
+    doc.text('Summary by Project Code', 40, y)
+    y += 16
+
+    // Header row
+    const sumColX = { code: 40, desc: 140, hours: 320, days: 390 }
+    doc.font('Sans-Bold').fontSize(8).fillColor('#000000')
+    doc.text('Code', sumColX.code, y)
+    doc.text('Description', sumColX.desc, y)
+    doc.text('Hours', sumColX.hours, y)
+    doc.text('Days', sumColX.days, y)
+    y += 14
+    doc.moveTo(40, y).lineTo(pageWidth - rightMargin, y).stroke('#cccccc')
+    y += 4
+
+    // Aggregate by subProjectCode
+    const codeMap = new Map<string, { desc: string; hours: number; days: number }>()
+    for (const row of rows) {
+        const existing = codeMap.get(row.subProjectCode)
+        const h = row.trackingType !== 'days' ? row.totalHours : 0
+        const d = row.trackingType === 'days' ? row.totalHours : 0
+        if (existing) {
+            existing.hours += h
+            existing.days += d
+        } else {
+            codeMap.set(row.subProjectCode, {
+                desc: row.subProjectDescription || row.projectName,
+                hours: h,
+                days: d,
+            })
+        }
+    }
+
+    doc.font('Sans').fontSize(8)
+    for (const [code, data] of codeMap) {
+        if (y + 14 > 760) { doc.addPage(); y = 40 }
+        doc.text(code, sumColX.code, y, { width: 95 })
+        doc.text(data.desc, sumColX.desc, y, { width: 175 })
+        doc.text(data.hours > 0 ? String(data.hours) : '—', sumColX.hours, y)
+        doc.text(data.days > 0 ? String(data.days) : '—', sumColX.days, y)
+        y += 14
+    }
+
+    // Grand total footer
     y += 10
     if (y > 730) { doc.addPage(); y = 40 }
     doc.moveTo(40, y).lineTo(pageWidth - rightMargin, y).stroke('#cccccc')
     y += 8
-    doc.font('Helvetica-Bold').fontSize(10)
+    doc.font('Sans-Bold').fontSize(10)
     doc.text(`Total Hours: ${totalHours}`, 40, y)
     doc.text(`Total Days: ${totalDays}`, 200, y)
     doc.text(`Worked Days: ${workedDaysCount}`, 340, y)
     y += 24
     doc.moveTo(40, y).lineTo(pageWidth - rightMargin, y).stroke('#cccccc')
     y += 8
-    doc.fontSize(8).font('Helvetica').fillColor('#666666')
+    doc.fontSize(8).font('Sans').fillColor('#666666')
     doc.text(`Generated: ${format(new Date(), 'dd.MM.yyyy')}`, 40, y)
 
     doc.end()
@@ -303,8 +362,9 @@ export async function listPdfExports(filters?: { userId?: string }) {
 }
 
 const EXPENSE_TYPE_LABELS: Record<string, string> = {
-    taxi: 'Taxi', hotel: 'Hotel', meals: 'Meals', flight: 'Flight',
-    parking: 'Parking', office_supplies: 'Office Supplies', personal_car: 'Personal Car', other: 'Other',
+    plane_ticket: 'E_011 Plane ticket', taxi: 'E_012 Taxi', bus: 'E_013 Bus',
+    train: 'E_014 Train', mileage: 'E_015 Mileage', lodging: 'E_20 Lodging, Hotel',
+    meals: 'E_30 Meals', other: 'N/A',
 }
 
 export async function generateExpensePdf(tableId: string) {
@@ -373,16 +433,17 @@ export async function generateExpensePdf(tableId: string) {
     const colX = { date: 40, location: 115, type: 210, desc: 300, amount: 470 }
 
     const doc = new PDFDocument({ size: 'A4', margin: 40 })
+    registerFonts(doc)
     const chunks: Buffer[] = []
     doc.on('data', (c: Buffer) => chunks.push(c))
 
     // Header
-    doc.fontSize(16).font('Helvetica-Bold').text('Seaclouds - Expense Report', 40, 40)
+    doc.fontSize(16).font('Sans-Bold').text('Seaclouds - Expense Report', 40, 40)
 
     // Info block
     doc.moveDown(0.8)
     let y = doc.y
-    doc.fontSize(9).fillColor('#000000').font('Helvetica')
+    doc.fontSize(9).fillColor('#000000').font('Sans')
     doc.text(`Name: ${ownerProfile.full_name || 'N/A'}`, 40, y)
     doc.text(`Employee ID: ${ownerProfile.employee_id || 'N/A'}`, 300, y)
     y += 14
@@ -405,7 +466,7 @@ export async function generateExpensePdf(tableId: string) {
     // Table header
     doc.moveTo(40, y).lineTo(pageWidth - rightMargin, y).stroke('#cccccc')
     y += 6
-    doc.font('Helvetica-Bold').fontSize(7).fillColor('#000000')
+    doc.font('Sans-Bold').fontSize(7).fillColor('#000000')
     doc.text('Date', colX.date, y)
     doc.text('Location', colX.location, y)
     doc.text('Type', colX.type, y)
@@ -416,9 +477,9 @@ export async function generateExpensePdf(tableId: string) {
     y += 6
 
     // Table rows
-    doc.font('Helvetica').fontSize(7)
+    doc.font('Sans').fontSize(7)
     for (const entry of typedEntries) {
-        const isPersonalCar = entry.expense_type === 'personal_car'
+        const isPersonalCar = entry.expense_type === 'mileage'
         const typeLabel = EXPENSE_TYPE_LABELS[entry.expense_type] ?? entry.expense_type
         const descText = isPersonalCar && entry.km != null && entry.km_rate != null
             ? `${entry.km} km × ${entry.km_rate}/km`
@@ -450,13 +511,13 @@ export async function generateExpensePdf(tableId: string) {
     if (y > 720) { doc.addPage(); y = 40 }
     doc.moveTo(40, y).lineTo(pageWidth - rightMargin, y).stroke('#cccccc')
     y += 8
-    doc.font('Helvetica-Bold').fontSize(9)
+    doc.font('Sans-Bold').fontSize(9)
     doc.text(`Total (PLN): ${totalPln.toFixed(2)}`, 40, y)
     y += 20
 
     doc.moveTo(40, y).lineTo(pageWidth - rightMargin, y).stroke('#cccccc')
     y += 8
-    doc.fontSize(7).font('Helvetica').fillColor('#666666')
+    doc.fontSize(7).font('Sans').fillColor('#666666')
     doc.text(`Generated: ${format(new Date(), 'dd.MM.yyyy')}`, 40, y)
 
     doc.end()

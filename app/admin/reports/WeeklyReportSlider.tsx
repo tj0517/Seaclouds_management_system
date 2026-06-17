@@ -31,6 +31,7 @@ export type SubProjectData = {
 export type ProjectData = {
   name: string
   code: string | null
+  serviceOrder?: string
   subProjects: SubProjectData[]
   weekTotal: number
   weekTotalHours: number
@@ -72,6 +73,7 @@ type AggregatedSubProject = {
 type AggregatedProject = {
   name: string
   code: string | null
+  serviceOrders?: Record<string, string> // weekStart -> contractCode
   subProjects: AggregatedSubProject[]
   weeklyTotals: Record<string, number> // weekStart -> hours
   weeklyTotalsHours: Record<string, number>
@@ -84,6 +86,7 @@ type AggregatedProject = {
 function buildAggregatedProjects(weeks: WeekData[]): AggregatedProject[] {
   const projectMap = new Map<string, {
     code: string | null
+    serviceOrders: Record<string, string>
     subProjectMap: Map<string, {
       description: string | null
       trackingType?: 'hours' | 'days'
@@ -101,8 +104,11 @@ function buildAggregatedProjects(weeks: WeekData[]): AggregatedProject[] {
     for (const project of week.projects) {
       let pEntry = projectMap.get(project.name)
       if (!pEntry) {
-        pEntry = { code: project.code, subProjectMap: new Map(), weeklyTotals: {}, weeklyTotalsHours: {}, weeklyTotalsDays: {}, total: 0, totalHours: 0, totalDays: 0 }
+        pEntry = { code: project.code, serviceOrders: {}, subProjectMap: new Map(), weeklyTotals: {}, weeklyTotalsHours: {}, weeklyTotalsDays: {}, total: 0, totalHours: 0, totalDays: 0 }
         projectMap.set(project.name, pEntry)
+      }
+      if (project.serviceOrder) {
+        pEntry.serviceOrders[week.weekStart] = project.serviceOrder
       }
       pEntry.weeklyTotals[week.weekStart] = (pEntry.weeklyTotals[week.weekStart] ?? 0) + project.weekTotal
       pEntry.weeklyTotalsHours[week.weekStart] = (pEntry.weeklyTotalsHours[week.weekStart] ?? 0) + project.weekTotalHours
@@ -136,6 +142,7 @@ function buildAggregatedProjects(weeks: WeekData[]): AggregatedProject[] {
   return Array.from(projectMap.entries()).map(([name, p]) => ({
     name,
     code: p.code,
+    serviceOrders: p.serviceOrders,
     total: p.total,
     totalHours: p.totalHours,
     totalDays: p.totalDays,
@@ -219,7 +226,8 @@ export default function WeeklyReportSlider({ weeks }: { weeks: WeekData[] }) {
     )
   }
 
-  const week = weeks[currentWeekIndex]
+  const safeIndex = Math.min(currentWeekIndex, weeks.length - 1)
+  const week = weeks[safeIndex]
   const totalHoursAllWeeks = weeks.reduce((s, w) => s + w.weekTotalHours, 0)
   const totalDaysAllWeeks = weeks.reduce((s, w) => s + w.weekTotalDays, 0)
 
@@ -234,7 +242,7 @@ export default function WeeklyReportSlider({ weeks }: { weeks: WeekData[] }) {
                 variant="outline"
                 size="icon"
                 className="h-8 w-8"
-                disabled={currentWeekIndex === 0}
+                disabled={safeIndex === 0}
                 onClick={() => setCurrentWeekIndex(i => i - 1)}
               >
                 <ChevronLeft className="h-4 w-4" />
@@ -243,7 +251,7 @@ export default function WeeklyReportSlider({ weeks }: { weeks: WeekData[] }) {
                 variant="outline"
                 size="icon"
                 className="h-8 w-8"
-                disabled={currentWeekIndex === weeks.length - 1}
+                disabled={safeIndex === weeks.length - 1}
                 onClick={() => setCurrentWeekIndex(i => i + 1)}
               >
                 <ChevronRight className="h-4 w-4" />
@@ -252,7 +260,7 @@ export default function WeeklyReportSlider({ weeks }: { weeks: WeekData[] }) {
                 Week {week.weekStartLabel} — {week.weekEndLabel}
               </h3>
               <span className="text-sm text-muted-foreground">
-                ({currentWeekIndex + 1} of {weeks.length})
+                ({safeIndex + 1} of {weeks.length})
               </span>
               <Badge variant="outline" className="font-mono text-xs ml-1">
                 {formatMixedTotal(week.weekTotalHours, week.weekTotalDays)} total
@@ -316,6 +324,7 @@ export default function WeeklyReportSlider({ weeks }: { weeks: WeekData[] }) {
                     <tr className="border-b bg-gray-50">
                       <th className="text-left px-3 py-2 font-medium text-gray-600 w-32">Code</th>
                       <th className="text-left px-3 py-2 font-medium text-gray-600 w-40">Description</th>
+                      <th className="text-left px-3 py-2 font-medium text-gray-600 w-36">Service Order</th>
                       <th className="text-left px-3 py-2 font-medium text-gray-600">Employee</th>
                       {week.days.map(d => (
                         <th
@@ -332,8 +341,14 @@ export default function WeeklyReportSlider({ weeks }: { weeks: WeekData[] }) {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {project.subProjects.map(sp =>
-                      sp.users.map((userRow, idx) => (
+                    {(() => {
+                      const totalUserRows = project.subProjects.reduce((s, sp) => s + sp.users.length, 0)
+                      let isFirstRow = true
+                      return project.subProjects.map(sp =>
+                        sp.users.map((userRow, idx) => {
+                          const showServiceOrder = isFirstRow
+                          if (isFirstRow) isFirstRow = false
+                          return (
                         <tr key={`${sp.code}-${userRow.userName}`} className="hover:bg-gray-50">
                           {idx === 0 && (
                             <td className="px-3 py-2 font-mono text-xs text-blue-700 font-semibold align-top" rowSpan={sp.users.length}>
@@ -343,6 +358,11 @@ export default function WeeklyReportSlider({ weeks }: { weeks: WeekData[] }) {
                           {idx === 0 && (
                             <td className="px-3 py-2 text-xs text-gray-500 align-top" rowSpan={sp.users.length}>
                               {sp.description || '—'}
+                            </td>
+                          )}
+                          {showServiceOrder && (
+                            <td className="px-3 py-2 font-mono text-xs text-purple-700 font-semibold align-top" rowSpan={totalUserRows}>
+                              {project.serviceOrder || '—'}
                             </td>
                           )}
                           <td className="px-3 py-2">
@@ -371,11 +391,14 @@ export default function WeeklyReportSlider({ weeks }: { weeks: WeekData[] }) {
                             <StatusCell userRow={userRow} weekStart={week.weekStart} />
                           </td>
                         </tr>
-                      ))
-                    )}
+                          )
+                        })
+                      )
+                    })()
+                    }
                     {/* Project subtotal */}
                     <tr className="bg-gray-50 font-semibold border-t-2 border-gray-200">
-                      <td colSpan={3} className="px-3 py-2 text-right text-xs text-gray-500 uppercase tracking-wide">Project Total</td>
+                      <td colSpan={4} className="px-3 py-2 text-right text-xs text-gray-500 uppercase tracking-wide">Project Total</td>
                       {week.days.map(d => {
                         const h = project.dailyTotalsHours[d.key] ?? 0
                         const dd = project.dailyTotalsDays[d.key] ?? 0
@@ -418,6 +441,7 @@ export default function WeeklyReportSlider({ weeks }: { weeks: WeekData[] }) {
                     <tr className="border-b bg-gray-50">
                       <th className="text-left px-3 py-2 font-medium text-gray-600 w-32">Code</th>
                       <th className="text-left px-3 py-2 font-medium text-gray-600 w-40">Description</th>
+                      <th className="text-left px-3 py-2 font-medium text-gray-600 w-36">Service Order</th>
                       <th className="text-left px-3 py-2 font-medium text-gray-600">Employee</th>
                       {weeks.map(w => (
                         <th key={w.weekStart} className="text-center px-2 py-2 font-medium text-gray-600 whitespace-nowrap">
@@ -431,8 +455,17 @@ export default function WeeklyReportSlider({ weeks }: { weeks: WeekData[] }) {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {project.subProjects.map(sp =>
-                      sp.users.map((user, idx) => (
+                    {(() => {
+                      const totalUserRows = project.subProjects.reduce((s, sp) => s + sp.users.length, 0)
+                      // Compute aggregated service order display for week view
+                      const uniqueCodes = [...new Set(Object.values(project.serviceOrders ?? {}))].filter(Boolean)
+                      const serviceOrderLabel = uniqueCodes.length > 0 ? uniqueCodes.join(', ') : '—'
+                      let isFirstRow = true
+                      return project.subProjects.map(sp =>
+                        sp.users.map((user, idx) => {
+                          const showServiceOrder = isFirstRow
+                          if (isFirstRow) isFirstRow = false
+                          return (
                         <tr key={`${sp.code}-${user.userName}`} className="hover:bg-gray-50">
                           {idx === 0 && (
                             <td className="px-3 py-2 font-mono text-xs text-blue-700 font-semibold align-top" rowSpan={sp.users.length}>
@@ -442,6 +475,11 @@ export default function WeeklyReportSlider({ weeks }: { weeks: WeekData[] }) {
                           {idx === 0 && (
                             <td className="px-3 py-2 text-xs text-gray-500 align-top" rowSpan={sp.users.length}>
                               {sp.description || '—'}
+                            </td>
+                          )}
+                          {showServiceOrder && (
+                            <td className="px-3 py-2 font-mono text-xs text-purple-700 font-semibold align-top" rowSpan={totalUserRows}>
+                              {serviceOrderLabel}
                             </td>
                           )}
                           <td className="px-3 py-2">
@@ -477,11 +515,14 @@ export default function WeeklyReportSlider({ weeks }: { weeks: WeekData[] }) {
                             )}
                           </td>
                         </tr>
-                      ))
-                    )}
+                          )
+                        })
+                      )
+                    })()
+                    }
                     {/* Project subtotal */}
                     <tr className="bg-gray-50 font-semibold border-t-2 border-gray-200">
-                      <td colSpan={3} className="px-3 py-2 text-right text-xs text-gray-500 uppercase tracking-wide">Project Total</td>
+                      <td colSpan={4} className="px-3 py-2 text-right text-xs text-gray-500 uppercase tracking-wide">Project Total</td>
                       {weeks.map(w => {
                         const h = project.weeklyTotalsHours[w.weekStart] ?? 0
                         const dd = project.weeklyTotalsDays[w.weekStart] ?? 0

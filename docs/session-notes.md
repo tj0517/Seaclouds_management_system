@@ -35,7 +35,3 @@ Generate a downloadable PDF for an employee's expense table.
 - `app/data/actions/pdf.ts` — existing timesheet PDF generation logic
 - `app/admin/expenses/[id]/AdminExpenseDetail.tsx` — good place to add a download button
 
-### What needs to be built
-1. Server action to generate expense PDF (model after `pdf.ts`)
-2. Store PDF in storage and optionally record in a table
-3. Download button on expense detail page

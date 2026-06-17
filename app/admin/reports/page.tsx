@@ -1,7 +1,8 @@
 import { getGroupedReportData, getReportFilterOptions } from '@/app/data/actions/timesheet'
+import { createClient } from '@/utils/supabase/server'
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, eachWeekOfInterval, addDays, parseISO, startOfWeek, min, max } from 'date-fns'
 import { enUS } from 'date-fns/locale'
-import { Filter, FileText, Calendar, CheckCircle2, Clock, Users, X, CalendarDays, DollarSign } from 'lucide-react'
+import { Filter, FileText, Calendar, CheckCircle2, Clock, Users, X, CalendarDays, DollarSign, ClipboardList } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -10,7 +11,7 @@ import Link from 'next/link'
 import WeeklyReportSlider, { type WeekData } from './WeeklyReportSlider'
 
 type Props = {
-  searchParams: Promise<{ from?: string; to?: string; user?: string; code?: string; project?: string }>
+  searchParams: Promise<{ from?: string; to?: string; user?: string; code?: string; project?: string; serviceOrder?: string }>
 }
 
 export default async function ReportsPage(props: Props) {
@@ -25,6 +26,7 @@ export default async function ReportsPage(props: Props) {
   const filterUser = searchParams.user || ''
   const filterCode = searchParams.code || ''
   const filterProject = searchParams.project || ''
+  const filterServiceOrder = searchParams.serviceOrder || ''
 
   const [rows, filterOptions] = await Promise.all([
     getGroupedReportData(dateFrom, dateTo, {
@@ -34,6 +36,40 @@ export default async function ReportsPage(props: Props) {
     }),
     getReportFilterOptions(dateFrom, dateTo),
   ])
+
+  // Fetch contract codes for the date range (per user, per project, per week)
+  const supabase = await createClient()
+  const { data: contractCodeRows } = await supabase
+    .from('weekly_contract_codes')
+    .select('user_id, project_id, week_start, contract_code')
+    .gte('week_start', dateFrom)
+    .lte('week_start', dateTo)
+
+  // Fetch projects to map projectId → projectName
+  const { data: projectRows } = await supabase
+    .from('projects')
+    .select('id, name')
+
+  const projectIdToName = new Map<string, string>()
+  for (const p of projectRows || []) {
+    projectIdToName.set(p.id, p.name)
+  }
+
+  // Build "userId||projectName" → weekStart → contractCode map
+  const contractCodeByUserProject = new Map<string, Map<string, string>>()
+  // Also build projectName → weekStart → contractCode (for display, picks any user's code)
+  const contractCodeByName = new Map<string, Map<string, string>>()
+  for (const row of contractCodeRows || []) {
+    const projectName = projectIdToName.get(row.project_id)
+    if (!projectName) continue
+
+    const userKey = `${row.user_id}||${projectName}`
+    if (!contractCodeByUserProject.has(userKey)) contractCodeByUserProject.set(userKey, new Map())
+    contractCodeByUserProject.get(userKey)!.set(row.week_start, row.contract_code)
+
+    if (!contractCodeByName.has(projectName)) contractCodeByName.set(projectName, new Map())
+    contractCodeByName.get(projectName)!.set(row.week_start, row.contract_code)
+  }
 
   // Generate weeks in the range, each with its days clamped to the from/to range
   const rangeStart = parseISO(dateFrom)
@@ -57,19 +93,57 @@ export default async function ReportsPage(props: Props) {
     }
   })
 
+  // Helper: get Monday of the week for a given date string
+  function getWeekStartForDate(dateStr: string): string {
+    const d = new Date(dateStr)
+    const day = d.getUTCDay() || 7
+    d.setUTCDate(d.getUTCDate() - day + 1)
+    return d.toISOString().slice(0, 10)
+  }
+
+  // Filter rows by service order — only keep days from weeks where that exact code was used
+  const filteredRows = filterServiceOrder
+    ? rows.map(r => {
+        const userKey = `${r.userId}||${r.projectName}`
+        const weekMap = contractCodeByUserProject.get(userKey)
+        if (!weekMap) return null
+
+        // Find which week-starts have the matching code
+        const matchingWeeks = new Set<string>()
+        for (const [ws, code] of weekMap) {
+          if (code === filterServiceOrder) matchingWeeks.add(ws)
+        }
+        if (matchingWeeks.size === 0) return null
+
+        // Keep only daily entries that fall in a matching week
+        const filteredBreakdown: Record<string, number> = {}
+        let totalHours = 0
+        for (const [date, hours] of Object.entries(r.dailyBreakdown)) {
+          if (matchingWeeks.has(getWeekStartForDate(date))) {
+            filteredBreakdown[date] = hours
+            totalHours += hours
+          }
+        }
+        if (totalHours === 0) return null
+
+        const rate = r.trackingType === 'days' ? r.rateDaily : r.rateHourly
+        return { ...r, dailyBreakdown: filteredBreakdown, totalHours, earnings: rate ? totalHours * rate : 0 }
+      }).filter((r): r is NonNullable<typeof r> => r !== null)
+    : rows
+
   // Summary stats
-  const totalHours = rows.filter(r => r.trackingType !== 'days').reduce((s, r) => s + r.totalHours, 0)
-  const totalDays = rows.filter(r => r.trackingType === 'days').reduce((s, r) => s + r.totalHours, 0)
-  const uniqueUsers = new Set(rows.map(r => r.userName)).size
-  const uniqueProjects = new Set(rows.map(r => r.projectName)).size
-  const totalSubmitted = rows.filter(r => r.isSubmitted).length
-  const totalEarnings = rows.reduce((s, r) => s + r.earnings, 0)
+  const totalHours = filteredRows.filter(r => r.trackingType !== 'days').reduce((s, r) => s + r.totalHours, 0)
+  const totalDays = filteredRows.filter(r => r.trackingType === 'days').reduce((s, r) => s + r.totalHours, 0)
+  const uniqueUsers = new Set(filteredRows.map(r => r.userName)).size
+  const uniqueProjects = new Set(filteredRows.map(r => r.projectName)).size
+  const totalSubmitted = filteredRows.filter(r => r.isSubmitted).length
+  const totalEarnings = filteredRows.reduce((s, r) => s + r.earnings, 0)
 
   // Active filter count (excluding dates)
-  const activeFilters = [filterUser, filterCode, filterProject].filter(Boolean).length
+  const activeFilters = [filterUser, filterCode, filterProject, filterServiceOrder].filter(Boolean).length
 
   // Group rows by project
-  const byProject = rows.reduce((acc, row) => {
+  const byProject = filteredRows.reduce((acc, row) => {
     if (!acc[row.projectName]) acc[row.projectName] = { code: row.projectCode, subProjects: {} }
     if (!acc[row.projectName].subProjects[row.subProjectCode]) {
       acc[row.projectName].subProjects[row.subProjectCode] = { description: row.subProjectDescription, users: [] }
@@ -93,7 +167,11 @@ export default async function ReportsPage(props: Props) {
 
       const projects = Object.entries(byProject)
         .map(([projectName, projectData]) => {
-          const projectWeekRows = rows.filter(r => r.projectName === projectName)
+          const projectWeekRows = filteredRows.filter(r => r.projectName === projectName)
+
+          // Look up service order for this project + week
+          const weekMap = contractCodeByName.get(projectName)
+          const serviceOrder = weekMap?.get(week.weekStart) ?? ''
 
           const subProjects = Object.entries(projectData.subProjects)
             .map(([spCode, spData]) => {
@@ -132,7 +210,7 @@ export default async function ReportsPage(props: Props) {
           const weekTotalHours = Object.values(dailyTotalsHours).reduce((a, b) => a + b, 0)
           const weekTotalDays = Object.values(dailyTotalsDays).reduce((a, b) => a + b, 0)
 
-          return { name: projectName, code: projectData.code, subProjects, weekTotal, weekTotalHours, weekTotalDays, dailyTotals, dailyTotalsHours, dailyTotalsDays }
+          return { name: projectName, code: projectData.code, subProjects, weekTotal, weekTotalHours, weekTotalDays, dailyTotals, dailyTotalsHours, dailyTotalsDays, serviceOrder }
         })
         .filter(p => p.weekTotal > 0)
 
@@ -168,7 +246,7 @@ export default async function ReportsPage(props: Props) {
       {/* FILTER BAR */}
       <Card>
         <CardContent className="pt-4">
-          <form className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 items-end">
+          <form className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-3 items-end">
             <div>
               <label className="block text-xs font-medium mb-1 text-muted-foreground uppercase tracking-wide">From</label>
               <div className="relative">
@@ -226,6 +304,20 @@ export default async function ReportsPage(props: Props) {
               </select>
             </div>
 
+            <div>
+              <label className="block text-xs font-medium mb-1 text-muted-foreground uppercase tracking-wide">Service Order</label>
+              <select
+                name="serviceOrder"
+                defaultValue={filterServiceOrder}
+                className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="">All orders</option>
+                {(filterOptions.serviceOrders ?? []).map(so => (
+                  <option key={so} value={so}>{so}</option>
+                ))}
+              </select>
+            </div>
+
             <div className="flex gap-2">
               <Button type="submit" className="flex-1">
                 <Filter className="mr-2 h-4 w-4" /> Filter
@@ -258,6 +350,11 @@ export default async function ReportsPage(props: Props) {
               {filterUser && (
                 <Badge variant="secondary" className="gap-1">
                   <Users className="h-3 w-3" /> {filterUser}
+                </Badge>
+              )}
+              {filterServiceOrder && (
+                <Badge variant="secondary" className="gap-1">
+                  <ClipboardList className="h-3 w-3" /> {filterServiceOrder}
                 </Badge>
               )}
             </div>

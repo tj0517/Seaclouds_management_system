@@ -12,6 +12,10 @@ import {
     AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
     AlertDialogTrigger
 } from '@/components/ui/alert-dialog'
+import {
+    Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger
+} from '@/components/ui/dialog'
+import { Textarea } from '@/components/ui/textarea'
 import { approveExpenseTable, declineExpenseTable } from '@/app/data/actions'
 import type { AdminExpenseTable } from '@/app/data/actions/expenses'
 
@@ -207,6 +211,8 @@ function TableRow({ table }: { table: AdminExpenseTable }) {
     const router = useRouter()
     const [approving, setApproving] = useState(false)
     const [declining, setDeclining] = useState(false)
+    const [declineOpen, setDeclineOpen] = useState(false)
+    const [declineReason, setDeclineReason] = useState('')
 
     const handleApprove = async () => {
         setApproving(true)
@@ -217,11 +223,17 @@ function TableRow({ table }: { table: AdminExpenseTable }) {
     }
 
     const handleDecline = async () => {
+        if (!declineReason.trim()) return
         setDeclining(true)
-        const result = await declineExpenseTable(table.id)
+        const result = await declineExpenseTable(table.id, declineReason.trim())
         setDeclining(false)
         if ('error' in result) toast.error(result.error)
-        else { toast.success('Expense table declined'); router.refresh() }
+        else {
+            toast.success('Expense table declined')
+            setDeclineOpen(false)
+            setDeclineReason('')
+            router.refresh()
+        }
     }
 
     return (
@@ -266,25 +278,31 @@ function TableRow({ table }: { table: AdminExpenseTable }) {
                                     </AlertDialogFooter>
                                 </AlertDialogContent>
                             </AlertDialog>
-                            <AlertDialog>
-                                <AlertDialogTrigger asChild>
+                            <Dialog open={declineOpen} onOpenChange={(open) => { setDeclineOpen(open); if (!open) setDeclineReason('') }}>
+                                <DialogTrigger asChild>
                                     <Button variant="ghost" size="icon" className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50" title="Decline" disabled={declining}>
                                         {declining ? <Loader2 size={16} className="animate-spin" /> : <X size={16} />}
                                     </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                    <AlertDialogHeader>
-                                        <AlertDialogTitle>Decline expense table?</AlertDialogTitle>
-                                        <AlertDialogDescription>
-                                            This will decline the expense table from {table.user_name}. They can withdraw and resubmit after making changes.
-                                        </AlertDialogDescription>
-                                    </AlertDialogHeader>
-                                    <AlertDialogFooter>
-                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                        <AlertDialogAction onClick={handleDecline} className="bg-red-600 hover:bg-red-700">Decline</AlertDialogAction>
-                                    </AlertDialogFooter>
-                                </AlertDialogContent>
-                            </AlertDialog>
+                                </DialogTrigger>
+                                <DialogContent>
+                                    <DialogHeader>
+                                        <DialogTitle>Decline expense table?</DialogTitle>
+                                        <DialogDescription>Provide a reason so {table.user_name} knows what to fix. They will receive an email notification.</DialogDescription>
+                                    </DialogHeader>
+                                    <Textarea
+                                        placeholder="Reason for declining..."
+                                        value={declineReason}
+                                        onChange={e => setDeclineReason(e.target.value)}
+                                        rows={3}
+                                    />
+                                    <DialogFooter>
+                                        <Button variant="outline" onClick={() => setDeclineOpen(false)}>Cancel</Button>
+                                        <Button onClick={handleDecline} disabled={!declineReason.trim() || declining} className="bg-red-600 hover:bg-red-700">
+                                            {declining && <Loader2 size={16} className="mr-2 animate-spin" />} Decline
+                                        </Button>
+                                    </DialogFooter>
+                                </DialogContent>
+                            </Dialog>
                         </>
                     )}
                 </div>
@@ -297,6 +315,8 @@ function MobileTableCard({ table }: { table: AdminExpenseTable }) {
     const router = useRouter()
     const [approving, setApproving] = useState(false)
     const [declining, setDeclining] = useState(false)
+    const [declineOpen, setDeclineOpen] = useState(false)
+    const [declineReason, setDeclineReason] = useState('')
 
     const handleApprove = async () => {
         setApproving(true)
@@ -307,11 +327,17 @@ function MobileTableCard({ table }: { table: AdminExpenseTable }) {
     }
 
     const handleDecline = async () => {
+        if (!declineReason.trim()) return
         setDeclining(true)
-        const result = await declineExpenseTable(table.id)
+        const result = await declineExpenseTable(table.id, declineReason.trim())
         setDeclining(false)
         if ('error' in result) toast.error(result.error)
-        else { toast.success('Expense table declined'); router.refresh() }
+        else {
+            toast.success('Expense table declined')
+            setDeclineOpen(false)
+            setDeclineReason('')
+            router.refresh()
+        }
     }
 
     return (
@@ -353,25 +379,31 @@ function MobileTableCard({ table }: { table: AdminExpenseTable }) {
                                 </AlertDialogFooter>
                             </AlertDialogContent>
                         </AlertDialog>
-                        <AlertDialog>
-                            <AlertDialogTrigger asChild>
+                        <Dialog open={declineOpen} onOpenChange={(open) => { setDeclineOpen(open); if (!open) setDeclineReason('') }}>
+                            <DialogTrigger asChild>
                                 <Button size="sm" variant="outline" className="text-red-600 border-red-300 hover:bg-red-50" disabled={declining}>
                                     {declining ? <Loader2 size={14} className="mr-1 animate-spin" /> : <X size={14} className="mr-1" />} Decline
                                 </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                                <AlertDialogHeader>
-                                    <AlertDialogTitle>Decline expense table?</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                        This will decline the expense table from {table.user_name}.
-                                    </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                    <AlertDialogAction onClick={handleDecline} className="bg-red-600 hover:bg-red-700">Decline</AlertDialogAction>
-                                </AlertDialogFooter>
-                            </AlertDialogContent>
-                        </AlertDialog>
+                            </DialogTrigger>
+                            <DialogContent>
+                                <DialogHeader>
+                                    <DialogTitle>Decline expense table?</DialogTitle>
+                                    <DialogDescription>Provide a reason so {table.user_name} knows what to fix. They will receive an email notification.</DialogDescription>
+                                </DialogHeader>
+                                <Textarea
+                                    placeholder="Reason for declining..."
+                                    value={declineReason}
+                                    onChange={e => setDeclineReason(e.target.value)}
+                                    rows={3}
+                                />
+                                <DialogFooter>
+                                    <Button variant="outline" onClick={() => setDeclineOpen(false)}>Cancel</Button>
+                                    <Button onClick={handleDecline} disabled={!declineReason.trim() || declining} className="bg-red-600 hover:bg-red-700">
+                                        {declining && <Loader2 size={14} className="mr-1 animate-spin" />} Decline
+                                    </Button>
+                                </DialogFooter>
+                            </DialogContent>
+                        </Dialog>
                     </>
                 )}
             </div>

@@ -524,13 +524,15 @@ export type Database = {
     Enums: {
       expense_currency: "PLN" | "EUR" | "USD" | "GBP"
       expense_type:
+        | "plane_ticket"
         | "taxi"
-        | "hotel"
+        | "bus"
+        | "train"
+        | "mileage"
+        | "lodging"
         | "meals"
-        | "flight"
         | "parking"
         | "office_supplies"
-        | "personal_car"
         | "other"
       user_role: "admin" | "employee"
     }
@@ -662,13 +664,15 @@ export const Constants = {
     Enums: {
       expense_currency: ["PLN", "EUR", "USD", "GBP"],
       expense_type: [
+        "plane_ticket",
         "taxi",
-        "hotel",
+        "bus",
+        "train",
+        "mileage",
+        "lodging",
         "meals",
-        "flight",
         "parking",
         "office_supplies",
-        "personal_car",
         "other",
       ],
       user_role: ["admin", "employee"],

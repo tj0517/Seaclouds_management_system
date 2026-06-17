@@ -2,11 +2,11 @@
 
 import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { format } from 'date-fns'
+import { format, parse } from 'date-fns'
 import { toast } from 'sonner'
 import {
     Plus, Trash2, Edit2, ChevronDown, ChevronUp,
-    Receipt, Upload, X, Car, Loader2, FileText, Check, Undo2, FileDown
+    Receipt, Upload, X, Car, Loader2, FileText, Check, Undo2, FileDown, CalendarIcon
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -17,6 +17,9 @@ import {
 import {
     Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from '@/components/ui/select'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Calendar } from '@/components/ui/calendar'
+import { cn } from '@/lib/utils'
 import {
     createExpenseTable, updateExpenseTable, deleteExpenseTable,
     saveExpenseEntry, updateExpenseEntry, deleteExpenseEntry,
@@ -31,17 +34,86 @@ type Project = { id: string; name: string; project_code: string | null }
 type TableWithEntries = ExpenseTableWithProject & { entries: ExpenseEntry[] }
 
 const EXPENSE_TYPES = [
-    { value: 'taxi', label: 'Taxi' },
-    { value: 'hotel', label: 'Hotel' },
-    { value: 'meals', label: 'Meals' },
-    { value: 'flight', label: 'Flight' },
-    { value: 'parking', label: 'Parking' },
-    { value: 'office_supplies', label: 'Office Supplies' },
-    { value: 'personal_car', label: 'Personal Car' },
-    { value: 'other', label: 'Other' },
+    { value: 'plane_ticket', label: 'E_011 Plane ticket' },
+    { value: 'taxi', label: 'E_012 Taxi' },
+    { value: 'bus', label: 'E_013 Bus' },
+    { value: 'train', label: 'E_014 Train' },
+    { value: 'mileage', label: 'E_015 Mileage' },
+    { value: 'lodging', label: 'E_20 Lodging, Hotel' },
+    { value: 'meals', label: 'E_30 Meals' },
+    { value: 'other', label: 'N/A' },
 ] as const
 
 const CURRENCIES = ['PLN', 'EUR', 'USD', 'GBP'] as const
+
+// yyyy-MM-dd string ↔ Date helpers
+function toDate(s: string): Date | undefined {
+    if (!s) return undefined
+    return parse(s, 'yyyy-MM-dd', new Date())
+}
+function toStr(d: Date | undefined): string {
+    return d ? format(d, 'yyyy-MM-dd') : ''
+}
+
+function DatePicker({ value, onChange, placeholder = 'Pick a date' }: {
+    value: string
+    onChange: (v: string) => void
+    placeholder?: string
+}) {
+    const [open, setOpen] = useState(false)
+    return (
+        <Popover open={open} onOpenChange={setOpen} modal>
+            <PopoverTrigger asChild>
+                <Button
+                    variant="outline"
+                    className={cn(
+                        'w-full justify-start text-left font-normal h-9',
+                        !value && 'text-muted-foreground'
+                    )}
+                >
+                    <CalendarIcon size={14} className="mr-2 shrink-0" />
+                    {value ? format(toDate(value)!, 'dd/MM/yyyy') : placeholder}
+                </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                    mode="single"
+                    selected={toDate(value)}
+                    onSelect={(d) => { onChange(toStr(d)); setOpen(false) }}
+                    defaultMonth={toDate(value)}
+                />
+            </PopoverContent>
+        </Popover>
+    )
+}
+
+function FileUploadButton({ fileRef }: { fileRef: React.RefObject<HTMLInputElement | null> }) {
+    const [fileName, setFileName] = useState<string | null>(null)
+    return (
+        <div className="flex items-center gap-2">
+            <input
+                ref={fileRef}
+                type="file"
+                accept="image/*,.pdf"
+                className="hidden"
+                onChange={(e) => setFileName(e.target.files?.[0]?.name || null)}
+            />
+            <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-9"
+                onClick={() => fileRef.current?.click()}
+            >
+                <Upload size={14} className="mr-2" />
+                {fileName || 'Choose file'}
+            </Button>
+            {fileName && (
+                <span className="text-sm text-muted-foreground truncate max-w-[180px]">{fileName}</span>
+            )}
+        </div>
+    )
+}
 
 function formatCurrency(amount: number, currency: string) {
     return new Intl.NumberFormat('en-US', {
@@ -161,11 +233,11 @@ function CreateTableDialog({ projects }: { projects: Project[] }) {
                     <div className="grid grid-cols-2 gap-4">
                         <div>
                             <Label>Start Date *</Label>
-                            <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
+                            <DatePicker value={startDate} onChange={setStartDate} placeholder="Pick start date" />
                         </div>
                         <div>
                             <Label>End Date</Label>
-                            <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
+                            <DatePicker value={endDate} onChange={setEndDate} placeholder="Pick end date" />
                         </div>
                     </div>
                 </div>
@@ -329,6 +401,14 @@ function ExpenseTableCard({
                 </div>
             </div>
 
+            {/* Decline reason */}
+            {isDeclined && table.decline_reason && (
+                <div className="mx-4 mt-3 p-3 rounded-md bg-red-50 border border-red-200 text-sm">
+                    <span className="font-medium text-red-800">Admin feedback:</span>{' '}
+                    <span className="text-red-700">{table.decline_reason}</span>
+                </div>
+            )}
+
             {/* Content */}
             {expanded && (
                 <div className="p-4">
@@ -434,7 +514,7 @@ function EntryRow({ entry, readOnly = false }: { entry: ExpenseEntry; readOnly?:
 
     const typeLabel = EXPENSE_TYPES.find(t => t.value === entry.expense_type)?.label ?? entry.expense_type
 
-    const isPersonalCar = entry.expense_type === 'personal_car'
+    const isPersonalCar = entry.expense_type === 'mileage'
 
     return (
         <tr className="border-b last:border-b-0 hover:bg-gray-50">
@@ -501,7 +581,7 @@ function MobileEntryCard({ entry, readOnly = false }: { entry: ExpenseEntry; rea
     }
 
     const typeLabel = EXPENSE_TYPES.find(t => t.value === entry.expense_type)?.label ?? entry.expense_type
-    const isPersonalCar = entry.expense_type === 'personal_car'
+    const isPersonalCar = entry.expense_type === 'mileage'
 
     return (
         <div className="border rounded-lg p-3 space-y-2">
@@ -645,7 +725,7 @@ function AddEntryDialog({ tableId }: { tableId: string }) {
     const [km, setKm] = useState('')
     const [kmRate, setKmRate] = useState('0.8358')
 
-    const isPersonalCar = type === 'personal_car'
+    const isPersonalCar = type === 'mileage'
     const computedAmount = isPersonalCar && km && kmRate
         ? (parseFloat(km) * parseFloat(kmRate)).toFixed(2)
         : amount
@@ -715,11 +795,11 @@ function AddEntryDialog({ tableId }: { tableId: string }) {
                     <div className="grid grid-cols-2 gap-3">
                         <div>
                             <Label>Date *</Label>
-                            <Input type="date" value={date} onChange={e => setDate(e.target.value)} />
+                            <DatePicker value={date} onChange={setDate} />
                         </div>
                         <div>
                             <Label>End Date</Label>
-                            <Input type="date" value={dateEnd} onChange={e => setDateEnd(e.target.value)} />
+                            <DatePicker value={dateEnd} onChange={setDateEnd} placeholder="Pick end date" />
                         </div>
                     </div>
                     <div>
@@ -778,8 +858,8 @@ function AddEntryDialog({ tableId }: { tableId: string }) {
                         </div>
                     )}
                     <div>
-                        <Label>Receipt (optional)</Label>
-                        <Input ref={fileRef} type="file" accept="image/*,.pdf" />
+                        <Label>Receipt</Label>
+                        <FileUploadButton fileRef={fileRef} />
                     </div>
                 </div>
                 <DialogFooter>
@@ -858,11 +938,11 @@ function EditTableDialog({ table, projects }: { table: ExpenseTableWithProject; 
                     <div className="grid grid-cols-2 gap-4">
                         <div>
                             <Label>Start Date *</Label>
-                            <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
+                            <DatePicker value={startDate} onChange={setStartDate} placeholder="Pick start date" />
                         </div>
                         <div>
                             <Label>End Date</Label>
-                            <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
+                            <DatePicker value={endDate} onChange={setEndDate} placeholder="Pick end date" />
                         </div>
                     </div>
                 </div>
@@ -895,7 +975,7 @@ function EditEntryDialog({ entry }: { entry: ExpenseEntry }) {
     const [km, setKm] = useState(entry.km != null ? String(entry.km) : '')
     const [kmRate, setKmRate] = useState(entry.km_rate != null ? String(entry.km_rate) : '0.8358')
 
-    const isPersonalCar = type === 'personal_car'
+    const isPersonalCar = type === 'mileage'
     const computedAmount = isPersonalCar && km && kmRate
         ? (parseFloat(km) * parseFloat(kmRate)).toFixed(2)
         : amount
@@ -938,11 +1018,11 @@ function EditEntryDialog({ entry }: { entry: ExpenseEntry }) {
                     <div className="grid grid-cols-2 gap-3">
                         <div>
                             <Label>Date *</Label>
-                            <Input type="date" value={date} onChange={e => setDate(e.target.value)} />
+                            <DatePicker value={date} onChange={setDate} />
                         </div>
                         <div>
                             <Label>End Date</Label>
-                            <Input type="date" value={dateEnd} onChange={e => setDateEnd(e.target.value)} />
+                            <DatePicker value={dateEnd} onChange={setDateEnd} placeholder="Pick end date" />
                         </div>
                     </div>
                     <div>

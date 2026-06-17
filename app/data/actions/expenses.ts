@@ -4,6 +4,7 @@ import { createClient } from '@/utils/supabase/server'
 import { getSupabaseAdmin } from '@/utils/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import { fetchNbpRate } from './nbp'
+import { sendExpenseDeclineNotification } from '@/lib/email'
 
 async function getTableStatus(supabase: any, tableId: string, userId: string): Promise<{ status: string } | null> {
     const { data } = await (supabase as any)
@@ -35,6 +36,7 @@ export type ExpenseTableWithProject = {
     created_at: string
     project_name: string
     status: string
+    decline_reason: string | null
 }
 
 export type ExpenseEntry = {
@@ -79,6 +81,7 @@ export async function getExpenseTables(): Promise<ExpenseTableWithProject[]> {
         created_at: row.created_at,
         project_name: row.projects?.name ?? 'Unknown',
         status: row.status ?? 'draft',
+        decline_reason: row.decline_reason ?? null,
     }))
 }
 
@@ -508,7 +511,7 @@ export async function withdrawExpenseSubmission(id: string) {
 
     const { error } = await (supabase as any)
         .from('expense_tables')
-        .update({ status: 'draft', reviewed_at: null, reviewed_by: null })
+        .update({ status: 'draft', reviewed_at: null, reviewed_by: null, decline_reason: null })
         .eq('id', id)
         .eq('user_id', user.id)
 
@@ -622,6 +625,7 @@ export async function getAdminExpenseTableDetail(id: string) {
         created_at: (data as any).created_at,
         reviewed_at: (data as any).reviewed_at,
         reviewed_by: (data as any).reviewed_by,
+        decline_reason: (data as any).decline_reason ?? null,
     }
 }
 
@@ -651,14 +655,14 @@ export async function approveExpenseTable(id: string) {
     return { success: true }
 }
 
-export async function declineExpenseTable(id: string) {
+export async function declineExpenseTable(id: string, reason: string) {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return { error: 'No session' }
 
     const { data: table } = await (supabase as any)
         .from('expense_tables')
-        .select('status')
+        .select('status, user_id, project_id, projects ( name )')
         .eq('id', id)
         .single()
 
@@ -667,10 +671,37 @@ export async function declineExpenseTable(id: string) {
 
     const { error } = await (supabase as any)
         .from('expense_tables')
-        .update({ status: 'declined', reviewed_at: new Date().toISOString(), reviewed_by: user.id })
+        .update({
+            status: 'declined',
+            reviewed_at: new Date().toISOString(),
+            reviewed_by: user.id,
+            decline_reason: reason || null,
+        })
         .eq('id', id)
 
     if (error) return { error: error.message }
+
+    // Send decline notification email
+    try {
+        const adminClient = getSupabaseAdmin()
+        const { data: authUser } = await adminClient.auth.admin.getUserById(table.user_id)
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('full_name')
+            .eq('id', table.user_id)
+            .single()
+
+        if (authUser?.user?.email) {
+            await sendExpenseDeclineNotification({
+                employeeEmail: authUser.user.email,
+                employeeName: profile?.full_name ?? 'Employee',
+                projectName: table.projects?.name ?? 'Unknown',
+                reason: reason || 'No reason provided',
+            })
+        }
+    } catch {
+        // Don't fail the decline if email fails
+    }
 
     revalidatePath('/admin/expenses')
     revalidatePath('/expenses')

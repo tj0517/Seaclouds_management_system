@@ -3,7 +3,8 @@
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Eye } from 'lucide-react'
+import { Eye, X } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import type { MonthlyEarningRow, EarningStatus } from '@/app/data/actions/earnings'
 import StatusSelect from './StatusSelect'
 
@@ -54,26 +55,21 @@ export default function AdminEarningsClient({ month, rows, statuses, projects }:
         { hours: 0, days: 0, earnings_hours: 0, earnings_days: 0, earnings: 0, expenses: 0, sum: 0 }
     )
 
-    const selectClass = 'border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring bg-white'
-
     return (
         <div className="space-y-4">
             {/* Controls row */}
             <div className="flex flex-wrap items-center gap-3">
-                <div className="flex items-center gap-2">
-                    <label className="text-sm font-medium text-gray-700">Month</label>
-                    <input
-                        type="month"
-                        value={month}
-                        onChange={e => router.push(`/admin/earnings?month=${e.target.value}`)}
-                        className={selectClass}
-                    />
-                </div>
+                <input
+                    type="month"
+                    value={month}
+                    onChange={e => router.push(`/admin/earnings?month=${e.target.value}`)}
+                    className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+                />
 
                 <select
                     value={filterEmployee}
                     onChange={e => setFilterEmployee(e.target.value)}
-                    className={selectClass}
+                    className="h-9 rounded-md border border-input bg-background px-3 text-sm"
                 >
                     <option value="">All employees</option>
                     {rows.map(r => (
@@ -84,7 +80,7 @@ export default function AdminEarningsClient({ month, rows, statuses, projects }:
                 <select
                     value={filterProject}
                     onChange={e => setFilterProject(e.target.value)}
-                    className={selectClass}
+                    className="h-9 rounded-md border border-input bg-background px-3 text-sm"
                 >
                     <option value="">All projects</option>
                     {projects.map(p => (
@@ -95,7 +91,7 @@ export default function AdminEarningsClient({ month, rows, statuses, projects }:
                 <select
                     value={filterStatus}
                     onChange={e => setFilterStatus(e.target.value)}
-                    className={selectClass}
+                    className="h-9 rounded-md border border-input bg-background px-3 text-sm"
                 >
                     <option value="">All statuses</option>
                     <option value="pending">Pending</option>
@@ -105,12 +101,13 @@ export default function AdminEarningsClient({ month, rows, statuses, projects }:
                 </select>
 
                 {(filterEmployee || filterProject || filterStatus) && (
-                    <button
+                    <Button
+                        variant="ghost"
+                        size="sm"
                         onClick={() => { setFilterEmployee(''); setFilterProject(''); setFilterStatus('') }}
-                        className="text-xs text-gray-500 hover:text-gray-900 underline"
                     >
-                        Clear filters
-                    </button>
+                        <X className="h-3 w-3" /> Clear filters
+                    </Button>
                 )}
             </div>
 
@@ -182,12 +179,11 @@ export default function AdminEarningsClient({ month, rows, statuses, projects }:
                                         />
                                     </td>
                                     <td className="px-4 py-3 text-right">
-                                        <Link
-                                            href={`/admin/earnings/${r.user_id}?month=${month}`}
-                                            className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-900 whitespace-nowrap"
-                                        >
-                                            <Eye className="h-4 w-4" /> View
-                                        </Link>
+                                        <Button variant="ghost" size="sm" asChild>
+                                            <Link href={`/admin/earnings/${r.user_id}?month=${month}`}>
+                                                <Eye className="h-4 w-4" /> View
+                                            </Link>
+                                        </Button>
                                     </td>
                                 </tr>
                             ))}

@@ -412,10 +412,23 @@ export async function getReportFilterOptions(startDate: string, endDate: string)
         if (sp?.projects?.name) projectsSet.add(sp.projects.name)
     }
 
+    // Fetch unique service order codes in the date range
+    const { data: contractRows } = await supabase
+        .from('weekly_contract_codes')
+        .select('contract_code')
+        .gte('week_start', startDate)
+        .lte('week_start', endDate)
+
+    const serviceOrdersSet = new Set<string>()
+    for (const row of contractRows || []) {
+        if (row.contract_code) serviceOrdersSet.add(row.contract_code)
+    }
+
     return {
         users: [...usersSet].sort(),
         subProjectCodes: [...codesSet].sort(),
         projectNames: [...projectsSet].sort(),
+        serviceOrders: [...serviceOrdersSet].sort(),
     }
 }
 
@@ -489,8 +502,29 @@ export async function copyWeek(currentWeekStart: string) {
         .gte('work_date', prevStartStr)
         .lte('work_date', prevEndStr)
 
+    // Copy contract codes from previous week (do this first, independently of entries)
+    const { data: prevCodes } = await supabase
+        .from('weekly_contract_codes')
+        .select('project_id, contract_code')
+        .eq('user_id', user.id)
+        .eq('week_start', prevStartStr)
+
+    if (prevCodes && prevCodes.length > 0) {
+        const codesToCopy = prevCodes.map(c => ({
+            user_id: user.id,
+            project_id: c.project_id,
+            week_start: currentWeekStart,
+            contract_code: c.contract_code,
+        }))
+
+        await supabase
+            .from('weekly_contract_codes')
+            .upsert(codesToCopy as any, { onConflict: 'user_id, project_id, week_start' })
+    }
+
     if (!oldEntries || oldEntries.length === 0) {
-        return { error: 'No entries in the previous week' }
+        revalidatePath('/')
+        return { success: true }
     }
 
     // Check which sub-projects are already submitted for the current week
@@ -518,7 +552,8 @@ export async function copyWeek(currentWeekStart: string) {
         })
 
     if (newEntries.length === 0) {
-        return { error: 'All sub-projects are already submitted for this week' }
+        revalidatePath('/')
+        return { success: true }
     }
 
     const { error } = await supabase
