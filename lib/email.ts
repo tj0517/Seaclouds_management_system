@@ -25,6 +25,51 @@ export async function sendAdminNotification({
     })
 }
 
+export async function sendExpenseSubmittedNotification({
+    employeeName,
+    projectName,
+    dateRange,
+}: {
+    employeeName: string
+    projectName: string
+    dateRange: string
+}) {
+    const adminEmail = process.env.ADMIN_NOTIFICATION_EMAIL
+    if (!adminEmail) return
+
+    await resend.emails.send({
+        from: 'Seaclouds Expenses <onboarding@resend.dev>',
+        to: [adminEmail],
+        subject: `Expense submitted — ${employeeName}, ${projectName}`,
+        html: `
+            <p><strong>${employeeName}</strong> submitted an expense table for project <strong>${projectName}</strong>.</p>
+            <p><strong>Date range:</strong> ${dateRange}</p>
+            <p>Please log in to review and approve or decline.</p>
+        `,
+    })
+}
+
+export async function sendExpenseApprovedNotification({
+    employeeEmail,
+    employeeName,
+    projectName,
+}: {
+    employeeEmail: string
+    employeeName: string
+    projectName: string
+}) {
+    await resend.emails.send({
+        from: 'Seaclouds Expenses <onboarding@resend.dev>',
+        to: [employeeEmail],
+        subject: `Expense approved — ${projectName}`,
+        html: `
+            <p>Hi <strong>${employeeName}</strong>,</p>
+            <p>Your expense table for project <strong>${projectName}</strong> has been <strong style="color: #16a34a;">approved</strong>.</p>
+            <p>No further action is needed.</p>
+        `,
+    })
+}
+
 export async function sendExpenseDeclineNotification({
     employeeEmail,
     employeeName,
