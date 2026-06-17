@@ -101,6 +101,10 @@ export default function TimesheetGrid({
 
   const [contractCodes, setContractCodes] = useState<Record<string, string>>(initialContractCodes)
 
+  useEffect(() => {
+    setContractCodes(initialContractCodes)
+  }, [initialContractCodes])
+
   const handleContractCodeSave = async (projectId: string, code: string) => {
     setContractCodes(prev => ({ ...prev, [projectId]: code }))
     setSaving(true)
@@ -144,7 +148,7 @@ export default function TimesheetGrid({
           <thead className="bg-gray-50">
             <tr>
               <th className="px-4 py-3 text-left font-medium text-gray-500 w-48 min-w-[180px]">Project</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500 min-w-[140px]">Contract code</th>
+              <th className="px-4 py-3 text-left font-medium text-gray-500 min-w-[140px]">Service Order</th>
               {weekDays.map(day => {
                 const isWeekend = day.getDay() === 0 || day.getDay() === 6
                 return (
@@ -191,7 +195,7 @@ export default function TimesheetGrid({
                     <td className="px-4 py-2" onClick={(e) => e.stopPropagation()}>
                       <input
                         type="text"
-                        placeholder="Contract code"
+                        placeholder="Service order"
                         disabled={isProjectFullySubmitted(project.id)}
                         className="w-full h-8 px-2 text-xs rounded border border-gray-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
                         value={contractCodes[project.id] || ''}
@@ -447,10 +451,10 @@ export default function TimesheetGrid({
               {isExpanded && (
                 <div className="mt-2 space-y-2 pl-2">
                   <div className="bg-white rounded-lg shadow-sm border border-gray-200 px-3 py-2 flex items-center gap-2">
-                    <label className="text-xs text-gray-500 whitespace-nowrap">Contract code:</label>
+                    <label className="text-xs text-gray-500 whitespace-nowrap">Service order:</label>
                     <input
                       type="text"
-                      placeholder="Enter contract code"
+                      placeholder="Enter service order"
                       disabled={isProjectFullySubmitted(project.id)}
                       className="flex-1 h-8 px-2 text-sm rounded border border-gray-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
                       value={contractCodes[project.id] || ''}

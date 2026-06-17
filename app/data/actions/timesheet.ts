@@ -249,14 +249,17 @@ export type GroupedReportRow = {
 export async function getGroupedReportData(
     startDate: string,
     endDate: string,
-    filters?: { userName?: string; subProjectCode?: string; projectName?: string; userId?: string }
+    filters?: { userName?: string; subProjectCode?: string; projectName?: string; userId?: string },
+    supabaseClient?: any
 ): Promise<GroupedReportRow[]> {
-    const supabase = await createClient()
+    const supabase = supabaseClient ?? await createClient()
 
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return []
+    if (!supabaseClient) {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) return []
+    }
 
-    // Fetch timesheet entries with full context
+    // Fetch timesheet entries with sub_projects (no profiles join — FK goes to auth.users, not profiles)
     let query = supabase
         .from('timesheet_entries')
         .select(`
@@ -265,8 +268,7 @@ export async function getGroupedReportData(
             hours,
             user_id,
             sub_project_id,
-            profiles:user_id ( full_name, rate_hourly, rate_daily ),
-            sub_projects:sub_project_id ( code, description, tracking_type, projects:project_id ( id, name, project_code ) )
+            sub_projects ( code, description, tracking_type, projects ( name, project_code ) )
         `)
         .gte('work_date', startDate)
         .lte('work_date', endDate)
@@ -277,7 +279,21 @@ export async function getGroupedReportData(
 
     const { data: entries, error } = await query
 
-    if (error || !entries) return []
+    if (error) {
+        console.error('[getGroupedReportData] query error:', error)
+        return []
+    }
+    if (!entries) return []
+
+    // Fetch profiles separately (no FK from timesheet_entries to profiles)
+    const userIds = [...new Set(entries.map((e: any) => e.user_id))]
+    const { data: profileRows } = await supabase
+        .from('profiles')
+        .select('id, full_name, rate_hourly, rate_daily')
+        .in('id', userIds)
+    const profileMap = new Map<string, { id: string; full_name: string | null; rate_hourly: number | null; rate_daily: number | null }>(
+        (profileRows || []).map((p: any) => [p.id, p])
+    )
 
     // Fetch all submissions in range to know what's been submitted
     const { data: submissions } = await supabase
@@ -287,7 +303,7 @@ export async function getGroupedReportData(
         .lte('week_start', endDate)
 
     const submissionSet = new Set(
-        (submissions || []).map(s => `${s.user_id}__${s.sub_project_id}__${s.week_start}`)
+        (submissions || []).map((s: any) => `${s.user_id}__${s.sub_project_id}__${s.week_start}`)
     )
 
     // Fetch contract codes for the date range
@@ -322,7 +338,7 @@ export async function getGroupedReportData(
         const subCode = sp?.code ?? '?'
         const subDesc = sp?.description ?? null
         const trackingType = (sp?.tracking_type === 'days' ? 'days' : 'hours') as 'hours' | 'days'
-        const profile = entry.profiles as any
+        const profile = profileMap.get(entry.user_id)
         const userName = profile?.full_name ?? 'Unknown user'
         const rateHourly = profile?.rate_hourly ?? null
         const rateDaily = profile?.rate_daily ?? null
@@ -391,11 +407,20 @@ export async function getReportFilterOptions(startDate: string, endDate: string)
     const { data } = await supabase
         .from('timesheet_entries')
         .select(`
-            profiles:user_id ( full_name ),
-            sub_projects:sub_project_id ( code, projects:project_id ( name ) )
+            user_id,
+            sub_projects ( code, projects ( name ) )
         `)
         .gte('work_date', startDate)
         .lte('work_date', endDate)
+
+    // Fetch profiles separately
+    const userIds = [...new Set((data || []).map((e: any) => e.user_id))]
+    const { data: profileRows } = userIds.length > 0
+        ? await supabase.from('profiles').select('id, full_name').in('id', userIds)
+        : { data: [] }
+    const profileMap = new Map(
+        (profileRows || []).map((p: any) => [p.id, p])
+    )
 
     const usersSet = new Set<string>()
     const codesSet = new Set<string>()
@@ -403,16 +428,29 @@ export async function getReportFilterOptions(startDate: string, endDate: string)
 
     for (const e of data || []) {
         const sp = e.sub_projects as any
-        const fullName = (e.profiles as any)?.full_name
+        const fullName = profileMap.get((e as any).user_id)?.full_name
         if (fullName) usersSet.add(fullName)
         if (sp?.code) codesSet.add(sp.code)
         if (sp?.projects?.name) projectsSet.add(sp.projects.name)
+    }
+
+    // Fetch unique service order codes in the date range
+    const { data: contractRows } = await supabase
+        .from('weekly_contract_codes')
+        .select('contract_code')
+        .gte('week_start', startDate)
+        .lte('week_start', endDate)
+
+    const serviceOrdersSet = new Set<string>()
+    for (const row of contractRows || []) {
+        if (row.contract_code) serviceOrdersSet.add(row.contract_code)
     }
 
     return {
         users: [...usersSet].sort(),
         subProjectCodes: [...codesSet].sort(),
         projectNames: [...projectsSet].sort(),
+        serviceOrders: [...serviceOrdersSet].sort(),
     }
 }
 
@@ -486,8 +524,29 @@ export async function copyWeek(currentWeekStart: string) {
         .gte('work_date', prevStartStr)
         .lte('work_date', prevEndStr)
 
+    // Copy contract codes from previous week (do this first, independently of entries)
+    const { data: prevCodes } = await supabase
+        .from('weekly_contract_codes')
+        .select('project_id, contract_code')
+        .eq('user_id', user.id)
+        .eq('week_start', prevStartStr)
+
+    if (prevCodes && prevCodes.length > 0) {
+        const codesToCopy = prevCodes.map(c => ({
+            user_id: user.id,
+            project_id: c.project_id,
+            week_start: currentWeekStart,
+            contract_code: c.contract_code,
+        }))
+
+        await supabase
+            .from('weekly_contract_codes')
+            .upsert(codesToCopy as any, { onConflict: 'user_id, project_id, week_start' })
+    }
+
     if (!oldEntries || oldEntries.length === 0) {
-        return { error: 'No entries in the previous week' }
+        revalidatePath('/')
+        return { success: true }
     }
 
     // Check which sub-projects are already submitted for the current week
@@ -515,7 +574,8 @@ export async function copyWeek(currentWeekStart: string) {
         })
 
     if (newEntries.length === 0) {
-        return { error: 'All sub-projects are already submitted for this week' }
+        revalidatePath('/')
+        return { success: true }
     }
 
     const { error } = await supabase
