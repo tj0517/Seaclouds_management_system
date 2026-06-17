@@ -4,7 +4,7 @@ import { createClient } from '@/utils/supabase/server'
 import { getSupabaseAdmin } from '@/utils/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import { fetchNbpRate } from './nbp'
-import { sendExpenseDeclineNotification } from '@/lib/email'
+import { sendExpenseSubmittedNotification, sendExpenseApprovedNotification, sendExpenseDeclineNotification } from '@/lib/email'
 
 async function getTableStatus(supabase: any, tableId: string, userId: string): Promise<{ status: string } | null> {
     const { data } = await (supabase as any)
@@ -488,6 +488,13 @@ export async function submitExpenseTable(id: string) {
 
     if (!count || count === 0) return { error: 'Cannot submit an empty expense table. Add at least one entry.' }
 
+    // Fetch table info for email before updating
+    const { data: tableInfo } = await (supabase as any)
+        .from('expense_tables')
+        .select('start_date, end_date, project_id, projects ( name )')
+        .eq('id', id)
+        .single()
+
     const { error } = await (supabase as any)
         .from('expense_tables')
         .update({ status: 'submitted' })
@@ -495,6 +502,30 @@ export async function submitExpenseTable(id: string) {
         .eq('user_id', user.id)
 
     if (error) return { error: error.message }
+
+    // Fire-and-forget email notification to admin
+    const notifyAdmin = async () => {
+        try {
+            const { data: profile } = await supabase
+                .from('profiles')
+                .select('full_name')
+                .eq('id', user.id)
+                .single()
+
+            const dateRange = tableInfo?.end_date
+                ? `${tableInfo.start_date} — ${tableInfo.end_date}`
+                : tableInfo?.start_date ?? ''
+
+            await sendExpenseSubmittedNotification({
+                employeeName: profile?.full_name ?? 'Employee',
+                projectName: tableInfo?.projects?.name ?? 'Unknown',
+                dateRange,
+            })
+        } catch (e) {
+            console.error('Failed to send expense submit notification:', e)
+        }
+    }
+    notifyAdmin()
 
     revalidatePath('/expenses')
     return { success: true }
@@ -535,6 +566,7 @@ export type AdminExpenseTable = {
     start_date: string
     end_date: string
     status: string
+    decline_reason: string | null
     created_at: string
     entry_count: number
     total_amount: number
@@ -586,6 +618,7 @@ export async function getAdminExpenseTables(): Promise<AdminExpenseTable[]> {
         start_date: row.start_date,
         end_date: row.end_date ?? '',
         status: row.status ?? 'draft',
+        decline_reason: row.decline_reason ?? null,
         created_at: row.created_at,
         entry_count: entryStats[row.id]?.count ?? 0,
         total_amount: entryStats[row.id]?.total ?? 0,
@@ -636,7 +669,7 @@ export async function approveExpenseTable(id: string) {
 
     const { data: table } = await (supabase as any)
         .from('expense_tables')
-        .select('status')
+        .select('status, user_id, project_id, projects ( name )')
         .eq('id', id)
         .single()
 
@@ -649,6 +682,30 @@ export async function approveExpenseTable(id: string) {
         .eq('id', id)
 
     if (error) return { error: error.message }
+
+    // Fire-and-forget email notification to employee
+    const notifyEmployee = async () => {
+        try {
+            const adminClient = getSupabaseAdmin()
+            const { data: authUser } = await adminClient.auth.admin.getUserById(table.user_id)
+            const { data: profile } = await supabase
+                .from('profiles')
+                .select('full_name')
+                .eq('id', table.user_id)
+                .single()
+
+            if (authUser?.user?.email) {
+                await sendExpenseApprovedNotification({
+                    employeeEmail: authUser.user.email,
+                    employeeName: profile?.full_name ?? 'Employee',
+                    projectName: table.projects?.name ?? 'Unknown',
+                })
+            }
+        } catch {
+            // Don't fail the approval if email fails
+        }
+    }
+    notifyEmployee()
 
     revalidatePath('/admin/expenses')
     revalidatePath('/expenses')

@@ -249,7 +249,14 @@ function TableRow({ table }: { table: AdminExpenseTable }) {
             <td className="px-4 py-3 max-w-[200px] truncate text-gray-600">{table.purpose || '—'}</td>
             <td className="px-4 py-3 text-right">{table.entry_count}</td>
             <td className="px-4 py-3 text-right font-medium">{formatCurrency(table.total_amount)}</td>
-            <td className="px-4 py-3">{statusBadge(table.status)}</td>
+            <td className="px-4 py-3">
+                {statusBadge(table.status)}
+                {table.status === 'declined' && table.decline_reason && (
+                    <div className="text-xs text-red-600 mt-1 max-w-[200px] truncate" title={table.decline_reason}>
+                        {table.decline_reason}
+                    </div>
+                )}
+            </td>
             <td className="px-4 py-3 text-right">
                 <div className="flex items-center justify-end gap-1">
                     <Link href={`/admin/expenses/${table.id}`}>
@@ -354,6 +361,12 @@ function MobileTableCard({ table }: { table: AdminExpenseTable }) {
                 {table.purpose && <div>{table.purpose}</div>}
                 <div>{table.entry_count} entries · {formatCurrency(table.total_amount)}</div>
             </div>
+            {table.status === 'declined' && table.decline_reason && (
+                <div className="p-2 rounded bg-red-50 border border-red-200 text-xs">
+                    <span className="font-medium text-red-800">Reason:</span>{' '}
+                    <span className="text-red-700">{table.decline_reason}</span>
+                </div>
+            )}
             <div className="flex items-center gap-2 pt-1">
                 <Link href={`/admin/expenses/${table.id}`}>
                     <Button variant="outline" size="sm"><Eye size={14} className="mr-1" /> View</Button>

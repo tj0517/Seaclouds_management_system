@@ -429,7 +429,7 @@ function ExpenseTableCard({
                             </thead>
                             <tbody>
                                 {table.entries.map(entry => (
-                                    <EntryRow key={entry.id} entry={entry} readOnly={isLocked} />
+                                    <EntryRow key={entry.id} entry={entry} readOnly={isLocked} tableStartDate={table.start_date} tableEndDate={table.end_date} />
                                 ))}
                                 {table.entries.length === 0 && (
                                     <tr>
@@ -443,7 +443,7 @@ function ExpenseTableCard({
                     {/* Mobile cards */}
                     <div className="md:hidden space-y-3">
                         {table.entries.map(entry => (
-                            <MobileEntryCard key={entry.id} entry={entry} readOnly={isLocked} />
+                            <MobileEntryCard key={entry.id} entry={entry} readOnly={isLocked} tableStartDate={table.start_date} tableEndDate={table.end_date} />
                         ))}
                         {table.entries.length === 0 && (
                             <p className="text-center py-6 text-gray-400 text-sm">No expenses yet</p>
@@ -471,7 +471,7 @@ function ExpenseTableCard({
                         </div>
                         {!isLocked && (
                             <div className="flex items-center gap-2">
-                                <AddEntryDialog tableId={table.id} />
+                                <AddEntryDialog tableId={table.id} tableStartDate={table.start_date} tableEndDate={table.end_date} />
                                 <Button
                                     size="sm"
                                     onClick={handleSubmit}
@@ -492,7 +492,7 @@ function ExpenseTableCard({
 
 // ─── Entry Row (Desktop) ───
 
-function EntryRow({ entry, readOnly = false }: { entry: ExpenseEntry; readOnly?: boolean }) {
+function EntryRow({ entry, readOnly = false, tableStartDate, tableEndDate }: { entry: ExpenseEntry; readOnly?: boolean; tableStartDate: string; tableEndDate: string }) {
     const router = useRouter()
     const [deleting, setDeleting] = useState(false)
 
@@ -551,7 +551,7 @@ function EntryRow({ entry, readOnly = false }: { entry: ExpenseEntry; readOnly?:
             {!readOnly && (
                 <td className="py-2">
                     <div className="flex items-center gap-1">
-                        <EditEntryDialog entry={entry} />
+                        <EditEntryDialog entry={entry} tableStartDate={tableStartDate} tableEndDate={tableEndDate} />
                         <Button variant="ghost" size="icon" onClick={handleDelete} disabled={deleting} className="h-7 w-7 text-red-500 hover:text-red-700">
                             {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
                         </Button>
@@ -564,7 +564,7 @@ function EntryRow({ entry, readOnly = false }: { entry: ExpenseEntry; readOnly?:
 
 // ─── Mobile Entry Card ───
 
-function MobileEntryCard({ entry, readOnly = false }: { entry: ExpenseEntry; readOnly?: boolean }) {
+function MobileEntryCard({ entry, readOnly = false, tableStartDate, tableEndDate }: { entry: ExpenseEntry; readOnly?: boolean; tableStartDate: string; tableEndDate: string }) {
     const router = useRouter()
     const [deleting, setDeleting] = useState(false)
 
@@ -620,7 +620,7 @@ function MobileEntryCard({ entry, readOnly = false }: { entry: ExpenseEntry; rea
                 <ReceiptActions entryId={entry.id} hasReceipt={!!entry.receipt_path} readOnly={readOnly} />
                 {!readOnly && (
                     <div className="ml-auto flex items-center gap-1">
-                        <EditEntryDialog entry={entry} />
+                        <EditEntryDialog entry={entry} tableStartDate={tableStartDate} tableEndDate={tableEndDate} />
                         <Button variant="ghost" size="icon" onClick={handleDelete} disabled={deleting} className="h-7 w-7 text-red-500 hover:text-red-700">
                             {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
                         </Button>
@@ -709,7 +709,7 @@ function ReceiptActions({ entryId, hasReceipt, readOnly = false }: { entryId: st
 
 // ─── Add Entry Dialog ───
 
-function AddEntryDialog({ tableId }: { tableId: string }) {
+function AddEntryDialog({ tableId, tableStartDate, tableEndDate }: { tableId: string; tableStartDate: string; tableEndDate: string }) {
     const router = useRouter()
     const [open, setOpen] = useState(false)
     const [loading, setLoading] = useState(false)
@@ -745,6 +745,15 @@ function AddEntryDialog({ tableId }: { tableId: string }) {
     const handleSave = async () => {
         if (!date || !type || !computedAmount || parseFloat(computedAmount) <= 0) {
             toast.error('Date, type, and a positive amount are required')
+            return
+        }
+        // Validate date is within the table's date range
+        if (date < tableStartDate || (tableEndDate && date > tableEndDate)) {
+            toast.error(`Date must be between ${tableStartDate} and ${tableEndDate || tableStartDate}`)
+            return
+        }
+        if (dateEnd && (dateEnd < tableStartDate || (tableEndDate && dateEnd > tableEndDate))) {
+            toast.error(`End date must be between ${tableStartDate} and ${tableEndDate || tableStartDate}`)
             return
         }
         setLoading(true)
@@ -960,7 +969,7 @@ function EditTableDialog({ table, projects }: { table: ExpenseTableWithProject; 
 
 // ─── Edit Entry Dialog ───
 
-function EditEntryDialog({ entry }: { entry: ExpenseEntry }) {
+function EditEntryDialog({ entry, tableStartDate, tableEndDate }: { entry: ExpenseEntry; tableStartDate: string; tableEndDate: string }) {
     const router = useRouter()
     const [open, setOpen] = useState(false)
     const [loading, setLoading] = useState(false)
@@ -984,6 +993,15 @@ function EditEntryDialog({ entry }: { entry: ExpenseEntry }) {
         const finalAmount = parseFloat(computedAmount)
         if (!date || !type || !finalAmount || finalAmount <= 0) {
             toast.error('Date, type, and a positive amount are required')
+            return
+        }
+        // Validate date is within the table's date range
+        if (date < tableStartDate || (tableEndDate && date > tableEndDate)) {
+            toast.error(`Date must be between ${tableStartDate} and ${tableEndDate || tableStartDate}`)
+            return
+        }
+        if (dateEnd && (dateEnd < tableStartDate || (tableEndDate && dateEnd > tableEndDate))) {
+            toast.error(`End date must be between ${tableStartDate} and ${tableEndDate || tableStartDate}`)
             return
         }
         setLoading(true)

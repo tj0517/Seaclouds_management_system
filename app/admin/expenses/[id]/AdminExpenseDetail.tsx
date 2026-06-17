@@ -35,6 +35,7 @@ type TableDetail = {
     created_at: string
     reviewed_at: string | null
     reviewed_by: string | null
+    decline_reason: string | null
 }
 
 const EXPENSE_TYPES: Record<string, string> = {
@@ -232,6 +233,12 @@ export default function AdminExpenseDetail({ table, entries }: { table: TableDet
                             )}
                         </div>
                     </div>
+                    {table.status === 'declined' && table.decline_reason && (
+                        <div className="mt-4 p-3 rounded-md bg-red-50 border border-red-200 text-sm">
+                            <span className="font-medium text-red-800">Decline reason:</span>{' '}
+                            <span className="text-red-700">{table.decline_reason}</span>
+                        </div>
+                    )}
                 </CardContent>
             </Card>
 
