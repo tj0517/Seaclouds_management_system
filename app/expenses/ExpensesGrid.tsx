@@ -94,8 +94,7 @@ function FileUploadButton({ fileRef }: { fileRef: React.RefObject<HTMLInputEleme
             <input
                 ref={fileRef}
                 type="file"
-                accept="image/*,.pdf"
-                className="hidden"
+                                className="hidden"
                 onChange={(e) => setFileName(e.target.files?.[0]?.name || null)}
             />
             <Button

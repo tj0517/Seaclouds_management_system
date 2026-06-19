@@ -7,14 +7,15 @@ import AdminEarningsClient from './AdminEarningsClient'
 export default async function AdminEarningsPage({
     searchParams,
 }: {
-    searchParams: Promise<{ month?: string }>
+    searchParams: Promise<{ month?: string; project?: string }>
 }) {
     const params = await searchParams
     const month = params.month ?? format(new Date(), 'yyyy-MM')
+    const projectFilter = params.project || ''
 
     const supabase = await createClient()
     const [rows, statuses, projectsResult] = await Promise.all([
-        getMonthlyEarnings(month),
+        getMonthlyEarnings(month, projectFilter || undefined),
         getStatusesForMonth(month),
         supabase.from('projects').select('id, name').eq('is_active', true).order('name'),
     ])
@@ -31,7 +32,7 @@ export default async function AdminEarningsPage({
                     Monthly earnings computed from logged hours and approved expenses.
                 </p>
             </div>
-            <AdminEarningsClient month={month} rows={rows} statuses={statuses} projects={projects} />
+            <AdminEarningsClient month={month} rows={rows} statuses={statuses} projects={projects} selectedProject={projectFilter} />
         </div>
     )
 }

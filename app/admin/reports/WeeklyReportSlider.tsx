@@ -52,7 +52,7 @@ export type WeekData = {
   weekTotalDays: number
 }
 
-type ViewMode = 'day' | 'week'
+type ViewMode = 'day' | 'week' | 'month'
 
 // Aggregated data for the week summary view
 type AggregatedUser = {
@@ -267,10 +267,10 @@ export default function WeeklyReportSlider({ weeks }: { weeks: WeekData[] }) {
               </Badge>
             </>
           )}
-          {viewMode === 'week' && (
+          {(viewMode === 'week' || viewMode === 'month') && (
             <>
               <h3 className="text-lg font-semibold text-gray-800">
-                Summary — {weeks[0].weekStartLabel} to {weeks[weeks.length - 1].weekEndLabel}
+                {viewMode === 'month' ? 'Monthly' : ''} Summary — {weeks[0].weekStartLabel} to {weeks[weeks.length - 1].weekEndLabel}
               </h3>
               <Badge variant="outline" className="font-mono text-xs ml-1">
                 {formatMixedTotal(totalHoursAllWeeks, totalDaysAllWeeks)} total
@@ -301,11 +301,118 @@ export default function WeeklyReportSlider({ weeks }: { weeks: WeekData[] }) {
           >
             Week
           </button>
+          <button
+            className={`px-3 py-1.5 text-xs font-medium transition-colors border-l ${
+              viewMode === 'month'
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-background text-muted-foreground hover:bg-accent'
+            }`}
+            onClick={() => setViewMode('month')}
+          >
+            Month
+          </button>
         </div>
       </div>
 
       {/* Content */}
-      {viewMode === 'day' ? (
+      {viewMode === 'month' ? (
+        // Month view: one table per project, no date columns — just totals
+        aggregatedProjects.map(project => (
+          <Card key={project.name}>
+            <CardHeader className="pb-2">
+              <div className="flex items-center gap-3">
+                <CardTitle className="text-base">{project.name}</CardTitle>
+                {project.code && (
+                  <Badge variant="outline" className="font-mono text-xs">{project.code}</Badge>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-gray-50">
+                      <th className="text-left px-3 py-2 font-medium text-gray-600 w-32">Code</th>
+                      <th className="text-left px-3 py-2 font-medium text-gray-600 w-40">Description</th>
+                      <th className="text-left px-3 py-2 font-medium text-gray-600 w-36">Service Order</th>
+                      <th className="text-left px-3 py-2 font-medium text-gray-600">Employee</th>
+                      <th className="text-center px-3 py-2 font-bold text-gray-800 bg-gray-100 w-16">Σ</th>
+                      <th className="text-center px-3 py-2 font-medium text-gray-600 w-24">Earnings</th>
+                      <th className="text-center px-3 py-2 font-medium text-gray-600 w-28">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {(() => {
+                      const totalUserRows = project.subProjects.reduce((s, sp) => s + sp.users.length, 0)
+                      const uniqueCodes = [...new Set(Object.values(project.serviceOrders ?? {}))].filter(Boolean)
+                      const serviceOrderLabel = uniqueCodes.length > 0 ? uniqueCodes.join(', ') : '—'
+                      let isFirstRow = true
+                      return project.subProjects.map(sp =>
+                        sp.users.map((user, idx) => {
+                          const showServiceOrder = isFirstRow
+                          if (isFirstRow) isFirstRow = false
+                          return (
+                        <tr key={`${sp.code}-${user.userName}`} className="hover:bg-gray-50">
+                          {idx === 0 && (
+                            <td className="px-3 py-2 font-mono text-xs text-blue-700 font-semibold align-top" rowSpan={sp.users.length}>
+                              {sp.code}
+                            </td>
+                          )}
+                          {idx === 0 && (
+                            <td className="px-3 py-2 text-xs text-gray-500 align-top" rowSpan={sp.users.length}>
+                              {sp.description || '—'}
+                            </td>
+                          )}
+                          {showServiceOrder && (
+                            <td className="px-3 py-2 font-mono text-xs text-purple-700 font-semibold align-top" rowSpan={totalUserRows}>
+                              {serviceOrderLabel}
+                            </td>
+                          )}
+                          <td className="px-3 py-2">
+                            <div className="flex items-center gap-2">
+                              <div className="h-6 w-6 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-bold flex-shrink-0">
+                                {user.userName.charAt(0)}
+                              </div>
+                              {user.userName}
+                            </div>
+                          </td>
+                          <td className="px-3 py-2 text-center font-bold text-blue-600 bg-gray-50">{user.total}{sp.trackingType === 'days' ? 'd' : 'h'}</td>
+                          <td className="px-3 py-2 text-center font-medium text-emerald-700">
+                            {user.earnings > 0 ? `${user.earnings.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} PLN` : <span className="text-gray-300">—</span>}
+                          </td>
+                          <td className="px-3 py-2 text-center">
+                            {user.isSubmitted ? (
+                              <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-100">
+                                <CheckCircle2 className="h-3 w-3 mr-1" /> Submitted
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-amber-600 border-amber-300">Pending</Badge>
+                            )}
+                          </td>
+                        </tr>
+                          )
+                        })
+                      )
+                    })()
+                    }
+                    {/* Project subtotal */}
+                    <tr className="bg-gray-50 font-semibold border-t-2 border-gray-200">
+                      <td colSpan={4} className="px-3 py-2 text-right text-xs text-gray-500 uppercase tracking-wide">Project Total</td>
+                      <td className="px-3 py-2 text-center text-blue-700 bg-blue-50">
+                        {formatMixedTotal(project.totalHours, project.totalDays)}
+                      </td>
+                      <td className="px-3 py-2 text-center text-emerald-700 bg-emerald-50 font-bold">
+                        {project.subProjects.reduce((s, sp) => s + sp.users.reduce((us, u) => us + u.earnings, 0), 0).toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} PLN
+                      </td>
+                      <td />
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        ))
+      ) : viewMode === 'day' ? (
         // Day view: single week with daily columns, navigate with arrows
         week.projects.map(project => (
           <Card key={project.name}>
