@@ -79,17 +79,19 @@ async function getSubmittedKeys(supabase: any, monthStart: string, monthEnd: str
     return keys
 }
 
-export async function getMonthlyEarnings(yearMonth: string): Promise<MonthlyEarningRow[]> {
+export async function getMonthlyEarnings(yearMonth: string, projectId?: string): Promise<MonthlyEarningRow[]> {
     const supabase = await createClient()
     const { monthStart, monthEnd } = monthBounds(yearMonth)
 
+    let entriesQuery = supabase
+        .from('timesheet_entries')
+        .select('user_id, sub_project_id, work_date, hours, sub_projects ( tracking_type )')
+        .gte('work_date', monthStart)
+        .lte('work_date', monthEnd)
+
     const [submittedKeys, entriesResult, profilesResult, projectsResult] = await Promise.all([
         getSubmittedKeys(supabase, monthStart, monthEnd),
-        supabase
-            .from('timesheet_entries')
-            .select('user_id, sub_project_id, work_date, hours, sub_projects ( tracking_type )')
-            .gte('work_date', monthStart)
-            .lte('work_date', monthEnd),
+        entriesQuery,
         // Fetch ALL employees
         supabase
             .from('profiles')
@@ -111,6 +113,15 @@ export async function getMonthlyEarnings(yearMonth: string): Promise<MonthlyEarn
         }
     }
 
+    // Build set of sub_project IDs for the selected project filter
+    const filterSubProjectIds = projectId
+        ? new Set(
+            ((projectsResult.data ?? []) as any[])
+                .filter(p => p.id === projectId)
+                .flatMap(p => ((p.sub_projects ?? []) as any[]).map((s: any) => s.id))
+          )
+        : null
+
     // Separate hours vs days per user — only for submitted weeks
     const hoursByUser = new Map<string, number>()
     const daysByUser = new Map<string, number>()
@@ -119,6 +130,9 @@ export async function getMonthlyEarnings(yearMonth: string): Promise<MonthlyEarn
     for (const entry of entries) {
         const key = `${entry.user_id}::${entry.sub_project_id}::${weekStart(entry.work_date)}`
         if (!submittedKeys.has(key)) continue
+
+        // If filtering by project, skip entries not belonging to that project
+        if (filterSubProjectIds && !filterSubProjectIds.has(entry.sub_project_id)) continue
 
         const trackingType = entry.sub_projects?.tracking_type
         const uid = entry.user_id
@@ -137,12 +151,16 @@ export async function getMonthlyEarnings(yearMonth: string): Promise<MonthlyEarn
     }
 
     // 2. Fetch approved expenses for the month per user
-    const { data: expenseTables } = await (supabase as any)
+    let expenseQuery = (supabase as any)
         .from('expense_tables')
         .select('user_id, expense_entries ( amount_pln )')
         .eq('status', 'approved')
         .gte('start_date', monthStart)
         .lte('start_date', monthEnd)
+    if (projectId) {
+        expenseQuery = expenseQuery.eq('project_id', projectId)
+    }
+    const { data: expenseTables } = await expenseQuery
 
     const expensesByUser = new Map<string, number>()
     for (const table of (expenseTables ?? []) as any[]) {

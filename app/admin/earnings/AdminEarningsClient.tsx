@@ -21,26 +21,35 @@ interface Props {
     rows: MonthlyEarningRow[]
     statuses: Record<string, EarningStatus>
     projects: { id: string; name: string }[]
+    selectedProject: string
 }
 
-export default function AdminEarningsClient({ month, rows, statuses, projects }: Props) {
+export default function AdminEarningsClient({ month, rows, statuses, projects, selectedProject }: Props) {
     const router = useRouter()
 
     const [filterEmployee, setFilterEmployee] = useState('')
-    const [filterProject, setFilterProject] = useState('')
     const [filterStatus, setFilterStatus] = useState('')
+
+    // Build URL with month + project params
+    function pushProjectFilter(projectId: string) {
+        const params = new URLSearchParams()
+        params.set('month', month)
+        if (projectId) params.set('project', projectId)
+        router.push(`/admin/earnings?${params.toString()}`)
+    }
 
     const filtered = useMemo(() => {
         return rows.filter(r => {
             if (filterEmployee && r.user_id !== filterEmployee) return false
-            if (filterProject && !r.project_ids.includes(filterProject)) return false
+            // Project filter is now server-side, but still hide users with zero activity
+            if (selectedProject && !r.project_ids.includes(selectedProject)) return false
             if (filterStatus) {
                 const rowStatus = statuses[r.user_id] ?? 'pending'
                 if (rowStatus !== filterStatus) return false
             }
             return true
         })
-    }, [rows, statuses, filterEmployee, filterProject, filterStatus])
+    }, [rows, statuses, filterEmployee, selectedProject, filterStatus])
 
     const totals = filtered.reduce(
         (acc, r) => ({
@@ -78,8 +87,8 @@ export default function AdminEarningsClient({ month, rows, statuses, projects }:
                 </select>
 
                 <select
-                    value={filterProject}
-                    onChange={e => setFilterProject(e.target.value)}
+                    value={selectedProject}
+                    onChange={e => pushProjectFilter(e.target.value)}
                     className="h-9 rounded-md border border-input bg-background px-3 text-sm"
                 >
                     <option value="">All projects</option>
@@ -100,11 +109,11 @@ export default function AdminEarningsClient({ month, rows, statuses, projects }:
                     <option value="declined">Declined</option>
                 </select>
 
-                {(filterEmployee || filterProject || filterStatus) && (
+                {(filterEmployee || selectedProject || filterStatus) && (
                     <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => { setFilterEmployee(''); setFilterProject(''); setFilterStatus('') }}
+                        onClick={() => { setFilterEmployee(''); setFilterStatus(''); pushProjectFilter('') }}
                     >
                         <X className="h-3 w-3" /> Clear filters
                     </Button>
@@ -208,7 +217,7 @@ export default function AdminEarningsClient({ month, rows, statuses, projects }:
                             </tr>
                             <tr>
                                 <td colSpan={12} className="px-4 py-3 text-xs text-gray-400">
-                                    Sum = Total Earnings + Approved Expenses. Project filter shows employees with submitted hours on that project.
+                                    Sum = Total Earnings + Approved Expenses. Project filter recalculates hours and earnings for that project only.
                                 </td>
                             </tr>
                         </tfoot>
