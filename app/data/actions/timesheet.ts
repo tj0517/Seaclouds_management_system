@@ -3,7 +3,8 @@
 import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { addDays, subDays, format } from 'date-fns'
-import { sendAdminNotification } from '@/lib/email'
+import { sendAdminNotification, sendTimesheetWithdrawNotification } from '@/lib/email'
+import { getSupabaseAdmin } from '@/utils/supabase/admin'
 
 // 4. Pobierz wpisy z danego tygodnia
 export async function getWeeklyEntries(userId: string, startOfWeek: string, endOfWeek: string) {
@@ -68,21 +69,43 @@ export async function submitWeek(weekStart: string, subprojectId: string) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return { error: 'No session' }
 
-
-    const { error } = await supabase
+    // Check for existing rejected row — update instead of insert
+    const { data: existing } = await supabase
         .from('timesheet_submissions')
-        .insert({
-            user_id: user.id,
-            sub_project_id: subprojectId,
-            week_start: weekStart,
-            status: 'submitted'
-        })
+        .select('id, status')
+        .eq('user_id', user.id)
+        .eq('sub_project_id', subprojectId)
+        .eq('week_start', weekStart)
+        .maybeSingle()
 
-    if (error) {
-        if (error.code === '23505') {
-            return { error: 'This week has already been submitted.' }
+    if (existing?.status === 'submitted') {
+        return { error: 'This week has already been submitted.' }
+    }
+
+    if (existing) {
+        // Resubmit a rejected row
+        const { error } = await supabase
+            .from('timesheet_submissions')
+            .update({ status: 'submitted', reject_reason: null } as any)
+            .eq('id', existing.id)
+
+        if (error) return { error: error.message }
+    } else {
+        const { error } = await supabase
+            .from('timesheet_submissions')
+            .insert({
+                user_id: user.id,
+                sub_project_id: subprojectId,
+                week_start: weekStart,
+                status: 'submitted'
+            })
+
+        if (error) {
+            if (error.code === '23505') {
+                return { error: 'This week has already been submitted.' }
+            }
+            return { error: error.message }
         }
-        return { error: error.message }
     }
 
     // Fire-and-forget email notification to admins
@@ -121,34 +144,52 @@ export async function submitWeekAll(weekStart: string, subprojectIds: string[]) 
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return { error: 'No session' }
 
-    // Check which are already submitted
+    // Check which already exist
     const { data: existing } = await supabase
         .from('timesheet_submissions')
-        .select('sub_project_id')
+        .select('sub_project_id, status')
         .eq('user_id', user.id)
         .eq('week_start', weekStart)
         .in('sub_project_id', subprojectIds)
 
-    const alreadySubmitted = new Set(existing?.map(e => e.sub_project_id) ?? [])
-    const toSubmit = subprojectIds.filter(id => !alreadySubmitted.has(id))
+    const existingMap = new Map((existing ?? []).map(e => [e.sub_project_id, e.status]))
+    const alreadySubmitted = new Set(
+        (existing ?? []).filter(e => e.status === 'submitted').map(e => e.sub_project_id)
+    )
+    const rejectedIds = subprojectIds.filter(id => existingMap.get(id) === 'rejected')
+    const toInsert = subprojectIds.filter(id => !existingMap.has(id))
+    const toSubmit = [...rejectedIds, ...toInsert]
 
     if (toSubmit.length === 0) {
         return { error: 'All projects are already submitted.' }
     }
 
-    const rows = toSubmit.map(subprojectId => ({
-        user_id: user.id,
-        sub_project_id: subprojectId,
-        week_start: weekStart,
-        status: 'submitted' as const,
-    }))
+    // Update rejected rows back to submitted
+    if (rejectedIds.length > 0) {
+        const { error } = await supabase
+            .from('timesheet_submissions')
+            .update({ status: 'submitted', reject_reason: null } as any)
+            .eq('user_id', user.id)
+            .eq('week_start', weekStart)
+            .in('sub_project_id', rejectedIds)
 
-    const { error } = await supabase
-        .from('timesheet_submissions')
-        .insert(rows as any)
+        if (error) return { error: error.message }
+    }
 
-    if (error) {
-        return { error: error.message }
+    // Insert truly new rows
+    if (toInsert.length > 0) {
+        const rows = toInsert.map(subprojectId => ({
+            user_id: user.id,
+            sub_project_id: subprojectId,
+            week_start: weekStart,
+            status: 'submitted' as const,
+        }))
+
+        const { error } = await supabase
+            .from('timesheet_submissions')
+            .insert(rows as any)
+
+        if (error) return { error: error.message }
     }
 
     // Fire-and-forget email notifications
@@ -182,7 +223,7 @@ export async function submitWeekAll(weekStart: string, subprojectIds: string[]) 
     return { success: true, submitted: toSubmit }
 }
 
-export async function adminWithdrawSubmission(userId: string, weekStart: string, subprojectId: string) {
+export async function adminWithdrawSubmission(userId: string, weekStart: string, subprojectId: string, reason: string) {
     const supabase = await createClient()
 
     const { data: { user } } = await supabase.auth.getUser()
@@ -194,7 +235,7 @@ export async function adminWithdrawSubmission(userId: string, weekStart: string,
 
     const { error } = await supabase
         .from('timesheet_submissions')
-        .delete()
+        .update({ status: 'rejected', reject_reason: reason } as any)
         .eq('user_id', userId)
         .eq('sub_project_id', subprojectId)
         .eq('week_start', weekStart)
@@ -203,29 +244,57 @@ export async function adminWithdrawSubmission(userId: string, weekStart: string,
         return { error: error.message }
     }
 
+    // Send rejection notification email to employee
+    try {
+        const adminClient = getSupabaseAdmin()
+        const { data: authUser } = await adminClient.auth.admin.getUserById(userId)
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('full_name')
+            .eq('id', userId)
+            .single()
+        const { data: subProject } = await supabase
+            .from('sub_projects')
+            .select('code')
+            .eq('id', subprojectId)
+            .single()
+
+        if (authUser?.user?.email) {
+            await sendTimesheetWithdrawNotification({
+                employeeEmail: authUser.user.email,
+                employeeName: profile?.full_name ?? 'Employee',
+                subProjectCode: subProject?.code ?? 'Unknown',
+                weekStart,
+                reason,
+            })
+        }
+    } catch {
+        // Don't fail the rejection if email fails
+    }
+
     revalidatePath('/admin/reports')
     return { success: true }
 }
 
-export async function isWeekSubmitted(weekStart: string, subProjectId: string) {
+export async function isWeekSubmitted(weekStart: string, subProjectId: string): Promise<{ status: string; rejectReason: string | null } | null> {
     const supabase = await createClient()
 
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return false
+    if (!user) return null
 
     const { data, error } = await supabase
         .from('timesheet_submissions')
-        .select('id')
+        .select('status, reject_reason')
         .eq('user_id', user.id)
         .eq('sub_project_id', subProjectId)
         .eq('week_start', weekStart)
         .maybeSingle()
 
-    if (error) {
-        return false
+    if (error || !data) {
+        return null
     }
 
-    return !!data
+    return { status: data.status, rejectReason: data.reject_reason ?? null }
 }
 
 export type GroupedReportRow = {
@@ -294,10 +363,11 @@ export async function getGroupedReportData(
         (profileRows || []).map((p: any) => [p.id, p])
     )
 
-    // Fetch all submissions in range to know what's been submitted
+    // Fetch all submissions in range to know what's been submitted (only count 'submitted' status)
     const { data: submissions } = await supabase
         .from('timesheet_submissions')
         .select('user_id, sub_project_id, week_start')
+        .eq('status', 'submitted')
         .gte('week_start', startDate)
         .lte('week_start', endDate)
 
@@ -527,13 +597,14 @@ export async function copyWeek(currentWeekStart: string) {
         return { success: true }
     }
 
-    // Check which sub-projects are already submitted for the current week
+    // Check which sub-projects are already submitted for the current week (only block if status is 'submitted')
     const subProjectIds = [...new Set(oldEntries.map(e => e.sub_project_id))]
     const { data: submissions } = await supabase
         .from('timesheet_submissions')
         .select('sub_project_id')
         .eq('user_id', user.id)
         .eq('week_start', currentWeekStart)
+        .eq('status', 'submitted')
         .in('sub_project_id', subProjectIds)
 
     const submittedSet = new Set((submissions || []).map(s => s.sub_project_id))

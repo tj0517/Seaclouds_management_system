@@ -2,10 +2,12 @@
 
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ChevronLeft, ChevronRight, CheckCircle2, Undo2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, CheckCircle2, Undo2, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from '@/components/ui/dialog'
+import { Textarea } from '@/components/ui/textarea'
 import { adminWithdrawSubmission } from '@/app/data/actions/timesheet'
 import { toast } from 'sonner'
 
@@ -167,19 +169,23 @@ function buildAggregatedProjects(weeks: WeekData[]): AggregatedProject[] {
 function StatusCell({ userRow, weekStart }: { userRow: UserRow; weekStart: string }) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
-  const [withdrawn, setWithdrawn] = useState(false)
+  const [rejected, setRejected] = useState(false)
+  const [rejectOpen, setRejectOpen] = useState(false)
+  const [rejectReason, setRejectReason] = useState('')
 
-  if (!userRow.isSubmitted || withdrawn) {
+  if (!userRow.isSubmitted || rejected) {
     return <Badge variant="outline" className="text-amber-600 border-amber-300">Pending</Badge>
   }
 
-  const handleWithdraw = async () => {
+  const handleReject = async () => {
     setLoading(true)
-    const result = await adminWithdrawSubmission(userRow.userId, weekStart, userRow.subProjectId)
+    const result = await adminWithdrawSubmission(userRow.userId, weekStart, userRow.subProjectId, rejectReason)
     setLoading(false)
     if (result.success) {
-      setWithdrawn(true)
-      toast.success(`Withdrawn submission for ${userRow.userName}`)
+      setRejected(true)
+      setRejectOpen(false)
+      setRejectReason('')
+      toast.success(`Rejected submission for ${userRow.userName}`)
       router.refresh()
     } else if (result.error) {
       toast.error(result.error)
@@ -191,14 +197,37 @@ function StatusCell({ userRow, weekStart }: { userRow: UserRow; weekStart: strin
       <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-100">
         <CheckCircle2 className="h-3 w-3 mr-1" /> Submitted
       </Badge>
-      <button
-        onClick={handleWithdraw}
-        disabled={loading}
-        title="Withdraw submission"
-        className="text-amber-500 hover:text-amber-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-      >
-        <Undo2 className="h-3.5 w-3.5" />
-      </button>
+      <Dialog open={rejectOpen} onOpenChange={setRejectOpen}>
+        <DialogTrigger asChild>
+          <button
+            title="Reject submission"
+            className="text-amber-500 hover:text-amber-700 transition-colors"
+          >
+            <Undo2 className="h-3.5 w-3.5" />
+          </button>
+        </DialogTrigger>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reject Timesheet</DialogTitle>
+            <DialogDescription>
+              Reject the timesheet submission for <strong>{userRow.userName}</strong>, week starting {weekStart}. The employee will be notified and can resubmit.
+            </DialogDescription>
+          </DialogHeader>
+          <Textarea
+            placeholder="Reason for rejection (optional)"
+            value={rejectReason}
+            onChange={(e) => setRejectReason(e.target.value)}
+            rows={3}
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRejectOpen(false)}>Cancel</Button>
+            <Button variant="destructive" onClick={handleReject} disabled={loading}>
+              {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Reject
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

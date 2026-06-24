@@ -1,16 +1,22 @@
--- Expense tables feature migration
+-- Expense tables feature migration (idempotent)
 
 -- Enums
-CREATE TYPE public.expense_type AS ENUM (
-  'taxi', 'hotel', 'meals', 'flight', 'parking', 'office_supplies', 'personal_car', 'other'
-);
+DO $$ BEGIN
+  CREATE TYPE public.expense_type AS ENUM (
+    'taxi', 'hotel', 'meals', 'flight', 'parking', 'office_supplies', 'personal_car', 'other'
+  );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE TYPE public.expense_currency AS ENUM (
-  'PLN', 'EUR', 'USD', 'GBP'
-);
+DO $$ BEGIN
+  CREATE TYPE public.expense_currency AS ENUM (
+    'PLN', 'EUR', 'USD', 'GBP'
+  );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Expense tables (containers for trip/assignment expenses)
-CREATE TABLE public.expense_tables (
+CREATE TABLE IF NOT EXISTS public.expense_tables (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
   project_id UUID NOT NULL REFERENCES public.projects(id) ON DELETE CASCADE,
@@ -21,11 +27,11 @@ CREATE TABLE public.expense_tables (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_expense_tables_user_id ON public.expense_tables(user_id);
-CREATE INDEX idx_expense_tables_project_id ON public.expense_tables(project_id);
+CREATE INDEX IF NOT EXISTS idx_expense_tables_user_id ON public.expense_tables(user_id);
+CREATE INDEX IF NOT EXISTS idx_expense_tables_project_id ON public.expense_tables(project_id);
 
 -- Expense entries (individual expense rows within a table)
-CREATE TABLE public.expense_entries (
+CREATE TABLE IF NOT EXISTS public.expense_entries (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   expense_table_id UUID NOT NULL REFERENCES public.expense_tables(id) ON DELETE CASCADE,
   expense_date DATE NOT NULL,
@@ -41,74 +47,104 @@ CREATE TABLE public.expense_entries (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_expense_entries_table_id ON public.expense_entries(expense_table_id);
-CREATE INDEX idx_expense_entries_date ON public.expense_entries(expense_date);
+CREATE INDEX IF NOT EXISTS idx_expense_entries_table_id ON public.expense_entries(expense_table_id);
+CREATE INDEX IF NOT EXISTS idx_expense_entries_date ON public.expense_entries(expense_date);
 
 -- RLS for expense_tables
 ALTER TABLE public.expense_tables ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Users can view own expense tables"
-  ON public.expense_tables FOR SELECT
-  USING (auth.uid() = user_id);
+DO $$ BEGIN
+  CREATE POLICY "Users can view own expense tables"
+    ON public.expense_tables FOR SELECT
+    USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Admins can view all expense tables"
-  ON public.expense_tables FOR SELECT
-  USING (public.is_admin());
+DO $$ BEGIN
+  CREATE POLICY "Admins can view all expense tables"
+    ON public.expense_tables FOR SELECT
+    USING (public.is_admin());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Users can insert own expense tables"
-  ON public.expense_tables FOR INSERT
-  WITH CHECK (auth.uid() = user_id);
+DO $$ BEGIN
+  CREATE POLICY "Users can insert own expense tables"
+    ON public.expense_tables FOR INSERT
+    WITH CHECK (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Users can update own expense tables"
-  ON public.expense_tables FOR UPDATE
-  USING (auth.uid() = user_id);
+DO $$ BEGIN
+  CREATE POLICY "Users can update own expense tables"
+    ON public.expense_tables FOR UPDATE
+    USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Users can delete own expense tables"
-  ON public.expense_tables FOR DELETE
-  USING (auth.uid() = user_id);
+DO $$ BEGIN
+  CREATE POLICY "Users can delete own expense tables"
+    ON public.expense_tables FOR DELETE
+    USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- RLS for expense_entries
 ALTER TABLE public.expense_entries ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Users can view own expense entries"
-  ON public.expense_entries FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.expense_tables et
-      WHERE et.id = expense_table_id AND et.user_id = auth.uid()
-    )
-  );
+DO $$ BEGIN
+  CREATE POLICY "Users can view own expense entries"
+    ON public.expense_entries FOR SELECT
+    USING (
+      EXISTS (
+        SELECT 1 FROM public.expense_tables et
+        WHERE et.id = expense_table_id AND et.user_id = auth.uid()
+      )
+    );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Admins can view all expense entries"
-  ON public.expense_entries FOR SELECT
-  USING (public.is_admin());
+DO $$ BEGIN
+  CREATE POLICY "Admins can view all expense entries"
+    ON public.expense_entries FOR SELECT
+    USING (public.is_admin());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Users can insert own expense entries"
-  ON public.expense_entries FOR INSERT
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM public.expense_tables et
-      WHERE et.id = expense_table_id AND et.user_id = auth.uid()
-    )
-  );
+DO $$ BEGIN
+  CREATE POLICY "Users can insert own expense entries"
+    ON public.expense_entries FOR INSERT
+    WITH CHECK (
+      EXISTS (
+        SELECT 1 FROM public.expense_tables et
+        WHERE et.id = expense_table_id AND et.user_id = auth.uid()
+      )
+    );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Users can update own expense entries"
-  ON public.expense_entries FOR UPDATE
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.expense_tables et
-      WHERE et.id = expense_table_id AND et.user_id = auth.uid()
-    )
-  );
+DO $$ BEGIN
+  CREATE POLICY "Users can update own expense entries"
+    ON public.expense_entries FOR UPDATE
+    USING (
+      EXISTS (
+        SELECT 1 FROM public.expense_tables et
+        WHERE et.id = expense_table_id AND et.user_id = auth.uid()
+      )
+    );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Users can delete own expense entries"
-  ON public.expense_entries FOR DELETE
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.expense_tables et
-      WHERE et.id = expense_table_id AND et.user_id = auth.uid()
-    )
-  );
+DO $$ BEGIN
+  CREATE POLICY "Users can delete own expense entries"
+    ON public.expense_entries FOR DELETE
+    USING (
+      EXISTS (
+        SELECT 1 FROM public.expense_tables et
+        WHERE et.id = expense_table_id AND et.user_id = auth.uid()
+      )
+    );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Storage bucket for receipts
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
@@ -122,33 +158,45 @@ VALUES (
 ON CONFLICT (id) DO NOTHING;
 
 -- Storage policies
-CREATE POLICY "Users can upload own receipts"
-  ON storage.objects FOR INSERT
-  WITH CHECK (
-    bucket_id = 'expense-receipts'
-    AND (storage.foldername(name))[1] = 'receipts'
-    AND (storage.foldername(name))[2] = auth.uid()::text
-  );
+DO $$ BEGIN
+  CREATE POLICY "Users can upload own receipts"
+    ON storage.objects FOR INSERT
+    WITH CHECK (
+      bucket_id = 'expense-receipts'
+      AND (storage.foldername(name))[1] = 'receipts'
+      AND (storage.foldername(name))[2] = auth.uid()::text
+    );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Users can view own receipts"
-  ON storage.objects FOR SELECT
-  USING (
-    bucket_id = 'expense-receipts'
-    AND (storage.foldername(name))[1] = 'receipts'
-    AND (storage.foldername(name))[2] = auth.uid()::text
-  );
+DO $$ BEGIN
+  CREATE POLICY "Users can view own receipts"
+    ON storage.objects FOR SELECT
+    USING (
+      bucket_id = 'expense-receipts'
+      AND (storage.foldername(name))[1] = 'receipts'
+      AND (storage.foldername(name))[2] = auth.uid()::text
+    );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Users can delete own receipts"
-  ON storage.objects FOR DELETE
-  USING (
-    bucket_id = 'expense-receipts'
-    AND (storage.foldername(name))[1] = 'receipts'
-    AND (storage.foldername(name))[2] = auth.uid()::text
-  );
+DO $$ BEGIN
+  CREATE POLICY "Users can delete own receipts"
+    ON storage.objects FOR DELETE
+    USING (
+      bucket_id = 'expense-receipts'
+      AND (storage.foldername(name))[1] = 'receipts'
+      AND (storage.foldername(name))[2] = auth.uid()::text
+    );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Admins can view all receipts"
-  ON storage.objects FOR SELECT
-  USING (
-    bucket_id = 'expense-receipts'
-    AND public.is_admin()
-  );
+DO $$ BEGIN
+  CREATE POLICY "Admins can view all receipts"
+    ON storage.objects FOR SELECT
+    USING (
+      bucket_id = 'expense-receipts'
+      AND public.is_admin()
+    );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;

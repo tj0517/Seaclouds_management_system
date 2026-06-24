@@ -29,7 +29,7 @@ export default function TimesheetGrid({
   subProjects: SubProject[],
   existingEntries: Entry[],
   weekStart: Date,
-  initialSubmissionStatus: Record<string, boolean>,
+  initialSubmissionStatus: Record<string, { status: string; rejectReason: string | null } | null>,
   initialContractCodes: Record<string, string>
 }) {
   const router = useRouter()
@@ -97,7 +97,11 @@ export default function TimesheetGrid({
 
   const weeklyTotal = dailyTotals.reduce((acc, val) => acc + val, 0)
 
-  const [submittedProjects, setSubmittedProjects] = useState<Record<string, boolean>>(initialSubmissionStatus)
+  const [submittedProjects, setSubmittedProjects] = useState<Record<string, { status: string; rejectReason: string | null } | null>>(initialSubmissionStatus)
+
+  const isSubmitted = (spId: string) => submittedProjects[spId]?.status === 'submitted'
+  const isRejected = (spId: string) => submittedProjects[spId]?.status === 'rejected'
+  const getRejectionReason = (spId: string) => submittedProjects[spId]?.rejectReason ?? null
 
   const [contractCodes, setContractCodes] = useState<Record<string, string>>(initialContractCodes)
 
@@ -117,11 +121,11 @@ export default function TimesheetGrid({
 
   const isProjectFullySubmitted = (projectId: string) => {
     const pSubs = subProjects.filter(sp => sp.project_id === projectId)
-    return pSubs.length > 0 && pSubs.every(sp => submittedProjects[sp.id])
+    return pSubs.length > 0 && pSubs.every(sp => isSubmitted(sp.id))
   }
 
   const unsubmittedIds = subProjects
-    .filter(sp => !submittedProjects[sp.id])
+    .filter(sp => !isSubmitted(sp.id))
     .map(sp => sp.id)
 
   const projectSubProjects = projects.reduce((acc, project) => {
@@ -256,7 +260,7 @@ export default function TimesheetGrid({
                             return (
                               <td key={dateStr} className={`p-1 border-l border-gray-100 ${bgClass}`}>
                                 <div className="flex items-center justify-center h-8">
-                                  {submittedProjects[subProject.id] ? (
+                                  {isSubmitted(subProject.id) ? (
                                     <span className={`text-sm ${isChecked ? 'text-emerald-600 font-bold' : 'text-gray-300'}`}>
                                       {isChecked ? '✓' : '-'}
                                     </span>
@@ -284,7 +288,7 @@ export default function TimesheetGrid({
                                 min="0"
                                 max="24"
                                 step="0.5"
-                                disabled={submittedProjects[subProject.id]}
+                                disabled={isSubmitted(subProject.id)}
                                 className={`w-full h-8 text-center text-sm rounded border-transparent hover:border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all ${bgClass} ${hours && hours > 12 ? 'text-red-600 font-bold' : ''} disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed`}
                                 value={!hours ? '' : hours}
                                 placeholder="-"
@@ -298,21 +302,18 @@ export default function TimesheetGrid({
                           {rowTotal > 0 ? `${rowTotal}${isDays ? 'd' : ''}` : <span className="text-gray-300">-</span>}
                         </td>
                         <td className="px-4 py-2 text-center border-l border-gray-200">
-                          {submittedProjects[subProject.id] ? (
-                            <span className="text-green-600">Submitted</span>
-                          ) : (
-                            <SubmitWeekButton
-                              weekStart={format(weekStart, 'yyyy-MM-dd')}
-                              subprojectId={subProject.id}
-                              isSubmitted={submittedProjects[subProject.id] || false}
-                              onSuccess={() => {
-                                setSubmittedProjects(prev => ({
-                                  ...prev,
-                                  [subProject.id]: true
-                                }))
-                              }}
-                            />
-                          )}
+                          <SubmitWeekButton
+                            weekStart={format(weekStart, 'yyyy-MM-dd')}
+                            subprojectId={subProject.id}
+                            status={submittedProjects[subProject.id]?.status ?? null}
+                            rejectReason={getRejectionReason(subProject.id)}
+                            onSuccess={() => {
+                              setSubmittedProjects(prev => ({
+                                ...prev,
+                                [subProject.id]: { status: 'submitted', rejectReason: null }
+                              }))
+                            }}
+                          />
                         </td>
                       </tr>
                     )
@@ -360,7 +361,7 @@ export default function TimesheetGrid({
                         } else {
                           toast.success('Week submitted for all projects')
                           const newStatus = { ...submittedProjects }
-                          unsubmittedIds.forEach(id => { newStatus[id] = true })
+                          unsubmittedIds.forEach(id => { newStatus[id] = { status: 'submitted', rejectReason: null } })
                           setSubmittedProjects(newStatus)
                         }
                         router.refresh()
@@ -463,7 +464,7 @@ export default function TimesheetGrid({
                     />
                   </div>
                   {pSubProjects.map(subProject => {
-                    const isDisabled = submittedProjects[subProject.id]
+                    const isDisabled = isSubmitted(subProject.id)
                     const mobileIsDays = subProject.tracking_type === 'days'
                     const rowTotal = weekDays.reduce((acc, day) => {
                       const dateStr = format(day, 'yyyy-MM-dd')
@@ -540,21 +541,18 @@ export default function TimesheetGrid({
 
                         {/* Submit row */}
                         <div className="px-3 py-2 border-t border-gray-100 flex items-center justify-end">
-                          {submittedProjects[subProject.id] ? (
-                            <span className="text-xs text-emerald-600 font-medium">Submitted</span>
-                          ) : (
-                            <SubmitWeekButton
-                              weekStart={format(weekStart, 'yyyy-MM-dd')}
-                              subprojectId={subProject.id}
-                              isSubmitted={submittedProjects[subProject.id] || false}
-                              onSuccess={() => {
-                                setSubmittedProjects(prev => ({
-                                  ...prev,
-                                  [subProject.id]: true
-                                }))
-                              }}
-                            />
-                          )}
+                          <SubmitWeekButton
+                            weekStart={format(weekStart, 'yyyy-MM-dd')}
+                            subprojectId={subProject.id}
+                            status={submittedProjects[subProject.id]?.status ?? null}
+                            rejectReason={getRejectionReason(subProject.id)}
+                            onSuccess={() => {
+                              setSubmittedProjects(prev => ({
+                                ...prev,
+                                [subProject.id]: { status: 'submitted', rejectReason: null }
+                              }))
+                            }}
+                          />
                         </div>
                       </div>
                     )
@@ -582,7 +580,7 @@ export default function TimesheetGrid({
                   } else {
                     toast.success('Week submitted for all projects')
                     const newStatus = { ...submittedProjects }
-                    unsubmittedIds.forEach(id => { newStatus[id] = true })
+                    unsubmittedIds.forEach(id => { newStatus[id] = { status: 'submitted', rejectReason: null } })
                     setSubmittedProjects(newStatus)
                   }
                   router.refresh()
