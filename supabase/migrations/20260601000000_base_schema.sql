@@ -74,7 +74,8 @@ CREATE TABLE timesheet_entries (
   work_date DATE NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc', now()),
   hours NUMERIC DEFAULT 0,
-  sub_project_id UUID NOT NULL REFERENCES sub_projects(id)
+  sub_project_id UUID NOT NULL REFERENCES sub_projects(id),
+  CONSTRAINT timesheet_entries_user_subproject_date_key UNIQUE (user_id, sub_project_id, work_date)
 );
 
 -- timesheet_submissions
