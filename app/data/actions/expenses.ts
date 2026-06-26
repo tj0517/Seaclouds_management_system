@@ -384,22 +384,29 @@ export async function getReceiptUploadUrl(entryId: string, fileName: string) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return { error: 'No session' }
 
-    // Verify ownership
-    const { data: entry } = await (getSupabaseAdmin() as any)
+    const adminClient = getSupabaseAdmin()
+
+    // Verify ownership — separate queries to avoid nested select issues
+    const { data: entry, error: entryError } = await (adminClient as any)
         .from('expense_entries')
-        .select('id, expense_tables ( user_id, status )')
+        .select('id, expense_table_id')
         .eq('id', entryId)
         .single()
 
-    if (!entry) return { error: 'Entry not found' }
-    if (entry.expense_tables?.user_id !== user.id) return { error: 'Access denied' }
-    const status = entry.expense_tables?.status
-    if (status === 'submitted' || status === 'approved') return { error: 'Cannot modify a submitted or approved expense table' }
+    if (entryError || !entry) return { error: `Entry not found: ${entryError?.message || entryId}` }
+
+    const { data: table } = await (adminClient as any)
+        .from('expense_tables')
+        .select('user_id, status')
+        .eq('id', entry.expense_table_id)
+        .single()
+
+    if (!table) return { error: 'Expense table not found' }
+    if (table.user_id !== user.id) return { error: 'Access denied' }
+    if (table.status === 'submitted' || table.status === 'approved') return { error: 'Cannot modify a submitted or approved expense table' }
 
     const ext = fileName.split('.').pop()?.toLowerCase() || 'jpg'
     const storagePath = `receipts/${user.id}/${entryId}.${ext}`
-
-    const adminClient = getSupabaseAdmin()
 
     // Create signed upload URL (valid 60s)
     const { data, error } = await adminClient.storage
@@ -420,14 +427,22 @@ export async function confirmReceiptUpload(entryId: string, storagePath: string)
     if (!user) return { error: 'No session' }
 
     // Verify ownership
-    const { data: entry } = await (getSupabaseAdmin() as any)
+    const adminClient = getSupabaseAdmin()
+    const { data: entry } = await (adminClient as any)
         .from('expense_entries')
-        .select('id, expense_tables ( user_id )')
+        .select('id, expense_table_id')
         .eq('id', entryId)
         .single()
 
     if (!entry) return { error: 'Entry not found' }
-    if (entry.expense_tables?.user_id !== user.id) return { error: 'Access denied' }
+
+    const { data: table } = await (adminClient as any)
+        .from('expense_tables')
+        .select('user_id')
+        .eq('id', entry.expense_table_id)
+        .single()
+
+    if (!table || table.user_id !== user.id) return { error: 'Access denied' }
 
     // Verify the path matches the user
     if (!storagePath.startsWith(`receipts/${user.id}/`)) return { error: 'Invalid path' }
