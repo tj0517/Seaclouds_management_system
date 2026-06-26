@@ -1,31 +1,83 @@
 -- Seed data for Supabase branch
--- STEP 1: First create these 3 users via Dashboard → Authentication → Add User:
---   - ejezionek@gmail.com (any password)
---   - tjezionek2000@gmail.com (any password)
---   - tjezionekspam@gmail.com (any password)
--- STEP 2: Then run this SQL in the branch SQL editor
+-- Fully automated: creates auth users, profiles, projects, and sample data.
+-- All test users have password: password123
 
 -- ============================================================
--- Helper: map emails to user IDs
+-- Step 1: Create auth users with proper password + identity
 -- ============================================================
+-- bcrypt hash of "password123" (cost 10)
+-- Generated via: SELECT crypt('password123', gen_salt('bf'));
+
 DO $$
 DECLARE
-  uid_ernest UUID;
-  uid_tymon UUID;
-  uid_admin UUID;
+  uid_ernest UUID := gen_random_uuid();
+  uid_tymon UUID := gen_random_uuid();
+  uid_admin UUID := gen_random_uuid();
+  pwd_hash TEXT := '$2a$10$PznKGQEyMfgLMPXgHQaEpuCEmoD7R1.XLORmHmqTMHFWkBy.IC/9S';
+  now_ts TIMESTAMPTZ := now();
   pid_it UUID := '094e130b-599b-4295-87fa-697fb71e7fc4';
   pid_pej UUID := '6c0909ce-9b74-4bda-8e92-10811ff5a0fc';
   spid_timesheet UUID := '39ac163d-d2d0-4b5d-96dc-1516363dad27';
   spid_ctr122 UUID := '45d231d4-3c58-4679-b4fb-97d521d9e712';
   spid_ctr142 UUID := '465a6119-d9aa-4398-bb2c-47ec1274f51c';
 BEGIN
-  SELECT id INTO uid_ernest FROM auth.users WHERE email = 'ejezionek@gmail.com';
-  SELECT id INTO uid_tymon FROM auth.users WHERE email = 'tjezionek2000@gmail.com';
-  SELECT id INTO uid_admin FROM auth.users WHERE email = 'tjezionekspam@gmail.com';
 
-  IF uid_ernest IS NULL OR uid_tymon IS NULL OR uid_admin IS NULL THEN
-    RAISE EXCEPTION 'Missing users! Create all 3 users via Dashboard → Authentication first.';
-  END IF;
+  -- ============================================================
+  -- Auth users
+  -- ============================================================
+  INSERT INTO auth.users (
+    instance_id, id, aud, role, email,
+    encrypted_password, email_confirmed_at,
+    raw_app_meta_data, raw_user_meta_data,
+    created_at, updated_at,
+    confirmation_token, recovery_token,
+    is_super_admin
+  ) VALUES
+    (
+      '00000000-0000-0000-0000-000000000000', uid_ernest, 'authenticated', 'authenticated',
+      'ejezionek@gmail.com', pwd_hash, now_ts,
+      '{"provider":"email","providers":["email"]}'::jsonb,
+      '{"full_name":"Ernest Jezionek"}'::jsonb,
+      now_ts, now_ts, '', '', false
+    ),
+    (
+      '00000000-0000-0000-0000-000000000000', uid_tymon, 'authenticated', 'authenticated',
+      'tjezionek2000@gmail.com', pwd_hash, now_ts,
+      '{"provider":"email","providers":["email"]}'::jsonb,
+      '{"full_name":"Tymon"}'::jsonb,
+      now_ts, now_ts, '', '', false
+    ),
+    (
+      '00000000-0000-0000-0000-000000000000', uid_admin, 'authenticated', 'authenticated',
+      'tjezionekspam@gmail.com', pwd_hash, now_ts,
+      '{"provider":"email","providers":["email"]}'::jsonb,
+      '{"full_name":"ADMIN"}'::jsonb,
+      now_ts, now_ts, '', '', false
+    );
+
+  -- ============================================================
+  -- Auth identities (required for email/password login)
+  -- ============================================================
+  INSERT INTO auth.identities (
+    id, user_id, provider_id, provider,
+    identity_data, last_sign_in_at,
+    created_at, updated_at
+  ) VALUES
+    (
+      uid_ernest, uid_ernest, uid_ernest::text, 'email',
+      jsonb_build_object('sub', uid_ernest::text, 'email', 'ejezionek@gmail.com', 'email_verified', true, 'phone_verified', false),
+      now_ts, now_ts, now_ts
+    ),
+    (
+      uid_tymon, uid_tymon, uid_tymon::text, 'email',
+      jsonb_build_object('sub', uid_tymon::text, 'email', 'tjezionek2000@gmail.com', 'email_verified', true, 'phone_verified', false),
+      now_ts, now_ts, now_ts
+    ),
+    (
+      uid_admin, uid_admin, uid_admin::text, 'email',
+      jsonb_build_object('sub', uid_admin::text, 'email', 'tjezionekspam@gmail.com', 'email_verified', true, 'phone_verified', false),
+      now_ts, now_ts, now_ts
+    );
 
   -- ============================================================
   -- Profiles (update trigger-created rows)
