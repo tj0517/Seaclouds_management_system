@@ -29,28 +29,34 @@ BEGIN
     instance_id, id, aud, role, email,
     encrypted_password, email_confirmed_at,
     raw_app_meta_data, raw_user_meta_data,
-    created_at, updated_at
+    created_at, updated_at,
+    confirmation_token, email_change, email_change_token_new,
+    recovery_token, phone, phone_change, phone_change_token,
+    email_change_token_current, email_change_confirm_status
   ) VALUES
     (
       '00000000-0000-0000-0000-000000000000', uid_ernest, 'authenticated', 'authenticated',
       'ejezionek@gmail.com', pwd_hash, now_ts,
       '{"provider":"email","providers":["email"]}'::jsonb,
       '{"full_name":"Ernest Jezionek"}'::jsonb,
-      now_ts, now_ts
+      now_ts, now_ts,
+      '', '', '', '', '', '', '', '', 0
     ),
     (
       '00000000-0000-0000-0000-000000000000', uid_tymon, 'authenticated', 'authenticated',
       'tjezionek2000@gmail.com', pwd_hash, now_ts,
       '{"provider":"email","providers":["email"]}'::jsonb,
       '{"full_name":"Tymon"}'::jsonb,
-      now_ts, now_ts
+      now_ts, now_ts,
+      '', '', '', '', '', '', '', '', 0
     ),
     (
       '00000000-0000-0000-0000-000000000000', uid_admin, 'authenticated', 'authenticated',
       'tjezionekspam@gmail.com', pwd_hash, now_ts,
       '{"provider":"email","providers":["email"]}'::jsonb,
       '{"full_name":"ADMIN"}'::jsonb,
-      now_ts, now_ts
+      now_ts, now_ts,
+      '', '', '', '', '', '', '', '', 0
     );
 
   -- ============================================================
@@ -62,18 +68,18 @@ BEGIN
     created_at, updated_at
   ) VALUES
     (
-      gen_random_uuid(), uid_ernest, uid_ernest, 'email',
-      format('{"sub":"%s","email":"ejezionek@gmail.com"}', uid_ernest)::jsonb,
+      gen_random_uuid(), uid_ernest, uid_ernest::text, 'email',
+      format('{"sub":"%s","email":"ejezionek@gmail.com","email_verified":true}', uid_ernest)::jsonb,
       now_ts, now_ts, now_ts
     ),
     (
-      gen_random_uuid(), uid_tymon, uid_tymon, 'email',
-      format('{"sub":"%s","email":"tjezionek2000@gmail.com"}', uid_tymon)::jsonb,
+      gen_random_uuid(), uid_tymon, uid_tymon::text, 'email',
+      format('{"sub":"%s","email":"tjezionek2000@gmail.com","email_verified":true}', uid_tymon)::jsonb,
       now_ts, now_ts, now_ts
     ),
     (
-      gen_random_uuid(), uid_admin, uid_admin, 'email',
-      format('{"sub":"%s","email":"tjezionekspam@gmail.com"}', uid_admin)::jsonb,
+      gen_random_uuid(), uid_admin, uid_admin::text, 'email',
+      format('{"sub":"%s","email":"tjezionekspam@gmail.com","email_verified":true}', uid_admin)::jsonb,
       now_ts, now_ts, now_ts
     );
 
