@@ -1,12 +1,15 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Eye, X, ChevronLeft, ChevronRight, Calendar } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import type { MonthlyEarningRow, EarningStatus } from '@/app/data/actions/earnings'
 import StatusSelect from './StatusSelect'
+
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
 function fmt(amount: number) {
     return new Intl.NumberFormat('pl-PL', {
@@ -29,11 +32,22 @@ export default function AdminEarningsClient({ month, rows, statuses, projects, s
 
     const [filterEmployee, setFilterEmployee] = useState('')
     const [filterStatus, setFilterStatus] = useState('')
+    const [pickerOpen, setPickerOpen] = useState(false)
+    const [pickerYear, setPickerYear] = useState(() => Number(month.split('-')[0]))
 
     function navigateMonth(offset: number) {
         const [y, m] = month.split('-').map(Number)
         const d = new Date(y, m - 1 + offset, 1)
         const next = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+        const params = new URLSearchParams()
+        params.set('month', next)
+        if (selectedProject) params.set('project', selectedProject)
+        router.push(`/admin/earnings?${params.toString()}`)
+    }
+
+    function pickMonth(m: number) {
+        const next = `${pickerYear}-${String(m).padStart(2, '0')}`
+        setPickerOpen(false)
         const params = new URLSearchParams()
         params.set('month', next)
         if (selectedProject) params.set('project', selectedProject)
@@ -87,23 +101,44 @@ export default function AdminEarningsClient({ month, rows, statuses, projects, s
                     <Button variant="ghost" size="icon" className="h-9 w-9 rounded-r-none" onClick={() => navigateMonth(-1)}>
                         <ChevronLeft className="h-4 w-4" />
                     </Button>
-                    <label className="relative flex items-center gap-2 px-3 text-sm font-medium min-w-[160px] justify-center cursor-pointer hover:bg-accent/50 transition-colors">
-                        <Calendar className="h-4 w-4 text-muted-foreground" />
-                        {monthLabel}
-                        <input
-                            type="month"
-                            value={month}
-                            onChange={e => {
-                                if (e.target.value) {
-                                    const params = new URLSearchParams()
-                                    params.set('month', e.target.value)
-                                    if (selectedProject) params.set('project', selectedProject)
-                                    router.push(`/admin/earnings?${params.toString()}`)
-                                }
-                            }}
-                            className="absolute inset-0 opacity-0 cursor-pointer"
-                        />
-                    </label>
+                    <Popover open={pickerOpen} onOpenChange={(open) => { setPickerOpen(open); if (open) setPickerYear(Number(month.split('-')[0])) }}>
+                        <PopoverTrigger asChild>
+                            <button className="flex items-center gap-2 px-3 h-9 text-sm font-medium min-w-[160px] justify-center hover:bg-accent/50 transition-colors">
+                                <Calendar className="h-4 w-4 text-muted-foreground" />
+                                {monthLabel}
+                            </button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[240px] p-3" align="start">
+                            <div className="flex items-center justify-between mb-2">
+                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setPickerYear(y => y - 1)}>
+                                    <ChevronLeft className="h-4 w-4" />
+                                </Button>
+                                <span className="text-sm font-semibold">{pickerYear}</span>
+                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setPickerYear(y => y + 1)}>
+                                    <ChevronRight className="h-4 w-4" />
+                                </Button>
+                            </div>
+                            <div className="grid grid-cols-3 gap-1">
+                                {MONTH_NAMES.map((name, i) => {
+                                    const m = i + 1
+                                    const isActive = month === `${pickerYear}-${String(m).padStart(2, '0')}`
+                                    return (
+                                        <button
+                                            key={m}
+                                            onClick={() => pickMonth(m)}
+                                            className={`px-2 py-1.5 text-xs rounded-md transition-colors ${
+                                                isActive
+                                                    ? 'bg-primary text-primary-foreground font-semibold'
+                                                    : 'hover:bg-accent text-foreground'
+                                            }`}
+                                        >
+                                            {name}
+                                        </button>
+                                    )
+                                })}
+                            </div>
+                        </PopoverContent>
+                    </Popover>
                     <Button variant="ghost" size="icon" className="h-9 w-9 rounded-l-none" onClick={() => navigateMonth(1)}>
                         <ChevronRight className="h-4 w-4" />
                     </Button>
