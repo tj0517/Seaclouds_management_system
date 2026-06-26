@@ -13,7 +13,7 @@ DECLARE
   uid_ernest UUID := gen_random_uuid();
   uid_tymon UUID := gen_random_uuid();
   uid_admin UUID := gen_random_uuid();
-  pwd_hash TEXT := '$2a$10$PznKGQEyMfgLMPXgHQaEpuCEmoD7R1.XLORmHmqTMHFWkBy.IC/9S';
+  pwd_hash TEXT := crypt('password123', gen_salt('bf'));
   now_ts TIMESTAMPTZ := now();
   pid_it UUID := '094e130b-599b-4295-87fa-697fb71e7fc4';
   pid_pej UUID := '6c0909ce-9b74-4bda-8e92-10811ff5a0fc';
@@ -23,36 +23,34 @@ DECLARE
 BEGIN
 
   -- ============================================================
-  -- Auth users
+  -- Auth users (password: password123)
   -- ============================================================
   INSERT INTO auth.users (
     instance_id, id, aud, role, email,
     encrypted_password, email_confirmed_at,
     raw_app_meta_data, raw_user_meta_data,
-    created_at, updated_at,
-    confirmation_token, recovery_token,
-    is_super_admin
+    created_at, updated_at
   ) VALUES
     (
       '00000000-0000-0000-0000-000000000000', uid_ernest, 'authenticated', 'authenticated',
       'ejezionek@gmail.com', pwd_hash, now_ts,
       '{"provider":"email","providers":["email"]}'::jsonb,
       '{"full_name":"Ernest Jezionek"}'::jsonb,
-      now_ts, now_ts, '', '', false
+      now_ts, now_ts
     ),
     (
       '00000000-0000-0000-0000-000000000000', uid_tymon, 'authenticated', 'authenticated',
       'tjezionek2000@gmail.com', pwd_hash, now_ts,
       '{"provider":"email","providers":["email"]}'::jsonb,
       '{"full_name":"Tymon"}'::jsonb,
-      now_ts, now_ts, '', '', false
+      now_ts, now_ts
     ),
     (
       '00000000-0000-0000-0000-000000000000', uid_admin, 'authenticated', 'authenticated',
       'tjezionekspam@gmail.com', pwd_hash, now_ts,
       '{"provider":"email","providers":["email"]}'::jsonb,
       '{"full_name":"ADMIN"}'::jsonb,
-      now_ts, now_ts, '', '', false
+      now_ts, now_ts
     );
 
   -- ============================================================
@@ -64,18 +62,18 @@ BEGIN
     created_at, updated_at
   ) VALUES
     (
-      uid_ernest, uid_ernest, uid_ernest::text, 'email',
-      jsonb_build_object('sub', uid_ernest::text, 'email', 'ejezionek@gmail.com', 'email_verified', true, 'phone_verified', false),
+      gen_random_uuid(), uid_ernest, uid_ernest, 'email',
+      format('{"sub":"%s","email":"ejezionek@gmail.com"}', uid_ernest)::jsonb,
       now_ts, now_ts, now_ts
     ),
     (
-      uid_tymon, uid_tymon, uid_tymon::text, 'email',
-      jsonb_build_object('sub', uid_tymon::text, 'email', 'tjezionek2000@gmail.com', 'email_verified', true, 'phone_verified', false),
+      gen_random_uuid(), uid_tymon, uid_tymon, 'email',
+      format('{"sub":"%s","email":"tjezionek2000@gmail.com"}', uid_tymon)::jsonb,
       now_ts, now_ts, now_ts
     ),
     (
-      uid_admin, uid_admin, uid_admin::text, 'email',
-      jsonb_build_object('sub', uid_admin::text, 'email', 'tjezionekspam@gmail.com', 'email_verified', true, 'phone_verified', false),
+      gen_random_uuid(), uid_admin, uid_admin, 'email',
+      format('{"sub":"%s","email":"tjezionekspam@gmail.com"}', uid_admin)::jsonb,
       now_ts, now_ts, now_ts
     );
 
