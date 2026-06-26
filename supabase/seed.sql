@@ -198,4 +198,18 @@ BEGIN
     ('fc6d8b67-7edc-4586-9663-04afb6faea88', '9af8e1b7-08ca-45e4-a7ed-2937bdd42b51', '2026-06-14', 'Gdansk', 'taxi', 'Taxi to site', 'PLN', 45, NULL, NULL, 1, 45)
   ON CONFLICT (id) DO NOTHING;
 
+  -- ============================================================
+  -- Fix NULL string columns in auth.users (GoTrue scans them as non-nullable strings)
+  -- ============================================================
+  UPDATE auth.users SET
+    confirmation_token  = COALESCE(confirmation_token, ''),
+    email_change        = COALESCE(email_change, ''),
+    email_change_token_new = COALESCE(email_change_token_new, ''),
+    email_change_token_current = COALESCE(email_change_token_current, ''),
+    recovery_token      = COALESCE(recovery_token, ''),
+    phone               = COALESCE(phone, ''),
+    phone_change        = COALESCE(phone_change, ''),
+    phone_change_token  = COALESCE(phone_change_token, ''),
+    email_change_confirm_status = COALESCE(email_change_confirm_status, 0);
+
 END $$;
