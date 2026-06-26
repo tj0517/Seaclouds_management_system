@@ -31,7 +31,7 @@ BEGIN
     raw_app_meta_data, raw_user_meta_data,
     created_at, updated_at,
     confirmation_token, email_change, email_change_token_new,
-    recovery_token, phone, phone_change, phone_change_token,
+    recovery_token, phone_change, phone_change_token,
     email_change_token_current, email_change_confirm_status
   ) VALUES
     (
@@ -40,7 +40,7 @@ BEGIN
       '{"provider":"email","providers":["email"]}'::jsonb,
       '{"full_name":"Ernest Jezionek"}'::jsonb,
       now_ts, now_ts,
-      '', '', '', '', '', '', '', '', 0
+      '', '', '', '', '', '', '', 0
     ),
     (
       '00000000-0000-0000-0000-000000000000', uid_tymon, 'authenticated', 'authenticated',
@@ -48,7 +48,7 @@ BEGIN
       '{"provider":"email","providers":["email"]}'::jsonb,
       '{"full_name":"Tymon"}'::jsonb,
       now_ts, now_ts,
-      '', '', '', '', '', '', '', '', 0
+      '', '', '', '', '', '', '', 0
     ),
     (
       '00000000-0000-0000-0000-000000000000', uid_admin, 'authenticated', 'authenticated',
@@ -56,7 +56,7 @@ BEGIN
       '{"provider":"email","providers":["email"]}'::jsonb,
       '{"full_name":"ADMIN"}'::jsonb,
       now_ts, now_ts,
-      '', '', '', '', '', '', '', '', 0
+      '', '', '', '', '', '', '', 0
     );
 
   -- ============================================================
@@ -207,7 +207,6 @@ BEGIN
     email_change_token_new = COALESCE(email_change_token_new, ''),
     email_change_token_current = COALESCE(email_change_token_current, ''),
     recovery_token      = COALESCE(recovery_token, ''),
-    phone               = COALESCE(phone, ''),
     phone_change        = COALESCE(phone_change, ''),
     phone_change_token  = COALESCE(phone_change_token, ''),
     email_change_confirm_status = COALESCE(email_change_confirm_status, 0);
