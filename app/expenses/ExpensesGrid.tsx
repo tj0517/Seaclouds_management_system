@@ -23,7 +23,7 @@ import { cn } from '@/lib/utils'
 import {
     createExpenseTable, updateExpenseTable, deleteExpenseTable,
     saveExpenseEntry, updateExpenseEntry, deleteExpenseEntry,
-    uploadReceipt, getReceiptUrl, deleteReceipt,
+    getReceiptUploadUrl, confirmReceiptUpload, getReceiptUrl, deleteReceipt,
     submitExpenseTable, withdrawExpenseSubmission,
     generateExpensePdf,
 } from '@/app/data/actions'
@@ -41,7 +41,7 @@ const EXPENSE_TYPES = [
     { value: 'mileage', label: 'E_015 Mileage' },
     { value: 'lodging', label: 'E_20 Lodging, Hotel' },
     { value: 'meals', label: 'E_30 Meals' },
-    { value: 'other', label: 'N/A' },
+    { value: 'other', label: 'OTHER' },
 ] as const
 
 const CURRENCIES = ['PLN', 'EUR', 'USD', 'GBP'] as const
@@ -642,16 +642,31 @@ function ReceiptActions({ entryId, hasReceipt, readOnly = false }: { entryId: st
         const file = e.target.files?.[0]
         if (!file) return
         setUploading(true)
-        const formData = new FormData()
-        formData.append('file', file)
-        const result = await uploadReceipt(entryId, formData)
-        setUploading(false)
-        if ('error' in result) toast.error(result.error)
-        else {
+        try {
+            // Step 1: get signed upload URL (small server action, no file data)
+            const urlResult = await getReceiptUploadUrl(entryId, file.name)
+            if ('error' in urlResult) { toast.error(urlResult.error); return }
+
+            // Step 2: upload directly to Supabase Storage from browser
+            const uploadRes = await fetch(urlResult.signedUrl, {
+                method: 'PUT',
+                headers: { 'Content-Type': file.type },
+                body: file,
+            })
+            if (!uploadRes.ok) { toast.error(`Upload failed: ${uploadRes.statusText}`); return }
+
+            // Step 3: confirm upload, save path to DB
+            const confirmResult = await confirmReceiptUpload(entryId, urlResult.storagePath)
+            if ('error' in confirmResult) { toast.error(confirmResult.error); return }
+
             toast.success('Receipt uploaded')
             router.refresh()
+        } catch (err: any) {
+            toast.error(err.message || 'Upload failed')
+        } finally {
+            setUploading(false)
+            if (fileRef.current) fileRef.current.value = ''
         }
-        if (fileRef.current) fileRef.current.value = ''
     }
 
     const handleView = async () => {
@@ -722,7 +737,7 @@ function AddEntryDialog({ tableId, tableStartDate, tableEndDate }: { tableId: st
     const [currency, setCurrency] = useState('PLN')
     const [amount, setAmount] = useState('')
     const [km, setKm] = useState('')
-    const [kmRate, setKmRate] = useState('0.8358')
+    const [kmRate, setKmRate] = useState('1.15')
 
     const isPersonalCar = type === 'mileage'
     const computedAmount = isPersonalCar && km && kmRate
@@ -738,7 +753,7 @@ function AddEntryDialog({ tableId, tableStartDate, tableEndDate }: { tableId: st
         setCurrency('PLN')
         setAmount('')
         setKm('')
-        setKmRate('0.8358')
+        setKmRate('1.15')
     }
 
     const handleSave = async () => {
@@ -775,12 +790,20 @@ function AddEntryDialog({ tableId, tableStartDate, tableEndDate }: { tableId: st
             return
         }
 
-        // Upload receipt if file selected
+        // Upload receipt if file selected (direct to Supabase Storage)
         const file = fileRef.current?.files?.[0]
         if (file && result.id) {
-            const formData = new FormData()
-            formData.append('file', file)
-            await uploadReceipt(result.id, formData)
+            const urlResult = await getReceiptUploadUrl(result.id, file.name)
+            if (!('error' in urlResult)) {
+                const uploadRes = await fetch(urlResult.signedUrl, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': file.type },
+                    body: file,
+                })
+                if (uploadRes.ok) {
+                    await confirmReceiptUpload(result.id, urlResult.storagePath)
+                }
+            }
         }
 
         setLoading(false)
@@ -981,7 +1004,7 @@ function EditEntryDialog({ entry, tableStartDate, tableEndDate }: { entry: Expen
     const [currency, setCurrency] = useState(entry.currency)
     const [amount, setAmount] = useState(String(entry.amount))
     const [km, setKm] = useState(entry.km != null ? String(entry.km) : '')
-    const [kmRate, setKmRate] = useState(entry.km_rate != null ? String(entry.km_rate) : '0.8358')
+    const [kmRate, setKmRate] = useState(entry.km_rate != null ? String(entry.km_rate) : '1.15')
 
     const isPersonalCar = type === 'mileage'
     const computedAmount = isPersonalCar && km && kmRate

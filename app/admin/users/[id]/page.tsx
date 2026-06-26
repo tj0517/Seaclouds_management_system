@@ -1,5 +1,6 @@
 
 import { getProjects, getUserAssignments, getUsers, fetchSubProjects, getUserSubProjectAssignments } from '@/app/data/actions'
+import { getSupabaseAdmin } from '@/utils/supabase/admin'
 import UserDetailsClient from './userDetailsClient'
 
 export default async function UserDetailsPage({
@@ -11,12 +12,15 @@ export default async function UserDetailsPage({
   const { id } = await params;
   const userId = id;
 
-  const [projects, assignedProjectIds, users, userSubProjectIds] = await Promise.all([
+  const [projects, assignedProjectIds, users, userSubProjectIds, authUser] = await Promise.all([
     getProjects(),
     getUserAssignments(userId),
     getUsers(),
-    getUserSubProjectAssignments(userId)
+    getUserSubProjectAssignments(userId),
+    getSupabaseAdmin().auth.admin.getUserById(userId),
   ])
+
+  const userEmail = authUser.data?.user?.email || null
 
   // Fetch sub-projects for all assigned projects
   const subProjectsByProject: Record<string, { id: string; code: string; description: string | null; is_active: boolean | null; project_id: string }[]> = {}
@@ -37,6 +41,7 @@ export default async function UserDetailsPage({
       assignedProjectIds={assignedProjectIds}
       subProjectsByProject={subProjectsByProject}
       userSubProjectIds={userSubProjectIds}
+      userEmail={userEmail}
     />
   )
 }

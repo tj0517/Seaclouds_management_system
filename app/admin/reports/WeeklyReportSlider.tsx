@@ -2,10 +2,12 @@
 
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ChevronLeft, ChevronRight, CheckCircle2, Undo2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, CheckCircle2, Undo2, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from '@/components/ui/dialog'
+import { Textarea } from '@/components/ui/textarea'
 import { adminWithdrawSubmission } from '@/app/data/actions/timesheet'
 import { toast } from 'sonner'
 
@@ -18,7 +20,7 @@ export type UserRow = {
   dailyHours: Record<string, number>
   weekTotal: number
   earnings: number
-  contractCode: string
+  serviceOrder: string
 }
 
 export type SubProjectData = {
@@ -62,7 +64,7 @@ type AggregatedUser = {
   total: number
   isSubmitted: boolean
   earnings: number
-  contractCodes: Record<string, string> // weekStart -> contractCode
+  serviceOrders: Record<string, string> // weekStart -> serviceOrder
 }
 
 type AggregatedSubProject = {
@@ -92,7 +94,7 @@ function buildAggregatedProjects(weeks: WeekData[]): AggregatedProject[] {
     subProjectMap: Map<string, {
       description: string | null
       trackingType?: 'hours' | 'days'
-      userMap: Map<string, { weeklyHours: Record<string, number>; total: number; isSubmitted: boolean; earnings: number; contractCodes: Record<string, string> }>
+      userMap: Map<string, { weeklyHours: Record<string, number>; total: number; isSubmitted: boolean; earnings: number; serviceOrders: Record<string, string> }>
     }>
     weeklyTotals: Record<string, number>
     weeklyTotalsHours: Record<string, number>
@@ -129,14 +131,14 @@ function buildAggregatedProjects(weeks: WeekData[]): AggregatedProject[] {
         for (const user of sp.users) {
           let uEntry = spEntry.userMap.get(user.userName)
           if (!uEntry) {
-            uEntry = { weeklyHours: {}, total: 0, isSubmitted: true, earnings: 0, contractCodes: {} }
+            uEntry = { weeklyHours: {}, total: 0, isSubmitted: true, earnings: 0, serviceOrders: {} }
             spEntry.userMap.set(user.userName, uEntry)
           }
           uEntry.weeklyHours[week.weekStart] = (uEntry.weeklyHours[week.weekStart] ?? 0) + user.weekTotal
           uEntry.total += user.weekTotal
           uEntry.earnings += user.earnings
+          if (user.serviceOrder) uEntry.serviceOrders[week.weekStart] = user.serviceOrder
           if (!user.isSubmitted) uEntry.isSubmitted = false
-          if (user.contractCode) uEntry.contractCodes[week.weekStart] = user.contractCode
         }
       }
     }
@@ -162,7 +164,7 @@ function buildAggregatedProjects(weeks: WeekData[]): AggregatedProject[] {
         total: u.total,
         isSubmitted: u.isSubmitted,
         earnings: u.earnings,
-        contractCodes: u.contractCodes,
+        serviceOrders: u.serviceOrders,
       })),
     })),
   }))
@@ -171,19 +173,23 @@ function buildAggregatedProjects(weeks: WeekData[]): AggregatedProject[] {
 function StatusCell({ userRow, weekStart }: { userRow: UserRow; weekStart: string }) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
-  const [withdrawn, setWithdrawn] = useState(false)
+  const [rejected, setRejected] = useState(false)
+  const [rejectOpen, setRejectOpen] = useState(false)
+  const [rejectReason, setRejectReason] = useState('')
 
-  if (!userRow.isSubmitted || withdrawn) {
+  if (!userRow.isSubmitted || rejected) {
     return <Badge variant="outline" className="text-amber-600 border-amber-300">Pending</Badge>
   }
 
-  const handleWithdraw = async () => {
+  const handleReject = async () => {
     setLoading(true)
-    const result = await adminWithdrawSubmission(userRow.userId, weekStart, userRow.subProjectId)
+    const result = await adminWithdrawSubmission(userRow.userId, weekStart, userRow.subProjectId, rejectReason)
     setLoading(false)
     if (result.success) {
-      setWithdrawn(true)
-      toast.success(`Withdrawn submission for ${userRow.userName}`)
+      setRejected(true)
+      setRejectOpen(false)
+      setRejectReason('')
+      toast.success(`Rejected submission for ${userRow.userName}`)
       router.refresh()
     } else if (result.error) {
       toast.error(result.error)
@@ -195,14 +201,37 @@ function StatusCell({ userRow, weekStart }: { userRow: UserRow; weekStart: strin
       <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-100">
         <CheckCircle2 className="h-3 w-3 mr-1" /> Submitted
       </Badge>
-      <button
-        onClick={handleWithdraw}
-        disabled={loading}
-        title="Withdraw submission"
-        className="text-amber-500 hover:text-amber-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-      >
-        <Undo2 className="h-3.5 w-3.5" />
-      </button>
+      <Dialog open={rejectOpen} onOpenChange={setRejectOpen}>
+        <DialogTrigger asChild>
+          <button
+            title="Reject submission"
+            className="text-amber-500 hover:text-amber-700 transition-colors"
+          >
+            <Undo2 className="h-3.5 w-3.5" />
+          </button>
+        </DialogTrigger>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reject Timesheet</DialogTitle>
+            <DialogDescription>
+              Reject the timesheet submission for <strong>{userRow.userName}</strong>, week starting {weekStart}. The employee will be notified and can resubmit.
+            </DialogDescription>
+          </DialogHeader>
+          <Textarea
+            placeholder="Reason for rejection (optional)"
+            value={rejectReason}
+            onChange={(e) => setRejectReason(e.target.value)}
+            rows={3}
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRejectOpen(false)}>Cancel</Button>
+            <Button variant="destructive" onClick={handleReject} disabled={loading}>
+              {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Reject
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
@@ -346,16 +375,11 @@ export default function WeeklyReportSlider({ weeks }: { weeks: WeekData[] }) {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {(() => {
-                      const totalUserRows = project.subProjects.reduce((s, sp) => s + sp.users.length, 0)
-                      const uniqueCodes = [...new Set(Object.values(project.serviceOrders ?? {}))].filter(Boolean)
-                      const serviceOrderLabel = uniqueCodes.length > 0 ? uniqueCodes.join(', ') : '—'
-                      let isFirstRow = true
-                      return project.subProjects.map(sp =>
-                        sp.users.map((user, idx) => {
-                          const showServiceOrder = isFirstRow
-                          if (isFirstRow) isFirstRow = false
-                          return (
+                    {project.subProjects.map(sp =>
+                      sp.users.map((user, idx) => {
+                        const userServiceCodes = [...new Set(Object.values(user.serviceOrders ?? {}))].filter(Boolean)
+                        const userServiceLabel = userServiceCodes.length > 0 ? userServiceCodes.join(', ') : '—'
+                        return (
                         <tr key={`${sp.code}-${user.userName}`} className="hover:bg-gray-50">
                           {idx === 0 && (
                             <td className="px-3 py-2 font-mono text-xs text-blue-700 font-semibold align-top" rowSpan={sp.users.length}>
@@ -367,11 +391,9 @@ export default function WeeklyReportSlider({ weeks }: { weeks: WeekData[] }) {
                               {sp.description || '—'}
                             </td>
                           )}
-                          {showServiceOrder && (
-                            <td className="px-3 py-2 font-mono text-xs text-purple-700 font-semibold align-top" rowSpan={totalUserRows}>
-                              {serviceOrderLabel}
-                            </td>
-                          )}
+                          <td className="px-3 py-2 font-mono text-xs text-purple-700 font-semibold">
+                            {userServiceLabel}
+                          </td>
                           <td className="px-3 py-2">
                             <div className="flex items-center gap-2">
                               <div className="h-6 w-6 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-bold flex-shrink-0">
@@ -394,11 +416,8 @@ export default function WeeklyReportSlider({ weeks }: { weeks: WeekData[] }) {
                             )}
                           </td>
                         </tr>
-                          )
-                        })
-                      )
-                    })()
-                    }
+                        )})
+                    )}
                     {/* Project subtotal */}
                     <tr className="bg-gray-50 font-semibold border-t-2 border-gray-200">
                       <td colSpan={4} className="px-3 py-2 text-right text-xs text-gray-500 uppercase tracking-wide">Project Total</td>
@@ -437,7 +456,6 @@ export default function WeeklyReportSlider({ weeks }: { weeks: WeekData[] }) {
                       <th className="text-left px-3 py-2 font-medium text-gray-600 w-40">Description</th>
                       <th className="text-left px-3 py-2 font-medium text-gray-600 w-36">Service Order</th>
                       <th className="text-left px-3 py-2 font-medium text-gray-600">Employee</th>
-                      <th className="text-left px-3 py-2 font-medium text-gray-600 w-36">Contract code</th>
                       {week.days.map(d => (
                         <th
                           key={d.key}
@@ -453,14 +471,8 @@ export default function WeeklyReportSlider({ weeks }: { weeks: WeekData[] }) {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {(() => {
-                      const totalUserRows = project.subProjects.reduce((s, sp) => s + sp.users.length, 0)
-                      let isFirstRow = true
-                      return project.subProjects.map(sp =>
-                        sp.users.map((userRow, idx) => {
-                          const showServiceOrder = isFirstRow
-                          if (isFirstRow) isFirstRow = false
-                          return (
+                    {project.subProjects.map(sp =>
+                      sp.users.map((userRow, idx) => (
                         <tr key={`${sp.code}-${userRow.userName}`} className="hover:bg-gray-50">
                           {idx === 0 && (
                             <td className="px-3 py-2 font-mono text-xs text-blue-700 font-semibold align-top" rowSpan={sp.users.length}>
@@ -472,11 +484,9 @@ export default function WeeklyReportSlider({ weeks }: { weeks: WeekData[] }) {
                               {sp.description || '—'}
                             </td>
                           )}
-                          {showServiceOrder && (
-                            <td className="px-3 py-2 font-mono text-xs text-purple-700 font-semibold align-top" rowSpan={totalUserRows}>
-                              {project.serviceOrder || '—'}
-                            </td>
-                          )}
+                          <td className="px-3 py-2 font-mono text-xs text-purple-700 font-semibold">
+                            {userRow.serviceOrder || '—'}
+                          </td>
                           <td className="px-3 py-2">
                             <div className="flex items-center gap-2">
                               <div className="h-6 w-6 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-bold flex-shrink-0">
@@ -484,9 +494,6 @@ export default function WeeklyReportSlider({ weeks }: { weeks: WeekData[] }) {
                               </div>
                               {userRow.userName}
                             </div>
-                          </td>
-                          <td className="px-3 py-2 text-xs text-gray-600 font-mono">
-                            {userRow.contractCode || <span className="text-gray-300">—</span>}
                           </td>
                           {week.days.map(d => {
                             const unit = (userRow.trackingType ?? sp.trackingType) === 'days' ? 'd' : 'h'
@@ -506,11 +513,8 @@ export default function WeeklyReportSlider({ weeks }: { weeks: WeekData[] }) {
                             <StatusCell userRow={userRow} weekStart={week.weekStart} />
                           </td>
                         </tr>
-                          )
-                        })
-                      )
-                    })()
-                    }
+                      ))
+                    )}
                     {/* Project subtotal */}
                     <tr className="bg-gray-50 font-semibold border-t-2 border-gray-200">
                       <td colSpan={4} className="px-3 py-2 text-right text-xs text-gray-500 uppercase tracking-wide">Project Total</td>
@@ -558,7 +562,6 @@ export default function WeeklyReportSlider({ weeks }: { weeks: WeekData[] }) {
                       <th className="text-left px-3 py-2 font-medium text-gray-600 w-40">Description</th>
                       <th className="text-left px-3 py-2 font-medium text-gray-600 w-36">Service Order</th>
                       <th className="text-left px-3 py-2 font-medium text-gray-600">Employee</th>
-                      <th className="text-left px-3 py-2 font-medium text-gray-600 w-36">Contract code</th>
                       {weeks.map(w => (
                         <th key={w.weekStart} className="text-center px-2 py-2 font-medium text-gray-600 whitespace-nowrap">
                           <div className="text-xs">{w.weekStartLabel}</div>
@@ -571,17 +574,11 @@ export default function WeeklyReportSlider({ weeks }: { weeks: WeekData[] }) {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {(() => {
-                      const totalUserRows = project.subProjects.reduce((s, sp) => s + sp.users.length, 0)
-                      // Compute aggregated service order display for week view
-                      const uniqueCodes = [...new Set(Object.values(project.serviceOrders ?? {}))].filter(Boolean)
-                      const serviceOrderLabel = uniqueCodes.length > 0 ? uniqueCodes.join(', ') : '—'
-                      let isFirstRow = true
-                      return project.subProjects.map(sp =>
-                        sp.users.map((user, idx) => {
-                          const showServiceOrder = isFirstRow
-                          if (isFirstRow) isFirstRow = false
-                          return (
+                    {project.subProjects.map(sp =>
+                      sp.users.map((user, idx) => {
+                        const userServiceCodes = [...new Set(Object.values(user.serviceOrders ?? {}))].filter(Boolean)
+                        const userServiceLabel = userServiceCodes.length > 0 ? userServiceCodes.join(', ') : '—'
+                        return (
                         <tr key={`${sp.code}-${user.userName}`} className="hover:bg-gray-50">
                           {idx === 0 && (
                             <td className="px-3 py-2 font-mono text-xs text-blue-700 font-semibold align-top" rowSpan={sp.users.length}>
@@ -593,11 +590,9 @@ export default function WeeklyReportSlider({ weeks }: { weeks: WeekData[] }) {
                               {sp.description || '—'}
                             </td>
                           )}
-                          {showServiceOrder && (
-                            <td className="px-3 py-2 font-mono text-xs text-purple-700 font-semibold align-top" rowSpan={totalUserRows}>
-                              {serviceOrderLabel}
-                            </td>
-                          )}
+                          <td className="px-3 py-2 font-mono text-xs text-purple-700 font-semibold">
+                            {userServiceLabel}
+                          </td>
                           <td className="px-3 py-2">
                             <div className="flex items-center gap-2">
                               <div className="h-6 w-6 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-bold flex-shrink-0">
@@ -605,12 +600,6 @@ export default function WeeklyReportSlider({ weeks }: { weeks: WeekData[] }) {
                               </div>
                               {user.userName}
                             </div>
-                          </td>
-                          <td className="px-3 py-2 text-xs text-gray-600 font-mono">
-                            {(() => {
-                              const codes = [...new Set(Object.values(user.contractCodes))]
-                              return codes.length > 0 ? codes.join(', ') : <span className="text-gray-300">—</span>
-                            })()}
                           </td>
                           {weeks.map(w => {
                             const h = user.weeklyHours[w.weekStart] ?? 0
@@ -637,11 +626,8 @@ export default function WeeklyReportSlider({ weeks }: { weeks: WeekData[] }) {
                             )}
                           </td>
                         </tr>
-                          )
-                        })
-                      )
-                    })()
-                    }
+                        )})
+                    )}
                     {/* Project subtotal */}
                     <tr className="bg-gray-50 font-semibold border-t-2 border-gray-200">
                       <td colSpan={4} className="px-3 py-2 text-right text-xs text-gray-500 uppercase tracking-wide">Project Total</td>

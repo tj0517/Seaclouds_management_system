@@ -5,7 +5,7 @@ import { toast } from "sonner"
 import AssignmentCheckbox from './assignmentCheckbox'
 import SubProjectAssignmentCheckbox from './subProjectAssignmentCheckbox'
 import Link from 'next/link'
-import { ArrowLeft, ShieldOff, ChevronDown, ChevronRight } from 'lucide-react'
+import { ArrowLeft, ShieldOff, ChevronDown, ChevronRight, Pencil, Mail } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -20,7 +20,7 @@ import {
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Database } from '@/utils/supabase/types'
-import { deactivateUser, updateUserProfile } from '@/app/data/actions'
+import { deactivateUser, updateUserProfile, changeUserEmail } from '@/app/data/actions'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -49,6 +49,7 @@ interface UserDetailsClientProps {
     assignedProjectIds: string[]
     subProjectsByProject: Record<string, SubProject[]>
     userSubProjectIds: string[]
+    userEmail: string | null
 }
 
 export default function UserDetailsClient({
@@ -57,10 +58,14 @@ export default function UserDetailsClient({
     projects,
     assignedProjectIds,
     subProjectsByProject,
-    userSubProjectIds
+    userSubProjectIds,
+    userEmail
 }: UserDetailsClientProps) {
     const [isPending, startTransition] = useTransition()
     const [deactivateOpen, setDeactivateOpen] = useState(false)
+    const [emailChangeOpen, setEmailChangeOpen] = useState(false)
+    const [editingEmail, setEditingEmail] = useState(false)
+    const [newEmail, setNewEmail] = useState(userEmail || '')
     const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>({})
     const router = useRouter()
 
@@ -109,6 +114,25 @@ export default function UserDetailsClient({
         })
     }
 
+    const handleEmailChange = () => {
+        if (!newEmail || newEmail === userEmail) return
+        setEmailChangeOpen(true)
+    }
+
+    const confirmEmailChange = () => {
+        startTransition(async () => {
+            const result = await changeUserEmail(userId, newEmail)
+            if (result.error) {
+                toast.error(`Error: ${result.error}`)
+            } else {
+                toast.success('Email changed successfully')
+                setEditingEmail(false)
+                router.refresh()
+            }
+            setEmailChangeOpen(false)
+        })
+    }
+
     return (
         <>
         <div className="space-y-6">
@@ -138,6 +162,35 @@ export default function UserDetailsClient({
                             </div>
                         </CardHeader>
                         <CardContent className="space-y-4">
+                            <div className="space-y-2">
+                                <Label>Email</Label>
+                                {editingEmail ? (
+                                    <div className="flex gap-2">
+                                        <Input
+                                            type="email"
+                                            value={newEmail}
+                                            onChange={(e) => setNewEmail(e.target.value)}
+                                            placeholder="user@example.com"
+                                        />
+                                        <Button size="sm" onClick={handleEmailChange} disabled={isPending || !newEmail || newEmail === userEmail}>
+                                            Save
+                                        </Button>
+                                        <Button size="sm" variant="ghost" onClick={() => { setEditingEmail(false); setNewEmail(userEmail || '') }} disabled={isPending}>
+                                            Cancel
+                                        </Button>
+                                    </div>
+                                ) : (
+                                    <div className="flex items-center justify-between gap-2">
+                                        <span className="text-sm text-muted-foreground flex items-center gap-2">
+                                            <Mail className="h-3.5 w-3.5" />
+                                            {userEmail || 'No email'}
+                                        </span>
+                                        <Button size="sm" variant="ghost" onClick={() => setEditingEmail(true)}>
+                                            <Pencil className="h-3.5 w-3.5" />
+                                        </Button>
+                                    </div>
+                                )}
+                            </div>
                             <div className="space-y-2">
                                 <Label htmlFor="full-name">Full Name</Label>
                                 <Input
@@ -315,6 +368,25 @@ export default function UserDetailsClient({
                     </Button>
                     <Button variant="outline" className="border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 hover:text-amber-800" onClick={handleDeactivate} disabled={isPending}>
                         {isPending ? 'Revoking...' : 'Revoke Access'}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+
+        <Dialog open={emailChangeOpen} onOpenChange={setEmailChangeOpen}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Change User Email</DialogTitle>
+                    <DialogDescription>
+                        This will change the login email for <strong>{currentUser?.full_name || 'this user'}</strong> from <strong>{userEmail}</strong> to <strong>{newEmail}</strong>. The user will need to use the new email to sign in. All existing data will be preserved.
+                    </DialogDescription>
+                </DialogHeader>
+                <DialogFooter>
+                    <Button variant="outline" onClick={() => setEmailChangeOpen(false)} disabled={isPending}>
+                        Cancel
+                    </Button>
+                    <Button onClick={confirmEmailChange} disabled={isPending}>
+                        {isPending ? 'Changing...' : 'Confirm Change'}
                     </Button>
                 </DialogFooter>
             </DialogContent>

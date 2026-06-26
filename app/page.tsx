@@ -53,14 +53,14 @@ export default async function Home(props: Props) {
 
   const submissionStatuses = await Promise.all(
     subProjects.map(async (sp) => {
-      const isSubmitted = await isWeekSubmitted(
+      const status = await isWeekSubmitted(
         format(weekStart, 'yyyy-MM-dd'),
         sp.id
       )
-      return { [sp.id]: isSubmitted }
+      return { [sp.id]: status }
     })
   )
-  const initialSubmissionStatus = Object.assign({}, ...submissionStatuses)
+  const initialSubmissionStatus: Record<string, { status: string; rejectReason: string | null } | null> = Object.assign({}, ...submissionStatuses)
 
   const contractCodes = await getWeeklyContractCodes(user.id, format(weekStart, 'yyyy-MM-dd'))
 

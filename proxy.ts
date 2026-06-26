@@ -31,7 +31,24 @@ export async function proxy(request: NextRequest) {
 
   // 3. Pobieramy użytkownika (tylko RAZ)
   // UWAGA: To wywołanie odświeża też token w ciasteczkach jeśli trzeba
-  const { data: { user } } = await supabase.auth.getUser()
+  let user = null
+  try {
+    const { data } = await supabase.auth.getUser()
+    user = data.user
+  } catch (e: any) {
+    // Invalid/corrupted JWT (e.g. Safari cookie truncation) — clear auth cookies and redirect to login
+    if (e?.message?.includes('JWS') || e?.message?.includes('Compact') || e?.code === 'bad_jwt') {
+      const loginUrl = new URL('/login', request.url)
+      const redirectResponse = NextResponse.redirect(loginUrl)
+      // Delete all Supabase auth cookies
+      for (const cookie of request.cookies.getAll()) {
+        if (cookie.name.includes('auth-token')) {
+          redirectResponse.cookies.delete(cookie.name)
+        }
+      }
+      return redirectResponse
+    }
+  }
 
   // 4. Ochrona tras
   // Jeśli nie ma usera I nie jesteśmy na stronie logowania -> przekieruj

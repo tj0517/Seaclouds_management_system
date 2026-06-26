@@ -183,6 +183,31 @@ export async function changePassword(currentPassword: string, newPassword: strin
     return { success: true }
 }
 
+export async function changeUserEmail(userId: string, newEmail: string) {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return { error: 'No session' }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!newEmail || !emailRegex.test(newEmail)) return { error: 'Invalid email format' }
+
+    // Fetch current email to check it's different
+    const { data: targetUser, error: fetchError } = await getSupabaseAdmin().auth.admin.getUserById(userId)
+    if (fetchError || !targetUser?.user) return { error: fetchError?.message || 'User not found' }
+    if (targetUser.user.email === newEmail) return { error: 'New email is the same as current email' }
+
+    const { error } = await getSupabaseAdmin().auth.admin.updateUserById(userId, {
+        email: newEmail,
+        email_confirm: true,
+    })
+
+    if (error) return { error: error.message }
+
+    revalidatePath(`/admin/users/${userId}`)
+    revalidatePath('/admin/users')
+    return { success: true }
+}
+
 export async function deactivateUser(userId: string) {
     try {
         // Use admin client to bypass RLS

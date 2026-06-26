@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.5"
+    PostgrestVersion: "14.1"
   }
   public: {
     Tables: {
@@ -79,6 +79,7 @@ export type Database = {
       expense_tables: {
         Row: {
           created_at: string
+          decline_reason: string | null
           end_date: string | null
           id: string
           project_id: string
@@ -92,6 +93,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          decline_reason?: string | null
           end_date?: string | null
           id?: string
           project_id: string
@@ -105,6 +107,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          decline_reason?: string | null
           end_date?: string | null
           id?: string
           project_id?: string
@@ -371,12 +374,20 @@ export type Database = {
             referencedRelation: "sub_projects"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "timesheet_entries_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
         ]
       }
       timesheet_submissions: {
         Row: {
           created_at: string | null
           id: string
+          reject_reason: string | null
           status: string
           sub_project_id: string
           user_id: string
@@ -385,6 +396,7 @@ export type Database = {
         Insert: {
           created_at?: string | null
           id?: string
+          reject_reason?: string | null
           status?: string
           sub_project_id: string
           user_id: string
@@ -393,6 +405,7 @@ export type Database = {
         Update: {
           created_at?: string | null
           id?: string
+          reject_reason?: string | null
           status?: string
           sub_project_id?: string
           user_id?: string
@@ -511,6 +524,7 @@ export type Database = {
     Functions: {
       is_admin: { Args: never; Returns: boolean }
       is_week_locked:
+        | { Args: { entry_date: string; entry_user: string }; Returns: boolean }
         | {
             Args: {
               entry_date: string
@@ -519,21 +533,20 @@ export type Database = {
             }
             Returns: boolean
           }
-        | { Args: { entry_date: string; entry_user: string }; Returns: boolean }
     }
     Enums: {
       expense_currency: "PLN" | "EUR" | "USD" | "GBP"
       expense_type:
-        | "plane_ticket"
         | "taxi"
-        | "bus"
-        | "train"
-        | "mileage"
         | "lodging"
         | "meals"
+        | "plane_ticket"
         | "parking"
         | "office_supplies"
+        | "mileage"
         | "other"
+        | "bus"
+        | "train"
       user_role: "admin" | "employee"
     }
     CompositeTypes: {
@@ -664,16 +677,16 @@ export const Constants = {
     Enums: {
       expense_currency: ["PLN", "EUR", "USD", "GBP"],
       expense_type: [
-        "plane_ticket",
         "taxi",
-        "bus",
-        "train",
-        "mileage",
         "lodging",
         "meals",
+        "plane_ticket",
         "parking",
         "office_supplies",
+        "mileage",
         "other",
+        "bus",
+        "train",
       ],
       user_role: ["admin", "employee"],
     },

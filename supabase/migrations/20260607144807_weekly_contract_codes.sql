@@ -1,4 +1,5 @@
-CREATE TABLE weekly_contract_codes (
+-- Skip if already created by base migration
+CREATE TABLE IF NOT EXISTS weekly_contract_codes (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id UUID NOT NULL REFERENCES auth.users(id),
   project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -10,8 +11,12 @@ CREATE TABLE weekly_contract_codes (
 
 ALTER TABLE weekly_contract_codes ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Users manage own contract codes" ON weekly_contract_codes
-  FOR ALL USING (auth.uid() = user_id);
+DO $$ BEGIN
+  CREATE POLICY "Users manage own contract codes" ON weekly_contract_codes FOR ALL USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Admins read all" ON weekly_contract_codes
-  FOR SELECT USING (is_admin());
+DO $$ BEGIN
+  CREATE POLICY "Admins read all" ON weekly_contract_codes FOR SELECT USING (is_admin());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;

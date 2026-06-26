@@ -70,6 +70,32 @@ export async function sendExpenseApprovedNotification({
     })
 }
 
+export async function sendTimesheetWithdrawNotification({
+    employeeEmail,
+    employeeName,
+    subProjectCode,
+    weekStart,
+    reason,
+}: {
+    employeeEmail: string
+    employeeName: string
+    subProjectCode: string
+    weekStart: string
+    reason: string
+}) {
+    await resend.emails.send({
+        from: 'Seaclouds Timesheets <onboarding@resend.dev>',
+        to: [employeeEmail],
+        subject: `Timesheet rejected — ${subProjectCode}, week ${weekStart}`,
+        html: `
+            <p>Hi <strong>${employeeName}</strong>,</p>
+            <p>Your timesheet for sub-project <strong>${subProjectCode}</strong>, week starting <strong>${weekStart}</strong>, has been <strong style="color: #dc2626;">rejected</strong> by an admin.</p>
+            ${reason ? `<p><strong>Reason:</strong></p><blockquote style="border-left: 3px solid #e5e7eb; padding-left: 12px; color: #4b5563;">${reason}</blockquote>` : ''}
+            <p>Please log in to review and resubmit your timesheet.</p>
+        `,
+    })
+}
+
 export async function sendExpenseDeclineNotification({
     employeeEmail,
     employeeName,
