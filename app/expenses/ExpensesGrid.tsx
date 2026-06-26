@@ -738,7 +738,7 @@ function AddEntryDialog({ tableId, tableStartDate, tableEndDate }: { tableId: st
         setCurrency('PLN')
         setAmount('')
         setKm('')
-        setKmRate('0.8358')
+        setKmRate('1.15')
     }
 
     const handleSave = async () => {
@@ -981,7 +981,7 @@ function EditEntryDialog({ entry, tableStartDate, tableEndDate }: { entry: Expen
     const [currency, setCurrency] = useState(entry.currency)
     const [amount, setAmount] = useState(String(entry.amount))
     const [km, setKm] = useState(entry.km != null ? String(entry.km) : '')
-    const [kmRate, setKmRate] = useState(entry.km_rate != null ? String(entry.km_rate) : '0.8358')
+    const [kmRate, setKmRate] = useState(entry.km_rate != null ? String(entry.km_rate) : '1.15')
 
     const isPersonalCar = type === 'mileage'
     const computedAmount = isPersonalCar && km && kmRate

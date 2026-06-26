@@ -381,8 +381,17 @@ export async function uploadReceipt(entryId: string, formData: FormData) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return { error: 'No session' }
 
-    const parentStatus = await getTableStatusForEntry(supabase, entryId)
-    if (parentStatus === 'submitted' || parentStatus === 'approved') return { error: 'Cannot modify a submitted or approved expense table' }
+    // Verify ownership: entry must belong to this user's expense table
+    const { data: entry } = await (getSupabaseAdmin() as any)
+        .from('expense_entries')
+        .select('id, expense_tables ( user_id, status )')
+        .eq('id', entryId)
+        .single()
+
+    if (!entry) return { error: 'Entry not found' }
+    if (entry.expense_tables?.user_id !== user.id) return { error: 'Access denied' }
+    const status = entry.expense_tables?.status
+    if (status === 'submitted' || status === 'approved') return { error: 'Cannot modify a submitted or approved expense table' }
 
     const file = formData.get('file') as File
     if (!file) return { error: 'No file provided' }
@@ -404,8 +413,7 @@ export async function uploadReceipt(entryId: string, formData: FormData) {
 
     if (uploadError) return { error: `Upload failed: ${uploadError.message}` }
 
-    // Update entry with receipt path
-    const { error: updateError } = await (supabase as any)
+    const { error: updateError } = await (adminClient as any)
         .from('expense_entries')
         .update({ receipt_path: storagePath })
         .eq('id', entryId)
