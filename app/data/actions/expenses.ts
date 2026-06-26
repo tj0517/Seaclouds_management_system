@@ -376,12 +376,15 @@ export async function deleteExpenseEntry(id: string) {
     return { success: true }
 }
 
-export async function uploadReceipt(entryId: string, formData: FormData) {
+/**
+ * Step 1: Get a signed upload URL for a receipt. No file data goes through the server action.
+ */
+export async function getReceiptUploadUrl(entryId: string, fileName: string) {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return { error: 'No session' }
 
-    // Verify ownership: entry must belong to this user's expense table
+    // Verify ownership
     const { data: entry } = await (getSupabaseAdmin() as any)
         .from('expense_entries')
         .select('id, expense_tables ( user_id, status )')
@@ -393,27 +396,43 @@ export async function uploadReceipt(entryId: string, formData: FormData) {
     const status = entry.expense_tables?.status
     if (status === 'submitted' || status === 'approved') return { error: 'Cannot modify a submitted or approved expense table' }
 
-    const file = formData.get('file') as File
-    if (!file) return { error: 'No file provided' }
-
-    const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
+    const ext = fileName.split('.').pop()?.toLowerCase() || 'jpg'
     const storagePath = `receipts/${user.id}/${entryId}.${ext}`
 
     const adminClient = getSupabaseAdmin()
 
-    const arrayBuffer = await file.arrayBuffer()
-    const buffer = Buffer.from(arrayBuffer)
-
-    const { error: uploadError } = await adminClient.storage
+    // Create signed upload URL (valid 60s)
+    const { data, error } = await adminClient.storage
         .from('expense-receipts')
-        .upload(storagePath, buffer, {
-            contentType: file.type,
-            upsert: true,
-        })
+        .createSignedUploadUrl(storagePath, { upsert: true })
 
-    if (uploadError) return { error: `Upload failed: ${uploadError.message}` }
+    if (error) return { error: `Failed to create upload URL: ${error.message}` }
 
-    const { error: updateError } = await (adminClient as any)
+    return { signedUrl: data.signedUrl, storagePath }
+}
+
+/**
+ * Step 2: After client-side upload completes, save the receipt path to the entry.
+ */
+export async function confirmReceiptUpload(entryId: string, storagePath: string) {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return { error: 'No session' }
+
+    // Verify ownership
+    const { data: entry } = await (getSupabaseAdmin() as any)
+        .from('expense_entries')
+        .select('id, expense_tables ( user_id )')
+        .eq('id', entryId)
+        .single()
+
+    if (!entry) return { error: 'Entry not found' }
+    if (entry.expense_tables?.user_id !== user.id) return { error: 'Access denied' }
+
+    // Verify the path matches the user
+    if (!storagePath.startsWith(`receipts/${user.id}/`)) return { error: 'Invalid path' }
+
+    const { error: updateError } = await (getSupabaseAdmin() as any)
         .from('expense_entries')
         .update({ receipt_path: storagePath })
         .eq('id', entryId)
@@ -421,7 +440,7 @@ export async function uploadReceipt(entryId: string, formData: FormData) {
     if (updateError) return { error: updateError.message }
 
     revalidatePath('/expenses')
-    return { success: true, path: storagePath }
+    return { success: true }
 }
 
 export async function getReceiptUrl(entryId: string) {
