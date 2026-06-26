@@ -182,6 +182,8 @@ export default async function ReportsPage(props: Props) {
                   const weekTotal = week.days.reduce((s, d) => s + (u.dailyBreakdown[d] ?? 0), 0)
                   const rate = u.trackingType === 'days' ? u.rateDaily : u.rateHourly
                   const earnings = rate ? weekTotal * rate : 0
+                  const userProjectKey = `${u.userId}||${projectName}`
+                  const userServiceOrder = contractCodeByUserProject.get(userProjectKey)?.get(week.weekStart) ?? ''
                   return {
                     userId: u.userId,
                     userName: u.userName,
@@ -191,6 +193,7 @@ export default async function ReportsPage(props: Props) {
                     dailyHours: Object.fromEntries(week.days.map(d => [d, u.dailyBreakdown[d] ?? 0])),
                     weekTotal,
                     earnings,
+                    serviceOrder: userServiceOrder,
                   }
                 })
               return { code: spCode, subProjectId: spData.users[0]?.subProjectId ?? '', description: spData.description, trackingType: spTrackingType, users: usersWithHours }

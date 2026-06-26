@@ -41,7 +41,7 @@ const EXPENSE_TYPES = [
     { value: 'mileage', label: 'E_015 Mileage' },
     { value: 'lodging', label: 'E_20 Lodging, Hotel' },
     { value: 'meals', label: 'E_30 Meals' },
-    { value: 'other', label: 'N/A' },
+    { value: 'other', label: 'OTHER' },
 ] as const
 
 const CURRENCIES = ['PLN', 'EUR', 'USD', 'GBP'] as const
@@ -722,7 +722,7 @@ function AddEntryDialog({ tableId, tableStartDate, tableEndDate }: { tableId: st
     const [currency, setCurrency] = useState('PLN')
     const [amount, setAmount] = useState('')
     const [km, setKm] = useState('')
-    const [kmRate, setKmRate] = useState('0.8358')
+    const [kmRate, setKmRate] = useState('1.15')
 
     const isPersonalCar = type === 'mileage'
     const computedAmount = isPersonalCar && km && kmRate

@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Eye, X } from 'lucide-react'
+import { Eye, X, ChevronLeft, ChevronRight, Calendar } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { MonthlyEarningRow, EarningStatus } from '@/app/data/actions/earnings'
 import StatusSelect from './StatusSelect'
@@ -29,6 +29,21 @@ export default function AdminEarningsClient({ month, rows, statuses, projects, s
 
     const [filterEmployee, setFilterEmployee] = useState('')
     const [filterStatus, setFilterStatus] = useState('')
+
+    function navigateMonth(offset: number) {
+        const [y, m] = month.split('-').map(Number)
+        const d = new Date(y, m - 1 + offset, 1)
+        const next = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+        const params = new URLSearchParams()
+        params.set('month', next)
+        if (selectedProject) params.set('project', selectedProject)
+        router.push(`/admin/earnings?${params.toString()}`)
+    }
+
+    const monthLabel = (() => {
+        const [y, m] = month.split('-').map(Number)
+        return new Date(y, m - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+    })()
 
     // Build URL with month + project params
     function pushProjectFilter(projectId: string) {
@@ -68,12 +83,18 @@ export default function AdminEarningsClient({ month, rows, statuses, projects, s
         <div className="space-y-4">
             {/* Controls row */}
             <div className="flex flex-wrap items-center gap-3">
-                <input
-                    type="month"
-                    value={month}
-                    onChange={e => router.push(`/admin/earnings?month=${e.target.value}`)}
-                    className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-                />
+                <div className="inline-flex items-center rounded-md border border-input bg-background">
+                    <Button variant="ghost" size="icon" className="h-9 w-9 rounded-r-none" onClick={() => navigateMonth(-1)}>
+                        <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <span className="flex items-center gap-2 px-3 text-sm font-medium min-w-[160px] justify-center select-none">
+                        <Calendar className="h-4 w-4 text-muted-foreground" />
+                        {monthLabel}
+                    </span>
+                    <Button variant="ghost" size="icon" className="h-9 w-9 rounded-l-none" onClick={() => navigateMonth(1)}>
+                        <ChevronRight className="h-4 w-4" />
+                    </Button>
+                </div>
 
                 <select
                     value={filterEmployee}

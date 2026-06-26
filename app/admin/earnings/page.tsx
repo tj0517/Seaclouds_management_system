@@ -10,7 +10,7 @@ export default async function AdminEarningsPage({
     searchParams: Promise<{ month?: string; project?: string }>
 }) {
     const params = await searchParams
-    const month = params.month ?? format(new Date(), 'yyyy-MM')
+    const month = params.month || format(new Date(), 'yyyy-MM')
     const projectFilter = params.project || ''
 
     const supabase = await createClient()
