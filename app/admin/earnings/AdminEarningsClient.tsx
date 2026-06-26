@@ -87,10 +87,23 @@ export default function AdminEarningsClient({ month, rows, statuses, projects, s
                     <Button variant="ghost" size="icon" className="h-9 w-9 rounded-r-none" onClick={() => navigateMonth(-1)}>
                         <ChevronLeft className="h-4 w-4" />
                     </Button>
-                    <span className="flex items-center gap-2 px-3 text-sm font-medium min-w-[160px] justify-center select-none">
+                    <label className="relative flex items-center gap-2 px-3 text-sm font-medium min-w-[160px] justify-center cursor-pointer hover:bg-accent/50 transition-colors">
                         <Calendar className="h-4 w-4 text-muted-foreground" />
                         {monthLabel}
-                    </span>
+                        <input
+                            type="month"
+                            value={month}
+                            onChange={e => {
+                                if (e.target.value) {
+                                    const params = new URLSearchParams()
+                                    params.set('month', e.target.value)
+                                    if (selectedProject) params.set('project', selectedProject)
+                                    router.push(`/admin/earnings?${params.toString()}`)
+                                }
+                            }}
+                            className="absolute inset-0 opacity-0 cursor-pointer"
+                        />
+                    </label>
                     <Button variant="ghost" size="icon" className="h-9 w-9 rounded-l-none" onClick={() => navigateMonth(1)}>
                         <ChevronRight className="h-4 w-4" />
                     </Button>
