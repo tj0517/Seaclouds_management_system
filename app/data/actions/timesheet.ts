@@ -83,10 +83,10 @@ export async function submitWeek(weekStart: string, subprojectId: string) {
     }
 
     if (existing) {
-        // Resubmit a rejected row
+        // Resubmit a rejected row — keep reject_reason so user can still see why it was rejected
         const { error } = await supabase
             .from('timesheet_submissions')
-            .update({ status: 'submitted', reject_reason: null } as any)
+            .update({ status: 'submitted' } as any)
             .eq('id', existing.id)
 
         if (error) return { error: error.message }
@@ -165,7 +165,7 @@ export async function submitWeekAll(weekStart: string, subprojectIds: string[]) 
     if (rejectedIds.length > 0) {
         const { error } = await supabase
             .from('timesheet_submissions')
-            .update({ status: 'submitted', reject_reason: null } as any)
+            .update({ status: 'submitted' } as any)
             .eq('user_id', user.id)
             .eq('week_start', weekStart)
             .in('sub_project_id', rejectedIds)
@@ -304,6 +304,7 @@ export type GroupedReportRow = {
     dailyBreakdown: Record<string, number> // work_date -> hours
     isSubmitted: boolean
     weekStatuses: Record<string, 'submitted' | 'rejected' | 'pending'> // weekStart -> status
+    weekRejectReasons: Record<string, string> // weekStart -> reject_reason
     rateHourly: number | null
     rateDaily: number | null
     earnings: number // calculated: totalHours * rate
@@ -360,15 +361,25 @@ export async function getGroupedReportData(
     )
 
     // Fetch all submissions in range (both submitted and rejected)
+    // Expand the lower bound to the Monday of the week containing startDate,
+    // so submissions for partial weeks at the start of the range are included.
+    const startD = new Date(startDate)
+    const startDay = startD.getUTCDay() || 7 // 1=Mon..7=Sun
+    startD.setUTCDate(startD.getUTCDate() - startDay + 1)
+    const expandedStart = startD.toISOString().slice(0, 10)
+
     const { data: submissions } = await supabase
         .from('timesheet_submissions')
-        .select('user_id, sub_project_id, week_start, status')
+        .select('user_id, sub_project_id, week_start, status, reject_reason')
         .in('status', ['submitted', 'rejected'])
-        .gte('week_start', startDate)
+        .gte('week_start', expandedStart)
         .lte('week_start', endDate)
 
     const submissionMap = new Map<string, 'submitted' | 'rejected'>(
         (submissions || []).map((s: any) => [`${s.user_id}__${s.sub_project_id}__${s.week_start}`, s.status as 'submitted' | 'rejected'])
+    )
+    const rejectReasonMap = new Map<string, string>(
+        (submissions || []).filter((s: any) => s.reject_reason).map((s: any) => [`${s.user_id}__${s.sub_project_id}__${s.week_start}`, s.reject_reason])
     )
 
     // Fetch contract codes for the date range
@@ -424,6 +435,7 @@ export async function getGroupedReportData(
                 dailyBreakdown: {},
                 isSubmitted: false,
                 weekStatuses: {},
+                weekRejectReasons: {},
                 rateHourly,
                 rateDaily,
                 earnings: 0,
@@ -450,6 +462,8 @@ export async function getGroupedReportData(
         const weekKey = `${entry.user_id}__${entry.sub_project_id}__${weekStart}`
         const weekStatus = submissionMap.get(weekKey) ?? 'pending'
         row.weekStatuses[weekStart] = weekStatus
+        const reason = rejectReasonMap.get(weekKey)
+        if (reason) row.weekRejectReasons[weekStart] = reason
         if (weekStatus === 'submitted') row.isSubmitted = true
     }
 

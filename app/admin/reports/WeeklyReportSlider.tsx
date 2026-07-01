@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ChevronLeft, ChevronRight, CheckCircle2, Undo2, Loader2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, CheckCircle2, Undo2, Loader2, Info } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -10,12 +10,30 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Textarea } from '@/components/ui/textarea'
 import { adminWithdrawSubmission } from '@/app/data/actions/timesheet'
 import { toast } from 'sonner'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+
+function RejectReasonTooltip({ reason }: { reason: string }) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button className="ml-1.5 inline-flex items-center justify-center h-5 w-5 rounded-full bg-red-100 hover:bg-red-200 transition-colors">
+          <Info className="h-4 w-4 text-red-500" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent side="top" className="w-64 text-sm p-3">
+        <p className="font-medium text-red-700 mb-1">Rejection reason:</p>
+        <p className="text-gray-700">{reason}</p>
+      </PopoverContent>
+    </Popover>
+  )
+}
 
 export type UserRow = {
   userId: string
   userName: string
   subProjectId: string
   submissionStatus: 'submitted' | 'rejected' | 'pending'
+  rejectReason: string | null
   trackingType?: 'hours' | 'days'
   dailyHours: Record<string, number>
   weekTotal: number
@@ -63,6 +81,7 @@ type AggregatedUser = {
   weeklyHours: Record<string, number> // weekStart -> hours
   total: number
   submissionStatus: 'submitted' | 'rejected' | 'pending'
+  rejectReason: string | null
   earnings: number
   serviceOrders: Record<string, string> // weekStart -> serviceOrder
 }
@@ -94,7 +113,7 @@ function buildAggregatedProjects(weeks: WeekData[]): AggregatedProject[] {
     subProjectMap: Map<string, {
       description: string | null
       trackingType?: 'hours' | 'days'
-      userMap: Map<string, { weeklyHours: Record<string, number>; total: number; submissionStatus: 'submitted' | 'rejected' | 'pending'; earnings: number; serviceOrders: Record<string, string> }>
+      userMap: Map<string, { weeklyHours: Record<string, number>; total: number; submissionStatus: 'submitted' | 'rejected' | 'pending'; rejectReason: string | null; earnings: number; serviceOrders: Record<string, string> }>
     }>
     weeklyTotals: Record<string, number>
     weeklyTotalsHours: Record<string, number>
@@ -131,13 +150,14 @@ function buildAggregatedProjects(weeks: WeekData[]): AggregatedProject[] {
         for (const user of sp.users) {
           let uEntry = spEntry.userMap.get(user.userName)
           if (!uEntry) {
-            uEntry = { weeklyHours: {}, total: 0, submissionStatus: 'submitted', earnings: 0, serviceOrders: {} }
+            uEntry = { weeklyHours: {}, total: 0, submissionStatus: 'submitted', rejectReason: null, earnings: 0, serviceOrders: {} }
             spEntry.userMap.set(user.userName, uEntry)
           }
           uEntry.weeklyHours[week.weekStart] = (uEntry.weeklyHours[week.weekStart] ?? 0) + user.weekTotal
           uEntry.total += user.weekTotal
           uEntry.earnings += user.earnings
           if (user.serviceOrder) uEntry.serviceOrders[week.weekStart] = user.serviceOrder
+          if (user.rejectReason) uEntry.rejectReason = user.rejectReason
           // Aggregate status: rejected > pending > submitted (worst wins)
           if (user.submissionStatus === 'rejected') {
             uEntry.submissionStatus = 'rejected'
@@ -168,6 +188,7 @@ function buildAggregatedProjects(weeks: WeekData[]): AggregatedProject[] {
         weeklyHours: u.weeklyHours,
         total: u.total,
         submissionStatus: u.submissionStatus,
+        rejectReason: u.rejectReason,
         earnings: u.earnings,
         serviceOrders: u.serviceOrders,
       })),
@@ -183,7 +204,12 @@ function StatusCell({ userRow, weekStart }: { userRow: UserRow; weekStart: strin
   const [rejectReason, setRejectReason] = useState('')
 
   if (localRejected || userRow.submissionStatus === 'rejected') {
-    return <Badge className="bg-red-100 text-red-700 border-red-200 hover:bg-red-100">Rejected</Badge>
+    return (
+      <span className="inline-flex items-center">
+        <Badge className="bg-red-100 text-red-700 border-red-200 hover:bg-red-100">Rejected</Badge>
+        {userRow.rejectReason && <RejectReasonTooltip reason={userRow.rejectReason} />}
+      </span>
+    )
   }
 
   if (userRow.submissionStatus === 'pending') {
@@ -207,9 +233,12 @@ function StatusCell({ userRow, weekStart }: { userRow: UserRow; weekStart: strin
 
   return (
     <div className="flex items-center justify-center gap-1.5">
-      <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-100">
-        <CheckCircle2 className="h-3 w-3 mr-1" /> Submitted
-      </Badge>
+      <span className="inline-flex items-center">
+        <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-100">
+          <CheckCircle2 className="h-3 w-3 mr-1" /> Submitted
+        </Badge>
+        {userRow.rejectReason && <RejectReasonTooltip reason={userRow.rejectReason} />}
+      </span>
       <Dialog open={rejectOpen} onOpenChange={setRejectOpen}>
         <DialogTrigger asChild>
           <button
@@ -245,15 +274,23 @@ function StatusCell({ userRow, weekStart }: { userRow: UserRow; weekStart: strin
   )
 }
 
-function AggregatedStatusBadge({ status }: { status: 'submitted' | 'rejected' | 'pending' }) {
+function AggregatedStatusBadge({ status, rejectReason }: { status: 'submitted' | 'rejected' | 'pending'; rejectReason?: string | null }) {
   if (status === 'rejected') {
-    return <Badge className="bg-red-100 text-red-700 border-red-200 hover:bg-red-100">Rejected</Badge>
+    return (
+      <span className="inline-flex items-center">
+        <Badge className="bg-red-100 text-red-700 border-red-200 hover:bg-red-100">Rejected</Badge>
+        {rejectReason && <RejectReasonTooltip reason={rejectReason} />}
+      </span>
+    )
   }
   if (status === 'submitted') {
     return (
-      <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-100">
-        <CheckCircle2 className="h-3 w-3 mr-1" /> Submitted
-      </Badge>
+      <span className="inline-flex items-center">
+        <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-100">
+          <CheckCircle2 className="h-3 w-3 mr-1" /> Submitted
+        </Badge>
+        {rejectReason && <RejectReasonTooltip reason={rejectReason} />}
+      </span>
     )
   }
   return <Badge variant="outline" className="text-amber-600 border-amber-300">Pending</Badge>
@@ -430,7 +467,7 @@ export default function WeeklyReportSlider({ weeks }: { weeks: WeekData[] }) {
                             {user.earnings > 0 ? `${user.earnings.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} PLN` : <span className="text-gray-300">—</span>}
                           </td>
                           <td className="px-3 py-2 text-center">
-                            <AggregatedStatusBadge status={user.submissionStatus} />
+                            <AggregatedStatusBadge status={user.submissionStatus} rejectReason={user.rejectReason} />
                           </td>
                         </tr>
                         )})
@@ -634,7 +671,7 @@ export default function WeeklyReportSlider({ weeks }: { weeks: WeekData[] }) {
                             {user.earnings > 0 ? `${user.earnings.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} PLN` : <span className="text-gray-300">—</span>}
                           </td>
                           <td className="px-3 py-2 text-center">
-                            <AggregatedStatusBadge status={user.submissionStatus} />
+                            <AggregatedStatusBadge status={user.submissionStatus} rejectReason={user.rejectReason} />
                           </td>
                         </tr>
                         )})
