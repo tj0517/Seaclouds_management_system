@@ -545,29 +545,26 @@ export async function submitExpenseTable(id: string) {
 
     if (error) return { error: error.message }
 
-    // Fire-and-forget email notification to admin
-    const notifyAdmin = async () => {
-        try {
-            const { data: profile } = await supabase
-                .from('profiles')
-                .select('full_name')
-                .eq('id', user.id)
-                .single()
+    // Email notification to admin
+    try {
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('full_name')
+            .eq('id', user.id)
+            .single()
 
-            const dateRange = tableInfo?.end_date
-                ? `${tableInfo.start_date} — ${tableInfo.end_date}`
-                : tableInfo?.start_date ?? ''
+        const dateRange = tableInfo?.end_date
+            ? `${tableInfo.start_date} — ${tableInfo.end_date}`
+            : tableInfo?.start_date ?? ''
 
-            await sendExpenseSubmittedNotification({
-                employeeName: profile?.full_name ?? 'Employee',
-                projectName: tableInfo?.projects?.name ?? 'Unknown',
-                dateRange,
-            })
-        } catch (e) {
-            console.error('Failed to send expense submit notification:', e)
-        }
+        await sendExpenseSubmittedNotification({
+            employeeName: profile?.full_name ?? 'Employee',
+            projectName: tableInfo?.projects?.name ?? 'Unknown',
+            dateRange,
+        })
+    } catch (e) {
+        console.error('Failed to send expense submit notification:', e)
     }
-    notifyAdmin()
 
     revalidatePath('/expenses')
     return { success: true }
@@ -725,29 +722,26 @@ export async function approveExpenseTable(id: string) {
 
     if (error) return { error: error.message }
 
-    // Fire-and-forget email notification to employee
-    const notifyEmployee = async () => {
-        try {
-            const adminClient = getSupabaseAdmin()
-            const { data: authUser } = await adminClient.auth.admin.getUserById(table.user_id)
-            const { data: profile } = await supabase
-                .from('profiles')
-                .select('full_name')
-                .eq('id', table.user_id)
-                .single()
+    // Email notification to employee
+    try {
+        const adminClient = getSupabaseAdmin()
+        const { data: authUser } = await adminClient.auth.admin.getUserById(table.user_id)
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('full_name')
+            .eq('id', table.user_id)
+            .single()
 
-            if (authUser?.user?.email) {
-                await sendExpenseApprovedNotification({
-                    employeeEmail: authUser.user.email,
-                    employeeName: profile?.full_name ?? 'Employee',
-                    projectName: table.projects?.name ?? 'Unknown',
-                })
-            }
-        } catch {
-            // Don't fail the approval if email fails
+        if (authUser?.user?.email) {
+            await sendExpenseApprovedNotification({
+                employeeEmail: authUser.user.email,
+                employeeName: profile?.full_name ?? 'Employee',
+                projectName: table.projects?.name ?? 'Unknown',
+            })
         }
+    } catch {
+        // Don't fail the approval if email fails
     }
-    notifyEmployee()
 
     revalidatePath('/admin/expenses')
     revalidatePath('/expenses')

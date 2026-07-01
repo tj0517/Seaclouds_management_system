@@ -108,31 +108,28 @@ export async function submitWeek(weekStart: string, subprojectId: string) {
         }
     }
 
-    // Fire-and-forget email notification to admins
-    const notifyAdmins = async () => {
-        try {
-            const { data: profile } = await supabase
-                .from('profiles')
-                .select('full_name')
-                .eq('id', user.id)
-                .single()
+    // Email notification to admins
+    try {
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('full_name')
+            .eq('id', user.id)
+            .single()
 
-            const { data: subProject } = await supabase
-                .from('sub_projects')
-                .select('code')
-                .eq('id', subprojectId)
-                .single()
+        const { data: subProject } = await supabase
+            .from('sub_projects')
+            .select('code')
+            .eq('id', subprojectId)
+            .single()
 
-            await sendAdminNotification({
-                employeeName: profile?.full_name ?? 'Unknown',
-                subProjectCode: subProject?.code ?? subprojectId,
-                weekStart,
-            })
-        } catch (e) {
-            console.error('Failed to send admin notification:', e)
-        }
+        await sendAdminNotification({
+            employeeName: profile?.full_name ?? 'Unknown',
+            subProjectCode: subProject?.code ?? subprojectId,
+            weekStart,
+        })
+    } catch (e) {
+        console.error('Failed to send admin notification:', e)
     }
-    notifyAdmins()
 
     revalidatePath('/')
     return { success: true }
@@ -192,32 +189,29 @@ export async function submitWeekAll(weekStart: string, subprojectIds: string[]) 
         if (error) return { error: error.message }
     }
 
-    // Fire-and-forget email notifications
-    const notifyAdmins = async () => {
-        try {
-            const { data: profile } = await supabase
-                .from('profiles')
-                .select('full_name')
-                .eq('id', user.id)
-                .single()
+    // Email notification to admins
+    try {
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('full_name')
+            .eq('id', user.id)
+            .single()
 
-            const { data: subProjectData } = await supabase
-                .from('sub_projects')
-                .select('code')
-                .in('id', toSubmit)
+        const { data: subProjectData } = await supabase
+            .from('sub_projects')
+            .select('code')
+            .in('id', toSubmit)
 
-            const codes = subProjectData?.map(sp => sp.code).join(', ') ?? 'multiple projects'
+        const codes = subProjectData?.map(sp => sp.code).join(', ') ?? 'multiple projects'
 
-            await sendAdminNotification({
-                employeeName: profile?.full_name ?? 'Unknown',
-                subProjectCode: codes,
-                weekStart,
-            })
-        } catch (e) {
-            console.error('Failed to send admin notification:', e)
-        }
+        await sendAdminNotification({
+            employeeName: profile?.full_name ?? 'Unknown',
+            subProjectCode: codes,
+            weekStart,
+        })
+    } catch (e) {
+        console.error('Failed to send admin notification:', e)
     }
-    notifyAdmins()
 
     revalidatePath('/')
     return { success: true, submitted: toSubmit }
