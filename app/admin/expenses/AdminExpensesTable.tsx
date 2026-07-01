@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { toast } from 'sonner'
-import { Check, X, Eye, Loader2, Search } from 'lucide-react'
+import { Check, X, Eye, Loader2, Search, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -16,7 +16,7 @@ import {
     Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger
 } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
-import { approveExpenseTable, declineExpenseTable } from '@/app/data/actions'
+import { approveExpenseTable, declineExpenseTable, resetExpenseTableStatus } from '@/app/data/actions'
 import type { AdminExpenseTable } from '@/app/data/actions/expenses'
 
 const STATUS_TABS = [
@@ -211,6 +211,7 @@ function TableRow({ table }: { table: AdminExpenseTable }) {
     const router = useRouter()
     const [approving, setApproving] = useState(false)
     const [declining, setDeclining] = useState(false)
+    const [resetting, setResetting] = useState(false)
     const [declineOpen, setDeclineOpen] = useState(false)
     const [declineReason, setDeclineReason] = useState('')
 
@@ -234,6 +235,14 @@ function TableRow({ table }: { table: AdminExpenseTable }) {
             setDeclineReason('')
             router.refresh()
         }
+    }
+
+    const handleReset = async () => {
+        setResetting(true)
+        const result = await resetExpenseTableStatus(table.id)
+        setResetting(false)
+        if ('error' in result) toast.error(result.error)
+        else { toast.success('Status reset to submitted'); router.refresh() }
     }
 
     return (
@@ -312,6 +321,27 @@ function TableRow({ table }: { table: AdminExpenseTable }) {
                             </Dialog>
                         </>
                     )}
+                    {(table.status === 'approved' || table.status === 'declined') && (
+                        <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-orange-600 hover:text-orange-700 hover:bg-orange-50" title="Reset to submitted" disabled={resetting}>
+                                    {resetting ? <Loader2 size={16} className="animate-spin" /> : <RotateCcw size={16} />}
+                                </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                                <AlertDialogHeader>
+                                    <AlertDialogTitle>Reset expense table?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                        This will reset the status back to &quot;submitted&quot; so you can review and approve or decline it again.
+                                    </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                    <AlertDialogAction onClick={handleReset} className="bg-orange-600 hover:bg-orange-700">Reset</AlertDialogAction>
+                                </AlertDialogFooter>
+                            </AlertDialogContent>
+                        </AlertDialog>
+                    )}
                 </div>
             </td>
         </tr>
@@ -322,6 +352,7 @@ function MobileTableCard({ table }: { table: AdminExpenseTable }) {
     const router = useRouter()
     const [approving, setApproving] = useState(false)
     const [declining, setDeclining] = useState(false)
+    const [resetting, setResetting] = useState(false)
     const [declineOpen, setDeclineOpen] = useState(false)
     const [declineReason, setDeclineReason] = useState('')
 
@@ -345,6 +376,14 @@ function MobileTableCard({ table }: { table: AdminExpenseTable }) {
             setDeclineReason('')
             router.refresh()
         }
+    }
+
+    const handleReset = async () => {
+        setResetting(true)
+        const result = await resetExpenseTableStatus(table.id)
+        setResetting(false)
+        if ('error' in result) toast.error(result.error)
+        else { toast.success('Status reset to submitted'); router.refresh() }
     }
 
     return (
@@ -418,6 +457,27 @@ function MobileTableCard({ table }: { table: AdminExpenseTable }) {
                             </DialogContent>
                         </Dialog>
                     </>
+                )}
+                {(table.status === 'approved' || table.status === 'declined') && (
+                    <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                            <Button size="sm" variant="outline" className="text-orange-600 border-orange-300 hover:bg-orange-50" disabled={resetting}>
+                                {resetting ? <Loader2 size={14} className="mr-1 animate-spin" /> : <RotateCcw size={14} className="mr-1" />} Reset
+                            </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                            <AlertDialogHeader>
+                                <AlertDialogTitle>Reset expense table?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                    This will reset the status back to &quot;submitted&quot; so you can review and approve or decline it again.
+                                </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction onClick={handleReset} className="bg-orange-600 hover:bg-orange-700">Reset</AlertDialogAction>
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
                 )}
             </div>
         </div>

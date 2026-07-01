@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { toast } from 'sonner'
-import { ArrowLeft, Check, X, Loader2, FileText, Car, FileDown } from 'lucide-react'
+import { ArrowLeft, Check, X, Loader2, FileText, Car, FileDown, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -17,7 +17,7 @@ import {
     Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger
 } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
-import { approveExpenseTable, declineExpenseTable, getReceiptUrl, generateExpensePdf } from '@/app/data/actions'
+import { approveExpenseTable, declineExpenseTable, resetExpenseTableStatus, getReceiptUrl, generateExpensePdf } from '@/app/data/actions'
 import type { ExpenseEntry } from '@/app/data/actions/expenses'
 
 type TableDetail = {
@@ -63,6 +63,7 @@ export default function AdminExpenseDetail({ table, entries }: { table: TableDet
     const router = useRouter()
     const [approving, setApproving] = useState(false)
     const [declining, setDeclining] = useState(false)
+    const [resetting, setResetting] = useState(false)
     const [exporting, setExporting] = useState(false)
     const [declineOpen, setDeclineOpen] = useState(false)
     const [declineReason, setDeclineReason] = useState('')
@@ -87,6 +88,14 @@ export default function AdminExpenseDetail({ table, entries }: { table: TableDet
             setDeclineReason('')
             router.refresh()
         }
+    }
+
+    const handleReset = async () => {
+        setResetting(true)
+        const result = await resetExpenseTableStatus(table.id)
+        setResetting(false)
+        if ('error' in result) toast.error(result.error)
+        else { toast.success('Status reset to submitted'); router.refresh() }
     }
 
     const handleExport = async () => {
@@ -176,6 +185,27 @@ export default function AdminExpenseDetail({ table, entries }: { table: TableDet
                             </DialogContent>
                         </Dialog>
                     </>
+                )}
+                {(table.status === 'approved' || table.status === 'declined') && (
+                    <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                            <Button variant="outline" className="text-orange-600 border-orange-300 hover:bg-orange-50" disabled={resetting}>
+                                {resetting ? <Loader2 size={16} className="mr-2 animate-spin" /> : <RotateCcw size={16} className="mr-2" />} Reset to Submitted
+                            </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                            <AlertDialogHeader>
+                                <AlertDialogTitle>Reset expense table?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                    This will reset the status back to &quot;submitted&quot; so you can review and approve or decline it again.
+                                </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction onClick={handleReset} className="bg-orange-600 hover:bg-orange-700">Reset</AlertDialogAction>
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
                 )}
                 </div>
             </div>

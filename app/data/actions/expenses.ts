@@ -806,3 +806,36 @@ export async function declineExpenseTable(id: string, reason: string) {
     revalidatePath('/expenses')
     return { success: true }
 }
+
+export async function resetExpenseTableStatus(id: string) {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return { error: 'No session' }
+
+    const { data: table } = await (supabase as any)
+        .from('expense_tables')
+        .select('status')
+        .eq('id', id)
+        .single()
+
+    if (!table) return { error: 'Table not found' }
+    if (table.status !== 'approved' && table.status !== 'declined') {
+        return { error: 'Only approved or declined tables can be reset' }
+    }
+
+    const { error } = await (supabase as any)
+        .from('expense_tables')
+        .update({
+            status: 'submitted',
+            reviewed_at: null,
+            reviewed_by: null,
+            decline_reason: null,
+        })
+        .eq('id', id)
+
+    if (error) return { error: error.message }
+
+    revalidatePath('/admin/expenses')
+    revalidatePath('/expenses')
+    return { success: true }
+}

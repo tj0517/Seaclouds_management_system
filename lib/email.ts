@@ -15,7 +15,7 @@ export async function sendAdminNotification({
     if (!adminEmail) return
 
     await resend.emails.send({
-        from: 'Seaclouds Timesheets <onboarding@resend.dev>',
+        from: 'Seaclouds Timesheets <notification@seaclouds.eu>',
         to: [adminEmail],
         subject: `Timesheet submitted — ${employeeName}, week ${weekStart}`,
         html: `
@@ -38,7 +38,7 @@ export async function sendExpenseSubmittedNotification({
     if (!adminEmail) return
 
     await resend.emails.send({
-        from: 'Seaclouds Expenses <onboarding@resend.dev>',
+        from: 'Seaclouds Expenses <notification@seaclouds.eu>',
         to: [adminEmail],
         subject: `Expense submitted — ${employeeName}, ${projectName}`,
         html: `
@@ -59,7 +59,7 @@ export async function sendExpenseApprovedNotification({
     projectName: string
 }) {
     await resend.emails.send({
-        from: 'Seaclouds Expenses <onboarding@resend.dev>',
+        from: 'Seaclouds Expenses <notification@seaclouds.eu>',
         to: [employeeEmail],
         subject: `Expense approved — ${projectName}`,
         html: `
@@ -84,7 +84,7 @@ export async function sendTimesheetWithdrawNotification({
     reason: string
 }) {
     await resend.emails.send({
-        from: 'Seaclouds Timesheets <onboarding@resend.dev>',
+        from: 'Seaclouds Timesheets <notification@seaclouds.eu>',
         to: [employeeEmail],
         subject: `Timesheet rejected — ${subProjectCode}, week ${weekStart}`,
         html: `
@@ -108,7 +108,7 @@ export async function sendExpenseDeclineNotification({
     reason: string
 }) {
     await resend.emails.send({
-        from: 'Seaclouds Expenses <onboarding@resend.dev>',
+        from: 'Seaclouds Expenses <notification@seaclouds.eu>',
         to: [employeeEmail],
         subject: `Expense table declined — ${projectName}`,
         html: `

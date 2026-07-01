@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { submitWeek } from '@/app/data/actions/timesheet'
 import { AlertTriangle } from 'lucide-react'
 
@@ -16,6 +16,10 @@ export default function SubmitWeekButton({ weekStart, subprojectId, status: init
     const [status, setStatus] = useState(initialStatus)
     const [loading, setLoading] = useState(false)
     const [showReason, setShowReason] = useState(false)
+
+    useEffect(() => {
+        setStatus(initialStatus)
+    }, [initialStatus])
 
     const submitWeekHandler = async () => {
         setLoading(true)

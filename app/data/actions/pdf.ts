@@ -97,7 +97,6 @@ export async function generateMonthlyPdf(month: string) {
     // Calculate totals
     const totalHours = rows.filter(r => r.trackingType !== 'days').reduce((s, r) => s + r.totalHours, 0)
     const totalDays = rows.filter(r => r.trackingType === 'days').reduce((s, r) => s + r.totalHours, 0)
-    const workedDaysCount = Object.keys(dailyData).length
 
     const PDFDocument = (await import('pdfkit')).default
     const monthLabel = format(monthDate, 'MMMM yyyy')
@@ -242,7 +241,6 @@ export async function generateMonthlyPdf(month: string) {
     doc.font('Sans-Bold').fontSize(10)
     doc.text(`Total Hours: ${totalHours}`, 40, y)
     doc.text(`Total Days: ${totalDays}`, 200, y)
-    doc.text(`Worked Days: ${workedDaysCount}`, 340, y)
     y += 24
     doc.moveTo(40, y).lineTo(pageWidth - rightMargin, y).stroke('#cccccc')
     y += 8
