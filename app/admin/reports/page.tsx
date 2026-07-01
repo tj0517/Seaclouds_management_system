@@ -188,7 +188,7 @@ export default async function ReportsPage(props: Props) {
                     userId: u.userId,
                     userName: u.userName,
                     subProjectId: u.subProjectId,
-                    submissionStatus: (u.weekStatuses?.[week.weekStart] ?? 'pending') as 'submitted' | 'rejected' | 'pending',
+                    submissionStatus: (u.weekStatuses?.[getWeekStartForDate(week.days[0])] ?? 'pending') as 'submitted' | 'rejected' | 'pending',
                     trackingType: u.trackingType,
                     dailyHours: Object.fromEntries(week.days.map(d => [d, u.dailyBreakdown[d] ?? 0])),
                     weekTotal,
