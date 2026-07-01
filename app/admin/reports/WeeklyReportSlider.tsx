@@ -15,7 +15,7 @@ export type UserRow = {
   userId: string
   userName: string
   subProjectId: string
-  isSubmitted: boolean
+  submissionStatus: 'submitted' | 'rejected' | 'pending'
   trackingType?: 'hours' | 'days'
   dailyHours: Record<string, number>
   weekTotal: number
@@ -62,7 +62,7 @@ type AggregatedUser = {
   userName: string
   weeklyHours: Record<string, number> // weekStart -> hours
   total: number
-  isSubmitted: boolean
+  submissionStatus: 'submitted' | 'rejected' | 'pending'
   earnings: number
   serviceOrders: Record<string, string> // weekStart -> serviceOrder
 }
@@ -94,7 +94,7 @@ function buildAggregatedProjects(weeks: WeekData[]): AggregatedProject[] {
     subProjectMap: Map<string, {
       description: string | null
       trackingType?: 'hours' | 'days'
-      userMap: Map<string, { weeklyHours: Record<string, number>; total: number; isSubmitted: boolean; earnings: number; serviceOrders: Record<string, string> }>
+      userMap: Map<string, { weeklyHours: Record<string, number>; total: number; submissionStatus: 'submitted' | 'rejected' | 'pending'; earnings: number; serviceOrders: Record<string, string> }>
     }>
     weeklyTotals: Record<string, number>
     weeklyTotalsHours: Record<string, number>
@@ -131,14 +131,19 @@ function buildAggregatedProjects(weeks: WeekData[]): AggregatedProject[] {
         for (const user of sp.users) {
           let uEntry = spEntry.userMap.get(user.userName)
           if (!uEntry) {
-            uEntry = { weeklyHours: {}, total: 0, isSubmitted: true, earnings: 0, serviceOrders: {} }
+            uEntry = { weeklyHours: {}, total: 0, submissionStatus: 'submitted', earnings: 0, serviceOrders: {} }
             spEntry.userMap.set(user.userName, uEntry)
           }
           uEntry.weeklyHours[week.weekStart] = (uEntry.weeklyHours[week.weekStart] ?? 0) + user.weekTotal
           uEntry.total += user.weekTotal
           uEntry.earnings += user.earnings
           if (user.serviceOrder) uEntry.serviceOrders[week.weekStart] = user.serviceOrder
-          if (!user.isSubmitted) uEntry.isSubmitted = false
+          // Aggregate status: rejected > pending > submitted (worst wins)
+          if (user.submissionStatus === 'rejected') {
+            uEntry.submissionStatus = 'rejected'
+          } else if (user.submissionStatus === 'pending' && uEntry.submissionStatus !== 'rejected') {
+            uEntry.submissionStatus = 'pending'
+          }
         }
       }
     }
@@ -162,7 +167,7 @@ function buildAggregatedProjects(weeks: WeekData[]): AggregatedProject[] {
         userName,
         weeklyHours: u.weeklyHours,
         total: u.total,
-        isSubmitted: u.isSubmitted,
+        submissionStatus: u.submissionStatus,
         earnings: u.earnings,
         serviceOrders: u.serviceOrders,
       })),
@@ -173,11 +178,15 @@ function buildAggregatedProjects(weeks: WeekData[]): AggregatedProject[] {
 function StatusCell({ userRow, weekStart }: { userRow: UserRow; weekStart: string }) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
-  const [rejected, setRejected] = useState(false)
+  const [localRejected, setLocalRejected] = useState(false)
   const [rejectOpen, setRejectOpen] = useState(false)
   const [rejectReason, setRejectReason] = useState('')
 
-  if (!userRow.isSubmitted || rejected) {
+  if (localRejected || userRow.submissionStatus === 'rejected') {
+    return <Badge className="bg-red-100 text-red-700 border-red-200 hover:bg-red-100">Rejected</Badge>
+  }
+
+  if (userRow.submissionStatus === 'pending') {
     return <Badge variant="outline" className="text-amber-600 border-amber-300">Pending</Badge>
   }
 
@@ -186,7 +195,7 @@ function StatusCell({ userRow, weekStart }: { userRow: UserRow; weekStart: strin
     const result = await adminWithdrawSubmission(userRow.userId, weekStart, userRow.subProjectId, rejectReason)
     setLoading(false)
     if (result.success) {
-      setRejected(true)
+      setLocalRejected(true)
       setRejectOpen(false)
       setRejectReason('')
       toast.success(`Rejected submission for ${userRow.userName}`)
@@ -234,6 +243,20 @@ function StatusCell({ userRow, weekStart }: { userRow: UserRow; weekStart: strin
       </Dialog>
     </div>
   )
+}
+
+function AggregatedStatusBadge({ status }: { status: 'submitted' | 'rejected' | 'pending' }) {
+  if (status === 'rejected') {
+    return <Badge className="bg-red-100 text-red-700 border-red-200 hover:bg-red-100">Rejected</Badge>
+  }
+  if (status === 'submitted') {
+    return (
+      <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-100">
+        <CheckCircle2 className="h-3 w-3 mr-1" /> Submitted
+      </Badge>
+    )
+  }
+  return <Badge variant="outline" className="text-amber-600 border-amber-300">Pending</Badge>
 }
 
 function formatMixedTotal(hours: number, days: number): string {
@@ -407,13 +430,7 @@ export default function WeeklyReportSlider({ weeks }: { weeks: WeekData[] }) {
                             {user.earnings > 0 ? `${user.earnings.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} PLN` : <span className="text-gray-300">—</span>}
                           </td>
                           <td className="px-3 py-2 text-center">
-                            {user.isSubmitted ? (
-                              <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-100">
-                                <CheckCircle2 className="h-3 w-3 mr-1" /> Submitted
-                              </Badge>
-                            ) : (
-                              <Badge variant="outline" className="text-amber-600 border-amber-300">Pending</Badge>
-                            )}
+                            <AggregatedStatusBadge status={user.submissionStatus} />
                           </td>
                         </tr>
                         )})
@@ -617,13 +634,7 @@ export default function WeeklyReportSlider({ weeks }: { weeks: WeekData[] }) {
                             {user.earnings > 0 ? `${user.earnings.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} PLN` : <span className="text-gray-300">—</span>}
                           </td>
                           <td className="px-3 py-2 text-center">
-                            {user.isSubmitted ? (
-                              <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-100">
-                                <CheckCircle2 className="h-3 w-3 mr-1" /> Submitted
-                              </Badge>
-                            ) : (
-                              <Badge variant="outline" className="text-amber-600 border-amber-300">Pending</Badge>
-                            )}
+                            <AggregatedStatusBadge status={user.submissionStatus} />
                           </td>
                         </tr>
                         )})

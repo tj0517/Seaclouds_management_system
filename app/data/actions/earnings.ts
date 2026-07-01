@@ -9,6 +9,8 @@ export type MonthlyEarningRow = {
     user_name: string
     total_hours: number
     total_days: number
+    unsubmitted_hours: number   // hours from weeks not yet submitted
+    unsubmitted_days: number    // days from weeks not yet submitted
     rate_hourly: number | null
     rate_daily: number | null
     earnings_from_hours: number
@@ -16,7 +18,7 @@ export type MonthlyEarningRow = {
     earnings_pln: number
     total_approved_expenses_pln: number
     sum_pln: number
-    project_ids: string[]   // project IDs with submitted hours this month (for filtering)
+    project_ids: string[]   // project IDs with hours this month (for filtering)
 }
 
 export type TimesheetLine = {
@@ -122,17 +124,19 @@ export async function getMonthlyEarnings(yearMonth: string, projectId?: string):
           )
         : null
 
-    // Separate hours vs days per user — only for submitted weeks
+    // Separate hours vs days per user — all entries, track unsubmitted separately
     const hoursByUser = new Map<string, number>()
     const daysByUser = new Map<string, number>()
+    const unsubmittedHoursByUser = new Map<string, number>()
+    const unsubmittedDaysByUser = new Map<string, number>()
     const projectIdsByUser = new Map<string, Set<string>>()
 
     for (const entry of entries) {
-        const key = `${entry.user_id}::${entry.sub_project_id}::${weekStart(entry.work_date)}`
-        if (!submittedKeys.has(key)) continue
-
         // If filtering by project, skip entries not belonging to that project
         if (filterSubProjectIds && !filterSubProjectIds.has(entry.sub_project_id)) continue
+
+        const key = `${entry.user_id}::${entry.sub_project_id}::${weekStart(entry.work_date)}`
+        const isSubmitted = submittedKeys.has(key)
 
         const trackingType = entry.sub_projects?.tracking_type
         const uid = entry.user_id
@@ -144,9 +148,14 @@ export async function getMonthlyEarnings(yearMonth: string, projectId?: string):
         }
 
         if (trackingType === 'days') {
-            if ((entry.hours ?? 0) >= 1) daysByUser.set(uid, (daysByUser.get(uid) ?? 0) + 1)
+            if ((entry.hours ?? 0) >= 1) {
+                daysByUser.set(uid, (daysByUser.get(uid) ?? 0) + 1)
+                if (!isSubmitted) unsubmittedDaysByUser.set(uid, (unsubmittedDaysByUser.get(uid) ?? 0) + 1)
+            }
         } else {
-            hoursByUser.set(uid, (hoursByUser.get(uid) ?? 0) + (entry.hours ?? 0))
+            const h = entry.hours ?? 0
+            hoursByUser.set(uid, (hoursByUser.get(uid) ?? 0) + h)
+            if (!isSubmitted) unsubmittedHoursByUser.set(uid, (unsubmittedHoursByUser.get(uid) ?? 0) + h)
         }
     }
 
@@ -201,6 +210,8 @@ export async function getMonthlyEarnings(yearMonth: string, projectId?: string):
             user_name: p.full_name ?? 'Unknown',
             total_hours: hours,
             total_days: days,
+            unsubmitted_hours: unsubmittedHoursByUser.get(p.id) ?? 0,
+            unsubmitted_days: unsubmittedDaysByUser.get(p.id) ?? 0,
             rate_hourly: rateH,
             rate_daily: rateD,
             earnings_from_hours: efh,

@@ -3,7 +3,7 @@
 import { useState, useMemo, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Eye, X, ChevronLeft, ChevronRight, Calendar } from 'lucide-react'
+import { Eye, X, ChevronLeft, ChevronRight, Calendar, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import type { MonthlyEarningRow, EarningStatus } from '@/app/data/actions/earnings'
@@ -226,7 +226,16 @@ export default function AdminEarningsClient({ month, rows, statuses, projects, s
                                     <td className="px-4 py-3 font-medium whitespace-nowrap">{r.user_name}</td>
                                     {/* Hours */}
                                     <td className="px-4 py-3 text-right font-mono border-l border-gray-200">
-                                        {r.total_hours > 0 ? `${r.total_hours} h` : <span className="text-gray-300">—</span>}
+                                        {r.total_hours > 0 ? (
+                                            <span className="inline-flex items-center gap-1 justify-end">
+                                                {r.total_hours} h
+                                                {r.unsubmitted_hours > 0 && (
+                                                    <span title={`${r.unsubmitted_hours}h not submitted`} className="text-amber-500">
+                                                        <AlertTriangle className="h-3.5 w-3.5" />
+                                                    </span>
+                                                )}
+                                            </span>
+                                        ) : <span className="text-gray-300">—</span>}
                                     </td>
                                     <td className="px-4 py-3 text-right text-gray-500 text-xs">
                                         {r.rate_hourly != null ? `${r.rate_hourly} PLN` : <span className="text-gray-300">—</span>}
@@ -236,7 +245,16 @@ export default function AdminEarningsClient({ month, rows, statuses, projects, s
                                     </td>
                                     {/* Days */}
                                     <td className="px-4 py-3 text-right font-mono text-purple-700 border-l border-gray-200">
-                                        {r.total_days > 0 ? `${r.total_days} d` : <span className="text-gray-300">—</span>}
+                                        {r.total_days > 0 ? (
+                                            <span className="inline-flex items-center gap-1 justify-end">
+                                                {r.total_days} d
+                                                {r.unsubmitted_days > 0 && (
+                                                    <span title={`${r.unsubmitted_days}d not submitted`} className="text-amber-500">
+                                                        <AlertTriangle className="h-3.5 w-3.5" />
+                                                    </span>
+                                                )}
+                                            </span>
+                                        ) : <span className="text-gray-300">—</span>}
                                     </td>
                                     <td className="px-4 py-3 text-right text-purple-500 text-xs">
                                         {r.rate_daily != null ? `${r.rate_daily} PLN` : <span className="text-gray-300">—</span>}
@@ -286,7 +304,8 @@ export default function AdminEarningsClient({ month, rows, statuses, projects, s
                             </tr>
                             <tr>
                                 <td colSpan={12} className="px-4 py-3 text-xs text-gray-400">
-                                    Sum = Total Earnings + Approved Expenses. Project filter recalculates hours and earnings for that project only.
+                                    <span>Sum = Total Earnings + Approved Expenses. Project filter recalculates hours and earnings for that project only.</span>
+                                    <span className="inline-flex items-center gap-1 ml-2 text-amber-500"><AlertTriangle className="h-3 w-3" /> = includes unsubmitted entries.</span>
                                 </td>
                             </tr>
                         </tfoot>
