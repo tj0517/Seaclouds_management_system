@@ -84,12 +84,16 @@ export async function submitWeek(weekStart: string, subprojectId: string) {
 
     if (existing) {
         // Resubmit a rejected row — keep reject_reason so user can still see why it was rejected
-        const { error } = await supabase
+        const { data: updated, error } = await supabase
             .from('timesheet_submissions')
             .update({ status: 'submitted' } as any)
             .eq('id', existing.id)
+            .select('id')
 
         if (error) return { error: error.message }
+        if (!updated || updated.length === 0) {
+            return { error: 'Failed to update submission. Please try again or contact an admin.' }
+        }
     } else {
         const { error } = await supabase
             .from('timesheet_submissions')
@@ -163,14 +167,18 @@ export async function submitWeekAll(weekStart: string, subprojectIds: string[]) 
 
     // Update rejected rows back to submitted
     if (rejectedIds.length > 0) {
-        const { error } = await supabase
+        const { data: updated, error } = await supabase
             .from('timesheet_submissions')
             .update({ status: 'submitted' } as any)
             .eq('user_id', user.id)
             .eq('week_start', weekStart)
             .in('sub_project_id', rejectedIds)
+            .select('id')
 
         if (error) return { error: error.message }
+        if (!updated || updated.length === 0) {
+            return { error: 'Failed to resubmit rejected entries. Please contact an admin.' }
+        }
     }
 
     // Insert truly new rows

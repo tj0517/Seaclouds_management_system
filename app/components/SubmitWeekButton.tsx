@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { submitWeek } from '@/app/data/actions/timesheet'
 import { AlertTriangle, Info } from 'lucide-react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { toast } from 'sonner'
 
 function RejectReasonTooltip({ reason }: { reason: string }) {
     return (
@@ -44,6 +45,8 @@ export default function SubmitWeekButton({ weekStart, subprojectId, status: init
         if (result.success) {
             setStatus('submitted')
             if (onSuccess) onSuccess()
+        } else if (result.error) {
+            toast.error(result.error)
         }
     }
 
