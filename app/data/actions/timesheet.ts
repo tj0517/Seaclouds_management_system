@@ -84,15 +84,25 @@ export async function submitWeek(weekStart: string, subprojectId: string) {
 
     if (existing) {
         // Resubmit a rejected row — keep reject_reason so user can still see why it was rejected
+        console.error('[submitWeek] Resubmit attempt:', JSON.stringify({
+            userId: user.id,
+            existingId: existing.id,
+            existingStatus: existing.status,
+            subprojectId,
+            weekStart,
+        }))
+
         const { data: updated, error } = await supabase
             .from('timesheet_submissions')
             .update({ status: 'submitted' } as any)
             .eq('id', existing.id)
-            .select('id')
+            .select('id, status')
+
+        console.error('[submitWeek] Update result:', JSON.stringify({ updated, error }))
 
         if (error) return { error: error.message }
         if (!updated || updated.length === 0) {
-            return { error: 'Failed to update submission. Please try again or contact an admin.' }
+            return { error: `Failed to update submission (id=${existing.id}, status=${existing.status}). The update was blocked — please contact an admin.` }
         }
     } else {
         const { error } = await supabase
