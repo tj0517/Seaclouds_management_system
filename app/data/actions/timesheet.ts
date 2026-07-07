@@ -84,7 +84,7 @@ export async function submitWeek(weekStart: string, subprojectId: string) {
 
     if (existing) {
         // Resubmit a rejected row via SECURITY DEFINER function
-        const { data: updated, error } = await supabase
+        const { data: updated, error } = await (supabase as any)
             .rpc('resubmit_rejected', {
                 p_submission_id: existing.id,
                 p_user_id: user.id,
@@ -176,7 +176,7 @@ export async function submitWeekAll(weekStart: string, subprojectIds: string[]) 
         if (rejectedRows && rejectedRows.length > 0) {
             const results = await Promise.all(
                 rejectedRows.map(row =>
-                    supabase.rpc('resubmit_rejected', {
+                    (supabase as any).rpc('resubmit_rejected', {
                         p_submission_id: row.id,
                         p_user_id: user.id,
                     })
