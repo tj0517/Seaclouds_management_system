@@ -1,7 +1,7 @@
 'use client'
 
-import { useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useMemo, useState, useCallback } from 'react'
+import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { ChevronLeft, ChevronRight, CheckCircle2, Undo2, Loader2, Info } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -11,6 +11,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { adminWithdrawSubmission } from '@/app/data/actions/timesheet'
 import { toast } from 'sonner'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Switch } from '@/components/ui/switch'
+import { Label } from '@/components/ui/label'
 
 function RejectReasonTooltip({ reason }: { reason: string }) {
   return (
@@ -303,9 +305,22 @@ function formatMixedTotal(hours: number, days: number): string {
   return parts.length > 0 ? parts.join(' / ') : '—'
 }
 
-export default function WeeklyReportSlider({ weeks }: { weeks: WeekData[] }) {
+export default function WeeklyReportSlider({ weeks, showEmpty }: { weeks: WeekData[]; showEmpty?: boolean }) {
   const [currentWeekIndex, setCurrentWeekIndex] = useState(0)
   const [viewMode, setViewMode] = useState<ViewMode>('day')
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const pathname = usePathname()
+
+  const toggleShowEmpty = useCallback((checked: boolean) => {
+    const params = new URLSearchParams(searchParams.toString())
+    if (checked) {
+      params.set('showEmpty', 'true')
+    } else {
+      params.delete('showEmpty')
+    }
+    router.push(`${pathname}?${params.toString()}`)
+  }, [searchParams, pathname, router])
 
   const aggregatedProjects = useMemo(() => buildAggregatedProjects(weeks), [weeks])
 
@@ -372,7 +387,18 @@ export default function WeeklyReportSlider({ weeks }: { weeks: WeekData[] }) {
           )}
         </div>
 
-        {/* View toggle */}
+        {/* Controls */}
+        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2">
+          <Switch
+            id="show-empty"
+            checked={showEmpty ?? false}
+            onCheckedChange={toggleShowEmpty}
+          />
+          <Label htmlFor="show-empty" className="text-xs text-muted-foreground cursor-pointer">
+            Show empty submissions
+          </Label>
+        </div>
         <div className="flex border rounded-md overflow-hidden">
           <button
             className={`px-3 py-1.5 text-xs font-medium transition-colors ${
@@ -404,6 +430,7 @@ export default function WeeklyReportSlider({ weeks }: { weeks: WeekData[] }) {
           >
             Month
           </button>
+        </div>
         </div>
       </div>
 

@@ -11,7 +11,7 @@ import Link from 'next/link'
 import WeeklyReportSlider, { type WeekData } from './WeeklyReportSlider'
 
 type Props = {
-  searchParams: Promise<{ from?: string; to?: string; user?: string; code?: string; project?: string; serviceOrder?: string }>
+  searchParams: Promise<{ from?: string; to?: string; user?: string; code?: string; project?: string; serviceOrder?: string; showEmpty?: string }>
 }
 
 export default async function ReportsPage(props: Props) {
@@ -27,12 +27,14 @@ export default async function ReportsPage(props: Props) {
   const filterCode = searchParams.code || ''
   const filterProject = searchParams.project || ''
   const filterServiceOrder = searchParams.serviceOrder || ''
+  const showEmpty = searchParams.showEmpty === 'true'
 
   const [rows, filterOptions] = await Promise.all([
     getGroupedReportData(dateFrom, dateTo, {
       userName: filterUser || undefined,
       subProjectCode: filterCode || undefined,
       projectName: filterProject || undefined,
+      showEmpty: showEmpty || undefined,
     }),
     getReportFilterOptions(dateFrom, dateTo),
   ])
@@ -177,7 +179,10 @@ export default async function ReportsPage(props: Props) {
             .map(([spCode, spData]) => {
               const spTrackingType = spData.users[0]?.trackingType ?? 'hours'
               const usersWithHours = spData.users
-                .filter(u => week.days.some(d => (u.dailyBreakdown[d] ?? 0) > 0))
+                .filter(u => showEmpty
+                  ? week.days.some(d => (u.dailyBreakdown[d] ?? 0) > 0) || (u.weekStatuses?.[week.weekStart] === 'submitted' || u.weekStatuses?.[week.weekStart] === 'rejected')
+                  : week.days.some(d => (u.dailyBreakdown[d] ?? 0) > 0)
+                )
                 .map(u => {
                   const weekTotal = week.days.reduce((s, d) => s + (u.dailyBreakdown[d] ?? 0), 0)
                   const rate = u.trackingType === 'days' ? u.rateDaily : u.rateHourly
@@ -199,7 +204,7 @@ export default async function ReportsPage(props: Props) {
                 })
               return { code: spCode, subProjectId: spData.users[0]?.subProjectId ?? '', description: spData.description, trackingType: spTrackingType, users: usersWithHours }
             })
-            .filter(sp => sp.users.length > 0)
+            .filter(sp => sp.users.length > 0 || showEmpty)
 
           const dailyTotals = Object.fromEntries(
             week.days.map(d => [d, projectWeekRows.reduce((s, r) => s + (r.dailyBreakdown[d] ?? 0), 0)])
@@ -216,7 +221,7 @@ export default async function ReportsPage(props: Props) {
 
           return { name: projectName, code: projectData.code, subProjects, weekTotal, weekTotalHours, weekTotalDays, dailyTotals, dailyTotalsHours, dailyTotalsDays, serviceOrder }
         })
-        .filter(p => p.weekTotal > 0)
+        .filter(p => p.weekTotal > 0 || showEmpty)
 
       const weekTotal = projects.reduce((s, p) => s + p.weekTotal, 0)
       const weekTotalHours = projects.reduce((s, p) => s + p.weekTotalHours, 0)
@@ -233,7 +238,7 @@ export default async function ReportsPage(props: Props) {
         weekTotalDays,
       }
     })
-    .filter(w => w.weekTotal > 0)
+    .filter(w => w.weekTotal > 0 || showEmpty)
 
   return (
     <div className="space-y-6">
@@ -389,7 +394,7 @@ export default async function ReportsPage(props: Props) {
       </div>
 
       {/* WEEKLY TABLES */}
-      <WeeklyReportSlider weeks={weekData} />
+      <WeeklyReportSlider weeks={weekData} showEmpty={showEmpty} />
     </div>
   )
 }

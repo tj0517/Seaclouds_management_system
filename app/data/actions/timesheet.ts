@@ -328,7 +328,7 @@ export type GroupedReportRow = {
 export async function getGroupedReportData(
     startDate: string,
     endDate: string,
-    filters?: { userName?: string; subProjectCode?: string; projectName?: string; userId?: string },
+    filters?: { userName?: string; subProjectCode?: string; projectName?: string; userId?: string; showEmpty?: boolean },
     supabaseClient?: any
 ): Promise<GroupedReportRow[]> {
     const supabase = supabaseClient ?? await createClient()
@@ -479,6 +479,87 @@ export async function getGroupedReportData(
         const reason = rejectReasonMap.get(weekKey)
         if (reason) row.weekRejectReasons[weekStart] = reason
         if (weekStatus === 'submitted') row.isSubmitted = true
+    }
+
+    // When showEmpty is true, include submitted/rejected submissions that have no timesheet entries
+    if (filters?.showEmpty) {
+        for (const sub of submissions || []) {
+            const weekStart = sub.week_start
+
+            // Check if this specific week already has status tracked in an existing row
+            const existingRow = Array.from(map.values()).find(
+                row => row.userId === sub.user_id && row.subProjectId === sub.sub_project_id
+            )
+
+            if (existingRow) {
+                // Row exists but this week might not have entries — ensure status is tracked
+                if (!existingRow.weekStatuses[weekStart]) {
+                    existingRow.weekStatuses[weekStart] = sub.status as 'submitted' | 'rejected'
+                    if (sub.reject_reason) existingRow.weekRejectReasons[weekStart] = sub.reject_reason
+                    if (sub.status === 'submitted') existingRow.isSubmitted = true
+                }
+                continue
+            }
+
+            // No row at all — fetch sub_project info and create a synthetic zero-hour row
+            const { data: spData } = await supabase
+                .from('sub_projects')
+                .select('code, description, tracking_type, projects ( name, project_code )')
+                .eq('id', sub.sub_project_id)
+                .single()
+
+            if (!spData) continue
+
+            const sp = spData as any
+            const project = sp.projects
+            const projectName = project?.name ?? 'Unknown project'
+            const projectCode = project?.project_code ?? null
+            const subCode = sp.code ?? '?'
+            const subDesc = sp.description ?? null
+            const trackingType = (sp.tracking_type === 'days' ? 'days' : 'hours') as 'hours' | 'days'
+
+            if (!profileMap.has(sub.user_id)) {
+                const { data: prof } = await supabase
+                    .from('profiles')
+                    .select('id, full_name, rate_hourly, rate_daily')
+                    .eq('id', sub.user_id)
+                    .single()
+                if (prof) profileMap.set(prof.id, prof as any)
+            }
+            const profile = profileMap.get(sub.user_id)
+            const userName = profile?.full_name ?? 'Unknown user'
+            const rateHourly = profile?.rate_hourly ?? null
+            const rateDaily = profile?.rate_daily ?? null
+
+            const key = `${projectName}||${subCode}||${userName}`
+
+            if (!map.has(key)) {
+                map.set(key, {
+                    projectName,
+                    projectCode,
+                    subProjectCode: subCode,
+                    subProjectId: sub.sub_project_id,
+                    subProjectDescription: subDesc,
+                    trackingType,
+                    userId: sub.user_id,
+                    userName,
+                    totalHours: 0,
+                    dailyBreakdown: {},
+                    isSubmitted: sub.status === 'submitted',
+                    weekStatuses: { [weekStart]: sub.status as 'submitted' | 'rejected' },
+                    weekRejectReasons: sub.reject_reason ? { [weekStart]: sub.reject_reason } : {},
+                    rateHourly,
+                    rateDaily,
+                    earnings: 0,
+                    contractCodes: {},
+                })
+            } else {
+                const row = map.get(key)!
+                row.weekStatuses[weekStart] = sub.status as 'submitted' | 'rejected'
+                if (sub.reject_reason) row.weekRejectReasons[weekStart] = sub.reject_reason
+                if (sub.status === 'submitted') row.isSubmitted = true
+            }
+        }
     }
 
     let result = Array.from(map.values()).sort((a, b) => {
