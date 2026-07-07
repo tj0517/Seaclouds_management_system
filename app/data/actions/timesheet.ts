@@ -83,15 +83,15 @@ export async function submitWeek(weekStart: string, subprojectId: string) {
     }
 
     if (existing) {
-        // Resubmit a rejected row — use admin client to bypass RLS
-        const adminClient = getSupabaseAdmin()
-        const { error } = await adminClient
-            .from('timesheet_submissions')
-            .update({ status: 'submitted' } as any)
-            .eq('id', existing.id)
-            .eq('user_id', user.id) // safety: ensure user owns the row
+        // Resubmit a rejected row via SECURITY DEFINER function
+        const { data: updated, error } = await supabase
+            .rpc('resubmit_rejected', {
+                p_submission_id: existing.id,
+                p_user_id: user.id,
+            })
 
         if (error) return { error: error.message }
+        if (updated === false) return { error: 'Could not resubmit — submission is not in rejected state.' }
     } else {
         const { error } = await supabase
             .from('timesheet_submissions')
@@ -163,17 +163,28 @@ export async function submitWeekAll(weekStart: string, subprojectIds: string[]) 
         return { error: 'All projects are already submitted.' }
     }
 
-    // Update rejected rows back to submitted — use admin client to bypass RLS
+    // Resubmit rejected rows via SECURITY DEFINER function
     if (rejectedIds.length > 0) {
-        const adminClient = getSupabaseAdmin()
-        const { error } = await adminClient
+        // Get submission IDs for the rejected sub-projects
+        const { data: rejectedRows } = await supabase
             .from('timesheet_submissions')
-            .update({ status: 'submitted' } as any)
-            .eq('user_id', user.id) // safety: ensure user owns the rows
+            .select('id')
+            .eq('user_id', user.id)
             .eq('week_start', weekStart)
             .in('sub_project_id', rejectedIds)
 
-        if (error) return { error: error.message }
+        if (rejectedRows && rejectedRows.length > 0) {
+            const results = await Promise.all(
+                rejectedRows.map(row =>
+                    supabase.rpc('resubmit_rejected', {
+                        p_submission_id: row.id,
+                        p_user_id: user.id,
+                    })
+                )
+            )
+            const failed = results.find(r => r.error)
+            if (failed?.error) return { error: failed.error.message }
+        }
     }
 
     // Insert truly new rows
