@@ -325,29 +325,80 @@ export default function WeeklyReportSlider({ weeks, showEmpty }: { weeks: WeekDa
 
   const aggregatedProjects = useMemo(() => buildAggregatedProjects(weeks), [weeks])
 
-  // Group weeks by month for month-by-month navigation
+  // Group weeks by month, splitting cross-month weeks by actual calendar date.
+  // E.g. a week Mon Jun 29 – Sun Jul 5: Jun 29–30 go to June, Jul 1–5 go to July.
   const monthGroups = useMemo(() => {
-    const groups: { label: string; weeks: WeekData[] }[] = []
-    const monthMap = new Map<string, WeekData[]>()
-
+    // Collect all unique months from actual day dates across all weeks
+    const monthKeys = new Set<string>()
     for (const w of weeks) {
-      // Use the weekStart date to determine which month this week belongs to
-      const d = new Date(w.weekStart + 'T00:00:00')
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-      if (!monthMap.has(key)) monthMap.set(key, [])
-      monthMap.get(key)!.push(w)
+      for (const d of w.days) {
+        const date = new Date(d.key + 'T00:00:00')
+        monthKeys.add(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`)
+      }
     }
 
-    for (const [key, mWeeks] of monthMap) {
-      const [year, month] = key.split('-')
-      const monthName = new Date(Number(year), Number(month) - 1, 1).toLocaleString('en-US', { month: 'long', year: 'numeric' })
-      groups.push({ label: monthName, weeks: mWeeks })
-    }
+    const sorted = [...monthKeys].sort()
 
-    return groups
+    return sorted.map(key => {
+      const [year, month] = key.split('-').map(Number)
+      const label = new Date(year, month - 1, 1).toLocaleString('en-US', { month: 'long', year: 'numeric' })
+
+      // For each week, filter days to only those in this calendar month and recalculate totals
+      const filteredWeeks: WeekData[] = weeks
+        .map(w => {
+          const monthDays = w.days.filter(d => {
+            const date = new Date(d.key + 'T00:00:00')
+            return date.getFullYear() === year && date.getMonth() + 1 === month
+          })
+          if (monthDays.length === 0) return null
+
+          const monthDayKeys = new Set(monthDays.map(d => d.key))
+
+          const projects = w.projects.map(p => {
+            const subProjects = p.subProjects.map(sp => ({
+              ...sp,
+              users: sp.users.map(u => {
+                const filteredDaily = Object.fromEntries(
+                  Object.entries(u.dailyHours).filter(([dk]) => monthDayKeys.has(dk))
+                )
+                const weekTotal = Object.values(filteredDaily).reduce((s, h) => s + h, 0)
+                const rate = u.trackingType === 'days'
+                  ? (u.earnings > 0 && u.weekTotal > 0 ? u.earnings / u.weekTotal : 0)
+                  : (u.earnings > 0 && u.weekTotal > 0 ? u.earnings / u.weekTotal : 0)
+                return { ...u, dailyHours: filteredDaily, weekTotal, earnings: rate * weekTotal }
+              }),
+            }))
+
+            const dailyTotals = Object.fromEntries(
+              monthDays.map(d => [d.key, subProjects.reduce((s, sp) => s + sp.users.reduce((us, u) => us + (u.dailyHours[d.key] ?? 0), 0), 0)])
+            )
+            const dailyTotalsHours = Object.fromEntries(
+              monthDays.map(d => [d.key, subProjects.reduce((s, sp) => s + sp.users.filter(u => (u.trackingType ?? sp.trackingType) !== 'days').reduce((us, u) => us + (u.dailyHours[d.key] ?? 0), 0), 0)])
+            )
+            const dailyTotalsDays = Object.fromEntries(
+              monthDays.map(d => [d.key, subProjects.reduce((s, sp) => s + sp.users.filter(u => (u.trackingType ?? sp.trackingType) === 'days').reduce((us, u) => us + (u.dailyHours[d.key] ?? 0), 0), 0)])
+            )
+            const weekTotal = Object.values(dailyTotals).reduce((a, b) => a + b, 0)
+            const weekTotalHours = Object.values(dailyTotalsHours).reduce((a, b) => a + b, 0)
+            const weekTotalDays = Object.values(dailyTotalsDays).reduce((a, b) => a + b, 0)
+
+            return { ...p, subProjects, weekTotal, weekTotalHours, weekTotalDays, dailyTotals, dailyTotalsHours, dailyTotalsDays }
+          })
+
+          const weekTotal = projects.reduce((s, p) => s + p.weekTotal, 0)
+          const weekTotalHours = projects.reduce((s, p) => s + p.weekTotalHours, 0)
+          const weekTotalDays = projects.reduce((s, p) => s + p.weekTotalDays, 0)
+
+          return { ...w, days: monthDays, projects, weekTotal, weekTotalHours, weekTotalDays } as WeekData
+        })
+        .filter((w): w is WeekData => w !== null)
+
+      return { label, weeks: filteredWeeks }
+    })
   }, [weeks])
 
-  const currentMonthGroup = monthGroups[Math.min(currentMonthIndex, monthGroups.length - 1)]
+  const safeMonthIndex = Math.min(currentMonthIndex, monthGroups.length - 1)
+  const currentMonthGroup = monthGroups[safeMonthIndex]
   const monthAggregatedProjects = useMemo(
     () => currentMonthGroup ? buildAggregatedProjects(currentMonthGroup.weeks) : [],
     [currentMonthGroup]
@@ -412,7 +463,7 @@ export default function WeeklyReportSlider({ weeks, showEmpty }: { weeks: WeekDa
                     variant="outline"
                     size="icon"
                     className="h-8 w-8"
-                    disabled={currentMonthIndex === 0}
+                    disabled={safeMonthIndex === 0}
                     onClick={() => setCurrentMonthIndex(i => i - 1)}
                   >
                     <ChevronLeft className="h-4 w-4" />
@@ -421,7 +472,7 @@ export default function WeeklyReportSlider({ weeks, showEmpty }: { weeks: WeekDa
                     variant="outline"
                     size="icon"
                     className="h-8 w-8"
-                    disabled={currentMonthIndex >= monthGroups.length - 1}
+                    disabled={safeMonthIndex >= monthGroups.length - 1}
                     onClick={() => setCurrentMonthIndex(i => i + 1)}
                   >
                     <ChevronRight className="h-4 w-4" />
@@ -433,7 +484,7 @@ export default function WeeklyReportSlider({ weeks, showEmpty }: { weeks: WeekDa
               </h3>
               {monthGroups.length > 1 && (
                 <span className="text-sm text-muted-foreground">
-                  ({Math.min(currentMonthIndex, monthGroups.length - 1) + 1} of {monthGroups.length})
+                  ({safeMonthIndex + 1} of {monthGroups.length})
                 </span>
               )}
               <Badge variant="outline" className="font-mono text-xs ml-1">
