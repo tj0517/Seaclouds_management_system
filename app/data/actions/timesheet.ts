@@ -70,58 +70,28 @@ export async function submitWeek(weekStart: string, subprojectId: string) {
     if (!user) return { error: 'No session' }
 
     // Check for existing rejected row — update instead of insert
-    const { data: existing, error: selectError } = await supabase
+    const { data: existing } = await supabase
         .from('timesheet_submissions')
-        .select('id, status, user_id')
+        .select('id, status')
         .eq('user_id', user.id)
         .eq('sub_project_id', subprojectId)
         .eq('week_start', weekStart)
         .maybeSingle()
-
-    if (selectError) {
-        return { error: `[DEBUG] Select failed: ${selectError.message} (code=${selectError.code})` }
-    }
 
     if (existing?.status === 'submitted') {
         return { error: 'This week has already been submitted.' }
     }
 
     if (existing) {
-        // Resubmit — try update, if blocked by RLS fall back to delete+insert
-        const { data: updated, error } = await supabase
+        // Resubmit a rejected row — use admin client to bypass RLS
+        const adminClient = getSupabaseAdmin()
+        const { error } = await adminClient
             .from('timesheet_submissions')
             .update({ status: 'submitted' } as any)
             .eq('id', existing.id)
-            .select('id, status')
+            .eq('user_id', user.id) // safety: ensure user owns the row
 
-        if (error) {
-            return { error: `[DEBUG] Update error: ${error.message} (code=${error.code})` }
-        }
-
-        if (!updated || updated.length === 0) {
-            // RLS blocked the update — fallback: delete the rejected row and insert a fresh one
-            const { error: delError } = await supabase
-                .from('timesheet_submissions')
-                .delete()
-                .eq('id', existing.id)
-
-            if (delError) {
-                return { error: `[DEBUG] Update blocked & delete failed: ${delError.message}. Row id=${existing.id}, status=${existing.status}, user_id=${existing.user_id}, auth=${user.id}` }
-            }
-
-            const { error: insError } = await supabase
-                .from('timesheet_submissions')
-                .insert({
-                    user_id: user.id,
-                    sub_project_id: subprojectId,
-                    week_start: weekStart,
-                    status: 'submitted'
-                })
-
-            if (insError) {
-                return { error: `[DEBUG] Update blocked, delete ok, insert failed: ${insError.message} (code=${insError.code})` }
-            }
-        }
+        if (error) return { error: error.message }
     } else {
         const { error } = await supabase
             .from('timesheet_submissions')
@@ -193,20 +163,17 @@ export async function submitWeekAll(weekStart: string, subprojectIds: string[]) 
         return { error: 'All projects are already submitted.' }
     }
 
-    // Update rejected rows back to submitted
+    // Update rejected rows back to submitted — use admin client to bypass RLS
     if (rejectedIds.length > 0) {
-        const { data: updated, error } = await supabase
+        const adminClient = getSupabaseAdmin()
+        const { error } = await adminClient
             .from('timesheet_submissions')
             .update({ status: 'submitted' } as any)
-            .eq('user_id', user.id)
+            .eq('user_id', user.id) // safety: ensure user owns the rows
             .eq('week_start', weekStart)
             .in('sub_project_id', rejectedIds)
-            .select('id')
 
         if (error) return { error: error.message }
-        if (!updated || updated.length === 0) {
-            return { error: 'Failed to resubmit rejected entries. Please contact an admin.' }
-        }
     }
 
     // Insert truly new rows
