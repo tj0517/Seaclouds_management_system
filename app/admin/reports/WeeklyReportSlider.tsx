@@ -307,6 +307,7 @@ function formatMixedTotal(hours: number, days: number): string {
 
 export default function WeeklyReportSlider({ weeks, showEmpty }: { weeks: WeekData[]; showEmpty?: boolean }) {
   const [currentWeekIndex, setCurrentWeekIndex] = useState(0)
+  const [currentMonthIndex, setCurrentMonthIndex] = useState(0)
   const [viewMode, setViewMode] = useState<ViewMode>('day')
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -323,6 +324,34 @@ export default function WeeklyReportSlider({ weeks, showEmpty }: { weeks: WeekDa
   }, [searchParams, pathname, router])
 
   const aggregatedProjects = useMemo(() => buildAggregatedProjects(weeks), [weeks])
+
+  // Group weeks by month for month-by-month navigation
+  const monthGroups = useMemo(() => {
+    const groups: { label: string; weeks: WeekData[] }[] = []
+    const monthMap = new Map<string, WeekData[]>()
+
+    for (const w of weeks) {
+      // Use the weekStart date to determine which month this week belongs to
+      const d = new Date(w.weekStart + 'T00:00:00')
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+      if (!monthMap.has(key)) monthMap.set(key, [])
+      monthMap.get(key)!.push(w)
+    }
+
+    for (const [key, mWeeks] of monthMap) {
+      const [year, month] = key.split('-')
+      const monthName = new Date(Number(year), Number(month) - 1, 1).toLocaleString('en-US', { month: 'long', year: 'numeric' })
+      groups.push({ label: monthName, weeks: mWeeks })
+    }
+
+    return groups
+  }, [weeks])
+
+  const currentMonthGroup = monthGroups[Math.min(currentMonthIndex, monthGroups.length - 1)]
+  const monthAggregatedProjects = useMemo(
+    () => currentMonthGroup ? buildAggregatedProjects(currentMonthGroup.weeks) : [],
+    [currentMonthGroup]
+  )
 
   if (weeks.length === 0) {
     return (
@@ -375,10 +404,50 @@ export default function WeeklyReportSlider({ weeks, showEmpty }: { weeks: WeekDa
               </Badge>
             </>
           )}
-          {(viewMode === 'week' || viewMode === 'month') && (
+          {viewMode === 'month' && monthGroups.length > 0 && (
+            <>
+              {monthGroups.length > 1 && (
+                <>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8"
+                    disabled={currentMonthIndex === 0}
+                    onClick={() => setCurrentMonthIndex(i => i - 1)}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8"
+                    disabled={currentMonthIndex >= monthGroups.length - 1}
+                    onClick={() => setCurrentMonthIndex(i => i + 1)}
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </>
+              )}
+              <h3 className="text-lg font-semibold text-gray-800 ml-1">
+                {currentMonthGroup.label}
+              </h3>
+              {monthGroups.length > 1 && (
+                <span className="text-sm text-muted-foreground">
+                  ({Math.min(currentMonthIndex, monthGroups.length - 1) + 1} of {monthGroups.length})
+                </span>
+              )}
+              <Badge variant="outline" className="font-mono text-xs ml-1">
+                {formatMixedTotal(
+                  currentMonthGroup.weeks.reduce((s, w) => s + w.weekTotalHours, 0),
+                  currentMonthGroup.weeks.reduce((s, w) => s + w.weekTotalDays, 0)
+                )} total
+              </Badge>
+            </>
+          )}
+          {viewMode === 'week' && (
             <>
               <h3 className="text-lg font-semibold text-gray-800">
-                {viewMode === 'month' ? 'Monthly' : ''} Summary — {weeks[0].weekStartLabel} to {weeks[weeks.length - 1].weekEndLabel}
+                Summary — {weeks[0].weekStartLabel} to {weeks[weeks.length - 1].weekEndLabel}
               </h3>
               <Badge variant="outline" className="font-mono text-xs ml-1">
                 {formatMixedTotal(totalHoursAllWeeks, totalDaysAllWeeks)} total
@@ -436,8 +505,8 @@ export default function WeeklyReportSlider({ weeks, showEmpty }: { weeks: WeekDa
 
       {/* Content */}
       {viewMode === 'month' ? (
-        // Month view: one table per project, no date columns — just totals
-        aggregatedProjects.map(project => (
+        // Month view: one table per project, no date columns — navigate month by month
+        monthAggregatedProjects.map(project => (
           <Card key={project.name}>
             <CardHeader className="pb-2">
               <div className="flex items-center gap-3">
