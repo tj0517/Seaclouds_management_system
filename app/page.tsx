@@ -21,6 +21,7 @@ export default async function Home(props: Props) {
   const { user, profile } = result
 
   const isAdmin = profile?.role === 'admin'
+  const isAdminOrPM = isAdmin || (profile?.role as string) === 'project_lead'
 
   // 3. LOGIKA DATY (SERCE NAWIGACJI)
   // Jeśli w URL jest data (?date=...), użyj jej. Jeśli nie, użyj dzisiaj.
@@ -77,9 +78,9 @@ export default async function Home(props: Props) {
               <Link href="/expenses" className="text-sm font-medium text-gray-600 hover:text-gray-800 flex items-center gap-1.5 px-2.5 py-1.5 rounded-md hover:bg-gray-100 transition">
                 <Receipt size={16} /> <span className="hidden sm:inline">Expenses</span>
               </Link>
-              {isAdmin && (
+              {isAdminOrPM && (
                 <Link href="/admin" className="text-sm font-medium text-blue-600 hover:text-blue-800 flex items-center gap-1.5 px-2.5 py-1.5 rounded-md hover:bg-blue-50 transition">
-                  <Shield size={16} /> <span className="hidden sm:inline">Admin</span>
+                  <Shield size={16} /> <span className="hidden sm:inline">{isAdmin ? 'Admin' : 'Lead'}</span>
                 </Link>
               )}
               <AccountMenu email={user.email || ''} />

@@ -237,9 +237,23 @@ export async function adminWithdrawSubmission(userId: string, weekStart: string,
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return { error: 'No session' }
 
-    // Verify caller is admin
+    // Verify caller is admin or PM for this project
     const { data: isAdmin } = await supabase.rpc('is_admin')
-    if (!isAdmin) return { error: 'Unauthorized' }
+    if (!isAdmin) {
+        // Check if PM for the sub-project's parent project
+        const { data: sp } = await supabase
+            .from('sub_projects')
+            .select('project_id')
+            .eq('id', subprojectId)
+            .single()
+        if (!sp) return { error: 'Sub-project not found' }
+
+        const { getUserRoleAndProjects, hasProjectAccess } = await import('./auth-helpers')
+        const roleInfo = await getUserRoleAndProjects()
+        if (!roleInfo || roleInfo.role !== 'project_lead' || !hasProjectAccess(roleInfo, sp.project_id)) {
+            return { error: 'Unauthorized' }
+        }
+    }
 
     const { error } = await supabase
         .from('timesheet_submissions')

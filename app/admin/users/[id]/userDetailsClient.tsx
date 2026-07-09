@@ -72,7 +72,7 @@ export default function UserDetailsClient({
     const [fullName, setFullName] = useState(currentUser?.full_name || '')
     const [employeeId, setEmployeeId] = useState(currentUser?.employee_id || '')
     const [position, setPosition] = useState(currentUser?.position || '')
-    const [role, setRole] = useState<'admin' | 'employee'>(currentUser?.role || 'employee')
+    const [role, setRole] = useState<'admin' | 'employee' | 'project_lead'>(currentUser?.role || 'employee')
     const [rateHourly, setRateHourly] = useState(currentUser?.rate_hourly?.toString() || '')
     const [rateDaily, setRateDaily] = useState(currentUser?.rate_daily?.toString() || '')
 
@@ -219,12 +219,13 @@ export default function UserDetailsClient({
                             </div>
                             <div className="space-y-2">
                                 <Label htmlFor="role">Role</Label>
-                                <Select value={role} onValueChange={(v) => setRole(v as 'admin' | 'employee')}>
+                                <Select value={role} onValueChange={(v) => setRole(v as 'admin' | 'employee' | 'project_lead')}>
                                     <SelectTrigger>
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="employee">Employee</SelectItem>
+                                        <SelectItem value="project_lead">Project Lead</SelectItem>
                                         <SelectItem value="admin">Admin</SelectItem>
                                     </SelectContent>
                                 </Select>

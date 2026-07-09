@@ -2,6 +2,8 @@ import { format } from 'date-fns'
 import { TrendingUp } from 'lucide-react'
 import { createClient } from '@/utils/supabase/server'
 import { getMonthlyEarnings, getStatusesForMonth } from '@/app/data/actions/earnings'
+import { getUserRoleAndProjects } from '@/app/data/actions/auth-helpers'
+import { redirect } from 'next/navigation'
 import AdminEarningsClient from './AdminEarningsClient'
 
 export default async function AdminEarningsPage({
@@ -9,6 +11,9 @@ export default async function AdminEarningsPage({
 }: {
     searchParams: Promise<{ month?: string; project?: string }>
 }) {
+    const roleInfo = await getUserRoleAndProjects()
+    if (!roleInfo || roleInfo.role === 'project_lead') redirect('/admin')
+
     const params = await searchParams
     const month = params.month || format(new Date(), 'yyyy-MM')
     const projectFilter = params.project || ''

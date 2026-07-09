@@ -1,4 +1,6 @@
 import { getProjectById, getUsers, getProjectAssignments, fetchSubProjects, getSubProjectAssignments } from '@/app/data/actions'
+import { getUserRoleAndProjects, hasProjectAccess } from '@/app/data/actions/auth-helpers'
+import { redirect } from 'next/navigation'
 import AssignedEmployeesTable from './AssignedEmployeesTable'
 import SubProjectsList from './SubProjectsList'
 import EditProjectDialog from './EditProjectDialog'
@@ -16,6 +18,12 @@ export default async function ProjectDetailsPage({
 }) {
     const { id } = await params
     const projectId = id
+
+    const roleInfo = await getUserRoleAndProjects()
+    if (!roleInfo) redirect('/login')
+    if (!hasProjectAccess(roleInfo, projectId)) redirect('/admin/projects')
+
+    const isAdmin = roleInfo.role === 'admin'
 
     const [project, users, assignedUserIds, subProjects] = await Promise.all([
         getProjectById(projectId),
@@ -68,32 +76,36 @@ export default async function ProjectDetailsPage({
                                 <p className="font-medium mb-1 text-gray-700">Description:</p>
                                 <p>{project.description || 'No description.'}</p>
                             </div>
-                            <div className="flex gap-2 pt-2">
-                                <EditProjectDialog project={project} />
-                                <DeleteProjectButton projectId={project.id} projectName={project.name} />
-                            </div>
+                            {isAdmin && (
+                                <div className="flex gap-2 pt-2">
+                                    <EditProjectDialog project={project} />
+                                    <DeleteProjectButton projectId={project.id} projectName={project.name} />
+                                </div>
+                            )}
                         </CardContent>
                     </Card>
                 </div>
 
-                {/* Lista Pracowników */}
-                <div className="md:col-span-2">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Assigned Employees</CardTitle>
-                            <CardDescription>
-                                Select employees who have access to this project.
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <AssignedEmployeesTable
-                                users={users}
-                                projectId={projectId}
-                                assignedUserIds={assignedUserIds}
-                            />
-                        </CardContent>
-                    </Card>
-                </div>
+                {/* Lista Pracowników — only admins can assign/unassign users from projects */}
+                {isAdmin && (
+                    <div className="md:col-span-2">
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Assigned Employees</CardTitle>
+                                <CardDescription>
+                                    Select employees who have access to this project.
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <AssignedEmployeesTable
+                                    users={users}
+                                    projectId={projectId}
+                                    assignedUserIds={assignedUserIds}
+                                />
+                            </CardContent>
+                        </Card>
+                    </div>
+                )}
             </div>
 
             {/* Lista Podprojektów */}
@@ -103,6 +115,7 @@ export default async function ProjectDetailsPage({
                     initialSubProjects={subProjects}
                     assignedUsers={assignedUsers}
                     subProjectAssignments={subProjectAssignments}
+                    isAdmin={isAdmin}
                 />
             </div>
         </div>

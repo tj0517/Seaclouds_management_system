@@ -305,7 +305,7 @@ function formatMixedTotal(hours: number, days: number): string {
   return parts.length > 0 ? parts.join(' / ') : '—'
 }
 
-export default function WeeklyReportSlider({ weeks, showEmpty }: { weeks: WeekData[]; showEmpty?: boolean }) {
+export default function WeeklyReportSlider({ weeks, showEmpty, showEarnings = true }: { weeks: WeekData[]; showEmpty?: boolean; showEarnings?: boolean }) {
   const [currentWeekIndex, setCurrentWeekIndex] = useState(0)
   const [currentMonthIndex, setCurrentMonthIndex] = useState(0)
   const [viewMode, setViewMode] = useState<ViewMode>('day')
@@ -577,7 +577,7 @@ export default function WeeklyReportSlider({ weeks, showEmpty }: { weeks: WeekDa
                       <th className="text-left px-3 py-2 font-medium text-gray-600 w-36">Service Order</th>
                       <th className="text-left px-3 py-2 font-medium text-gray-600">Employee</th>
                       <th className="text-center px-3 py-2 font-bold text-gray-800 bg-gray-100 w-16">Σ</th>
-                      <th className="text-center px-3 py-2 font-medium text-gray-600 w-24">Earnings</th>
+                      {showEarnings && <th className="text-center px-3 py-2 font-medium text-gray-600 w-24">Earnings</th>}
                       <th className="text-center px-3 py-2 font-medium text-gray-600 w-28">Status</th>
                     </tr>
                   </thead>
@@ -610,9 +610,9 @@ export default function WeeklyReportSlider({ weeks, showEmpty }: { weeks: WeekDa
                             </div>
                           </td>
                           <td className="px-3 py-2 text-center font-bold text-blue-600 bg-gray-50">{user.total}{sp.trackingType === 'days' ? 'd' : 'h'}</td>
-                          <td className="px-3 py-2 text-center font-medium text-emerald-700">
+                          {showEarnings && <td className="px-3 py-2 text-center font-medium text-emerald-700">
                             {user.earnings > 0 ? `${user.earnings.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} PLN` : <span className="text-gray-300">—</span>}
-                          </td>
+                          </td>}
                           <td className="px-3 py-2 text-center">
                             <AggregatedStatusBadge status={user.submissionStatus} rejectReason={user.rejectReason} />
                           </td>
@@ -625,9 +625,9 @@ export default function WeeklyReportSlider({ weeks, showEmpty }: { weeks: WeekDa
                       <td className="px-3 py-2 text-center text-blue-700 bg-blue-50">
                         {formatMixedTotal(project.totalHours, project.totalDays)}
                       </td>
-                      <td className="px-3 py-2 text-center text-emerald-700 bg-emerald-50 font-bold">
+                      {showEarnings && <td className="px-3 py-2 text-center text-emerald-700 bg-emerald-50 font-bold">
                         {project.subProjects.reduce((s, sp) => s + sp.users.reduce((us, u) => us + u.earnings, 0), 0).toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} PLN
-                      </td>
+                      </td>}
                       <td />
                     </tr>
                   </tbody>
@@ -667,7 +667,7 @@ export default function WeeklyReportSlider({ weeks, showEmpty }: { weeks: WeekDa
                         </th>
                       ))}
                       <th className="text-center px-3 py-2 font-bold text-gray-800 bg-gray-100 w-16">Σ</th>
-                      <th className="text-center px-3 py-2 font-medium text-gray-600 w-24">Earnings</th>
+                      {showEarnings && <th className="text-center px-3 py-2 font-medium text-gray-600 w-24">Earnings</th>}
                       <th className="text-center px-3 py-2 font-medium text-gray-600 w-28">Status</th>
                     </tr>
                   </thead>
@@ -707,9 +707,9 @@ export default function WeeklyReportSlider({ weeks, showEmpty }: { weeks: WeekDa
                             )
                           })}
                           <td className="px-3 py-2 text-center font-bold text-blue-600 bg-gray-50">{userRow.weekTotal}{(userRow.trackingType ?? sp.trackingType) === 'days' ? 'd' : 'h'}</td>
-                          <td className="px-3 py-2 text-center font-medium text-emerald-700">
+                          {showEarnings && <td className="px-3 py-2 text-center font-medium text-emerald-700">
                             {userRow.earnings > 0 ? `${userRow.earnings.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} PLN` : <span className="text-gray-300">—</span>}
-                          </td>
+                          </td>}
                           <td className="px-3 py-2 text-center">
                             <StatusCell userRow={userRow} weekStart={week.weekStart} />
                           </td>
@@ -731,9 +731,9 @@ export default function WeeklyReportSlider({ weeks, showEmpty }: { weeks: WeekDa
                       <td className="px-3 py-2 text-center text-blue-700 bg-blue-50">
                         {formatMixedTotal(project.weekTotalHours, project.weekTotalDays)}
                       </td>
-                      <td className="px-3 py-2 text-center text-emerald-700 bg-emerald-50 font-bold">
+                      {showEarnings && <td className="px-3 py-2 text-center text-emerald-700 bg-emerald-50 font-bold">
                         {project.subProjects.reduce((s, sp) => s + sp.users.reduce((us, u) => us + u.earnings, 0), 0).toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} PLN
-                      </td>
+                      </td>}
                       <td />
                     </tr>
                   </tbody>
@@ -770,7 +770,7 @@ export default function WeeklyReportSlider({ weeks, showEmpty }: { weeks: WeekDa
                         </th>
                       ))}
                       <th className="text-center px-3 py-2 font-bold text-gray-800 bg-gray-100 w-16">Σ</th>
-                      <th className="text-center px-3 py-2 font-medium text-gray-600 w-24">Earnings</th>
+                      {showEarnings && <th className="text-center px-3 py-2 font-medium text-gray-600 w-24">Earnings</th>}
                       <th className="text-center px-3 py-2 font-medium text-gray-600 w-28">Status</th>
                     </tr>
                   </thead>
@@ -814,9 +814,9 @@ export default function WeeklyReportSlider({ weeks, showEmpty }: { weeks: WeekDa
                             )
                           })}
                           <td className="px-3 py-2 text-center font-bold text-blue-600 bg-gray-50">{user.total}{sp.trackingType === 'days' ? 'd' : 'h'}</td>
-                          <td className="px-3 py-2 text-center font-medium text-emerald-700">
+                          {showEarnings && <td className="px-3 py-2 text-center font-medium text-emerald-700">
                             {user.earnings > 0 ? `${user.earnings.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} PLN` : <span className="text-gray-300">—</span>}
-                          </td>
+                          </td>}
                           <td className="px-3 py-2 text-center">
                             <AggregatedStatusBadge status={user.submissionStatus} rejectReason={user.rejectReason} />
                           </td>
@@ -838,9 +838,9 @@ export default function WeeklyReportSlider({ weeks, showEmpty }: { weeks: WeekDa
                       <td className="px-3 py-2 text-center text-blue-700 bg-blue-50">
                         {formatMixedTotal(project.totalHours, project.totalDays)}
                       </td>
-                      <td className="px-3 py-2 text-center text-emerald-700 bg-emerald-50 font-bold">
+                      {showEarnings && <td className="px-3 py-2 text-center text-emerald-700 bg-emerald-50 font-bold">
                         {project.subProjects.reduce((s, sp) => s + sp.users.reduce((us, u) => us + u.earnings, 0), 0).toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} PLN
-                      </td>
+                      </td>}
                       <td />
                     </tr>
                   </tbody>

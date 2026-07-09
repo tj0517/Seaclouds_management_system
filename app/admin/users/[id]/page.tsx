@@ -1,5 +1,7 @@
 
 import { getProjects, getUserAssignments, getUsers, fetchSubProjects, getUserSubProjectAssignments } from '@/app/data/actions'
+import { getUserRoleAndProjects } from '@/app/data/actions/auth-helpers'
+import { redirect } from 'next/navigation'
 import { getSupabaseAdmin } from '@/utils/supabase/admin'
 import UserDetailsClient from './userDetailsClient'
 
@@ -8,6 +10,8 @@ export default async function UserDetailsPage({
 }: {
   params: Promise<{ id: string }>
 }) {
+  const roleInfo = await getUserRoleAndProjects()
+  if (!roleInfo || roleInfo.role === 'project_lead') redirect('/admin')
 
   const { id } = await params;
   const userId = id;

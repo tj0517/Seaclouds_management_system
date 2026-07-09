@@ -1,9 +1,16 @@
 import { getAdminExpenseTables } from '@/app/data/actions/expenses'
+import { getUserRoleAndProjects } from '@/app/data/actions/auth-helpers'
 import { Receipt } from 'lucide-react'
 import AdminExpensesTable from './AdminExpensesTable'
 
 export default async function AdminExpensesPage() {
-    const tables = await getAdminExpenseTables()
+    const roleInfo = await getUserRoleAndProjects()
+    const allTables = await getAdminExpenseTables()
+
+    // Scope to PM's projects if applicable
+    const tables = roleInfo?.pmProjectIds
+        ? allTables.filter(t => roleInfo.pmProjectIds!.includes(t.project_id))
+        : allTables
 
     return (
         <div className="space-y-6">

@@ -1,9 +1,14 @@
 import { getUsers } from '@/app/data/actions'
+import { getUserRoleAndProjects } from '@/app/data/actions/auth-helpers'
+import { redirect } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import UsersTable from '@/app/components/UsersTable'
 import InviteUserDialog from './InviteUserDialog'
 
 export default async function UsersPage() {
+  const roleInfo = await getUserRoleAndProjects()
+  if (!roleInfo || roleInfo.role === 'project_lead') redirect('/admin')
+
   const users = await getUsers()
 
   return (

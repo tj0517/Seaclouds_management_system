@@ -1,4 +1,5 @@
 import { getGroupedReportData, getReportFilterOptions } from '@/app/data/actions/timesheet'
+import { getUserRoleAndProjects } from '@/app/data/actions/auth-helpers'
 import { createClient } from '@/utils/supabase/server'
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, eachWeekOfInterval, addDays, parseISO, startOfWeek, min, max } from 'date-fns'
 import { enUS } from 'date-fns/locale'
@@ -29,7 +30,10 @@ export default async function ReportsPage(props: Props) {
   const filterServiceOrder = searchParams.serviceOrder || ''
   const showEmpty = searchParams.showEmpty === 'true'
 
-  const [rows, filterOptions] = await Promise.all([
+  const roleInfo = await getUserRoleAndProjects()
+  const isAdmin = roleInfo?.role === 'admin'
+
+  const [allRows, allFilterOptions] = await Promise.all([
     getGroupedReportData(dateFrom, dateTo, {
       userName: filterUser || undefined,
       subProjectCode: filterCode || undefined,
@@ -38,6 +42,28 @@ export default async function ReportsPage(props: Props) {
     }),
     getReportFilterOptions(dateFrom, dateTo),
   ])
+
+  // Scope to PM's projects if applicable
+  let pmProjectNames: Set<string> | null = null
+  if (roleInfo?.pmProjectIds) {
+    const supabaseForPM = await createClient()
+    const { data: pmProjects } = await supabaseForPM
+      .from('projects')
+      .select('name')
+      .in('id', roleInfo.pmProjectIds)
+    pmProjectNames = new Set((pmProjects ?? []).map((p: any) => p.name))
+  }
+
+  const rows = pmProjectNames
+    ? allRows.filter(r => pmProjectNames!.has(r.projectName))
+    : allRows
+
+  const filterOptions = pmProjectNames
+    ? {
+        ...allFilterOptions,
+        projectNames: allFilterOptions.projectNames.filter(p => pmProjectNames!.has(p)),
+      }
+    : allFilterOptions
 
   // Fetch contract codes for the date range (per user, per project, per week)
   const supabase = await createClient()
@@ -128,7 +154,7 @@ export default async function ReportsPage(props: Props) {
         }
         if (totalHours === 0) return null
 
-        const rate = r.trackingType === 'days' ? r.rateDaily : r.rateHourly
+        const rate = isAdmin ? (r.trackingType === 'days' ? r.rateDaily : r.rateHourly) : 0
         return { ...r, dailyBreakdown: filteredBreakdown, totalHours, earnings: rate ? totalHours * rate : 0 }
       }).filter((r): r is NonNullable<typeof r> => r !== null)
     : rows
@@ -185,7 +211,7 @@ export default async function ReportsPage(props: Props) {
                 )
                 .map(u => {
                   const weekTotal = week.days.reduce((s, d) => s + (u.dailyBreakdown[d] ?? 0), 0)
-                  const rate = u.trackingType === 'days' ? u.rateDaily : u.rateHourly
+                  const rate = isAdmin ? (u.trackingType === 'days' ? u.rateDaily : u.rateHourly) : 0
                   const earnings = rate ? weekTotal * rate : 0
                   const userProjectKey = `${u.userId}||${projectName}`
                   const userServiceOrder = contractCodeByUserProject.get(userProjectKey)?.get(week.weekStart) ?? ''
@@ -372,11 +398,11 @@ export default async function ReportsPage(props: Props) {
       </Card>
 
       {/* SUMMARY CARDS */}
-      <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
+      <div className={`grid grid-cols-2 ${isAdmin ? 'lg:grid-cols-6' : 'lg:grid-cols-5'} gap-4`}>
         {[
           { label: 'Total Hours', value: `${totalHours}h`, icon: Clock },
           { label: 'Total Days', value: `${totalDays}d`, icon: CalendarDays },
-          { label: 'Earnings', value: `${totalEarnings.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} PLN`, icon: DollarSign },
+          ...(isAdmin ? [{ label: 'Earnings', value: `${totalEarnings.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} PLN`, icon: DollarSign }] : []),
           { label: 'Employees', value: uniqueUsers, icon: Users },
           { label: 'Projects', value: uniqueProjects, icon: FileText },
           { label: 'Submitted Rows', value: totalSubmitted, icon: CheckCircle2 },
@@ -394,7 +420,7 @@ export default async function ReportsPage(props: Props) {
       </div>
 
       {/* WEEKLY TABLES */}
-      <WeeklyReportSlider weeks={weekData} showEmpty={showEmpty} />
+      <WeeklyReportSlider weeks={weekData} showEmpty={showEmpty} showEarnings={isAdmin} />
     </div>
   )
 }

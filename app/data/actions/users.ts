@@ -4,6 +4,7 @@ import { createClient } from '@/utils/supabase/server'
 import { getSupabaseAdmin } from '@/utils/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import { Database } from '@/utils/supabase/types'
+import { getUserRoleAndProjects } from './auth-helpers'
 
 type Profile = Database['public']['Tables']['profiles']['Row']
 
@@ -67,19 +68,15 @@ export async function getMyProjects() {
 }
 
 // 11. Zmień rolę użytkownika
-// 11. Zmień rolę użytkownika
-export async function updateUserRole(userId: string, newRole: 'admin' | 'employee') {
+export async function updateUserRole(userId: string, newRole: 'admin' | 'employee' | 'project_lead') {
+    const roleInfo = await getUserRoleAndProjects()
+    if (!roleInfo || roleInfo.role !== 'admin') return { error: 'Unauthorized' }
+
     const supabase = await createClient()
-
-    // Opcjonalnie: Sprawdź, czy wykonujący to admin
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return { error: 'No session' }
-
-    // Tutaj zakładamy, że tylko admin może wywołać tę funkcję (RLS w bazie też powinno to blokować)
 
     const { error } = await supabase
         .from('profiles')
-        .update({ role: newRole })
+        .update({ role: newRole } as any)
         .eq('id', userId)
 
     if (error) {
@@ -91,10 +88,13 @@ export async function updateUserRole(userId: string, newRole: 'admin' | 'employe
 }
 
 export async function inviteUser(formData: FormData) {
+    const roleInfo = await getUserRoleAndProjects()
+    if (!roleInfo || roleInfo.role !== 'admin') return { error: 'Unauthorized' }
+
     const email = formData.get('email') as string
     const password = formData.get('password') as string
     const full_name = (formData.get('full_name') as string) || null
-    const role = ((formData.get('role') as string) || 'employee') as 'admin' | 'employee'
+    const role = ((formData.get('role') as string) || 'employee') as 'admin' | 'employee' | 'project_lead'
     const employee_id = (formData.get('employee_id') as string) || null
     const position = (formData.get('position') as string) || null
     const rate_hourly = formData.get('rate_hourly') ? Number(formData.get('rate_hourly')) : null
@@ -135,13 +135,12 @@ export async function updateUserProfile(userId: string, data: {
     full_name: string | null
     employee_id: string | null
     position: string | null
-    role: 'admin' | 'employee'
+    role: 'admin' | 'employee' | 'project_lead'
     rate_hourly: number | null
     rate_daily: number | null
 }) {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return { error: 'No session' }
+    const roleInfo = await getUserRoleAndProjects()
+    if (!roleInfo || roleInfo.role !== 'admin') return { error: 'Unauthorized' }
 
     const { error } = await getSupabaseAdmin()
         .from('profiles')
@@ -184,9 +183,8 @@ export async function changePassword(currentPassword: string, newPassword: strin
 }
 
 export async function changeUserEmail(userId: string, newEmail: string) {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return { error: 'No session' }
+    const roleInfo = await getUserRoleAndProjects()
+    if (!roleInfo || roleInfo.role !== 'admin') return { error: 'Unauthorized' }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
     if (!newEmail || !emailRegex.test(newEmail)) return { error: 'Invalid email format' }
@@ -209,8 +207,10 @@ export async function changeUserEmail(userId: string, newEmail: string) {
 }
 
 export async function deactivateUser(userId: string) {
+    const roleInfo = await getUserRoleAndProjects()
+    if (!roleInfo || roleInfo.role !== 'admin') return { error: 'Unauthorized' }
+
     try {
-        // Use admin client to bypass RLS
         const { error } = await getSupabaseAdmin()
             .from('project_assignments')
             .delete()

@@ -305,10 +305,10 @@ export async function getExportDownloadUrl(exportId: string) {
 
     if (error || !exportRecord) return { error: 'Export not found' }
 
-    // Only allow user to access their own exports, or admins
+    // Only allow user to access their own exports, or admins/PMs
     if (exportRecord.user_id !== user.id) {
-        const { data: isAdmin } = await supabase.rpc('is_admin')
-        if (!isAdmin) return { error: 'Unauthorized' }
+        const { data: isAdminOrPm } = await supabase.rpc('is_admin_or_pm' as any)
+        if (!isAdminOrPm) return { error: 'Unauthorized' }
     }
 
     const { data: signedUrlData, error: signedUrlError } = await adminClient
@@ -326,9 +326,9 @@ export async function listPdfExports(filters?: { userId?: string }) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return []
 
-    // Check admin
-    const { data: isAdmin } = await supabase.rpc('is_admin')
-    if (!isAdmin) return []
+    // Check admin or PM
+    const { data: isAdminOrPm } = await supabase.rpc('is_admin_or_pm' as any)
+    if (!isAdminOrPm) return []
 
     const adminClient = getSupabaseAdmin()
     let query = adminClient
@@ -378,8 +378,8 @@ export async function generateExpensePdf(tableId: string) {
         .single()
     if (!profile) return { error: 'Profile not found' }
 
-    // Check if admin (admins can export any table)
-    const { data: isAdmin } = await supabase.rpc('is_admin')
+    // Check if admin or PM (admins/PMs can export any table they have access to)
+    const { data: isAdminOrPm } = await supabase.rpc('is_admin_or_pm' as any)
 
     // Fetch expense table with project name
     const adminClient = getSupabaseAdmin()
@@ -391,8 +391,8 @@ export async function generateExpensePdf(tableId: string) {
 
     if (tableError || !table) return { error: 'Expense table not found' }
 
-    // Verify ownership (unless admin)
-    if ((table as any).user_id !== user.id && !isAdmin) {
+    // Verify ownership (unless admin/PM)
+    if ((table as any).user_id !== user.id && !isAdminOrPm) {
         return { error: 'Unauthorized' }
     }
 

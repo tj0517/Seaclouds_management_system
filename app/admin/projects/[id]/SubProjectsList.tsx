@@ -37,9 +37,10 @@ type Props = {
     initialSubProjects: SubProject[]
     assignedUsers: User[]
     subProjectAssignments: Record<string, string[]>
+    isAdmin: boolean
 }
 
-export default function SubProjectsList({ projectId, initialSubProjects, assignedUsers, subProjectAssignments }: Props) {
+export default function SubProjectsList({ projectId, initialSubProjects, assignedUsers, subProjectAssignments, isAdmin }: Props) {
     const [open, setOpen] = useState(false)
     const [loading, setLoading] = useState(false)
     const [togglingAssignment, setTogglingAssignment] = useState<string | null>(null)
@@ -197,9 +198,9 @@ export default function SubProjectsList({ projectId, initialSubProjects, assigne
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <div>
                     <CardTitle>Sub-projects</CardTitle>
-                    <CardDescription>Manage task codes and user assignments for this project.</CardDescription>
+                    <CardDescription>{isAdmin ? 'Manage task codes and user assignments for this project.' : 'Task codes and user assignments for this project.'}</CardDescription>
                 </div>
-                <Dialog open={open} onOpenChange={setOpen}>
+                {isAdmin && <Dialog open={open} onOpenChange={setOpen}>
                     <DialogTrigger asChild>
                         <Button size="sm" className="gap-1">
                             <Plus size={16} /> Add Sub-project
@@ -250,7 +251,7 @@ export default function SubProjectsList({ projectId, initialSubProjects, assigne
                             </DialogFooter>
                         </form>
                     </DialogContent>
-                </Dialog>
+                </Dialog>}
             </CardHeader>
             <CardContent>
                 {initialSubProjects.length === 0 ? (
@@ -266,7 +267,7 @@ export default function SubProjectsList({ projectId, initialSubProjects, assigne
                                 <TableHead className="w-[80px]">Type</TableHead>
                                 <TableHead>Assigned Users</TableHead>
                                 <TableHead className="w-[100px]">Status</TableHead>
-                                <TableHead className="w-[100px] text-right">Actions</TableHead>
+                                {isAdmin && <TableHead className="w-[100px] text-right">Actions</TableHead>}
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -302,9 +303,9 @@ export default function SubProjectsList({ projectId, initialSubProjects, assigne
                                                 ) : (
                                                     <span className="text-xs text-muted-foreground">No users</span>
                                                 )}
-                                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openAssignDialog(sp)}>
+                                                {isAdmin && <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openAssignDialog(sp)}>
                                                     <Users className="h-3.5 w-3.5" />
-                                                </Button>
+                                                </Button>}
                                             </div>
                                         </TableCell>
                                         <TableCell>
@@ -312,7 +313,7 @@ export default function SubProjectsList({ projectId, initialSubProjects, assigne
                                                 {sp.is_active ? 'Active' : 'Inactive'}
                                             </Badge>
                                         </TableCell>
-                                        <TableCell className="text-right">
+                                        {isAdmin && <TableCell className="text-right">
                                             <div className="flex items-center justify-end gap-1">
                                                 <Button
                                                     variant="ghost"
@@ -340,7 +341,7 @@ export default function SubProjectsList({ projectId, initialSubProjects, assigne
                                                     />
                                                 )}
                                             </div>
-                                        </TableCell>
+                                        </TableCell>}
                                     </TableRow>
                                 )
                             })}

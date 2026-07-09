@@ -715,6 +715,13 @@ export async function approveExpenseTable(id: string) {
     if (!table) return { error: 'Table not found' }
     if (table.status !== 'submitted') return { error: 'Only submitted tables can be approved' }
 
+    // Auth: admin or PM for this project
+    const { getUserRoleAndProjects, hasProjectAccess } = await import('./auth-helpers')
+    const roleInfo = await getUserRoleAndProjects()
+    if (!roleInfo || (roleInfo.role !== 'admin' && !hasProjectAccess(roleInfo, table.project_id))) {
+        return { error: 'Unauthorized' }
+    }
+
     const { error } = await (supabase as any)
         .from('expense_tables')
         .update({ status: 'approved', reviewed_at: new Date().toISOString(), reviewed_by: user.id })
@@ -762,6 +769,13 @@ export async function declineExpenseTable(id: string, reason: string) {
     if (!table) return { error: 'Table not found' }
     if (table.status !== 'submitted') return { error: 'Only submitted tables can be declined' }
 
+    // Auth: admin or PM for this project
+    const { getUserRoleAndProjects, hasProjectAccess } = await import('./auth-helpers')
+    const roleInfo = await getUserRoleAndProjects()
+    if (!roleInfo || (roleInfo.role !== 'admin' && !hasProjectAccess(roleInfo, table.project_id))) {
+        return { error: 'Unauthorized' }
+    }
+
     const { error } = await (supabase as any)
         .from('expense_tables')
         .update({
@@ -808,13 +822,20 @@ export async function resetExpenseTableStatus(id: string) {
 
     const { data: table } = await (supabase as any)
         .from('expense_tables')
-        .select('status')
+        .select('status, project_id')
         .eq('id', id)
         .single()
 
     if (!table) return { error: 'Table not found' }
     if (table.status !== 'approved' && table.status !== 'declined') {
         return { error: 'Only approved or declined tables can be reset' }
+    }
+
+    // Auth: admin or PM for this project
+    const { getUserRoleAndProjects, hasProjectAccess } = await import('./auth-helpers')
+    const roleInfo = await getUserRoleAndProjects()
+    if (!roleInfo || (roleInfo.role !== 'admin' && !hasProjectAccess(roleInfo, table.project_id))) {
+        return { error: 'Unauthorized' }
     }
 
     const { error } = await (supabase as any)

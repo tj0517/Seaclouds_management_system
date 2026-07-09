@@ -106,6 +106,7 @@ export default function InviteUserDialog() {
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="employee">Employee</SelectItem>
+                                    <SelectItem value="project_lead">Project Lead</SelectItem>
                                     <SelectItem value="admin">Admin</SelectItem>
                                 </SelectContent>
                             </Select>

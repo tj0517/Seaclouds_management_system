@@ -1,11 +1,24 @@
 import { listPdfExports } from '@/app/data/actions/pdf'
+import { getUserRoleAndProjects } from '@/app/data/actions/auth-helpers'
+import { getProjectAssignments } from '@/app/data/actions/projects'
 import { format } from 'date-fns'
 import { Download } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import PdfExportDownloadButton from './PdfExportDownloadButton'
 
 export default async function ExportsPage() {
-  const exports = await listPdfExports()
+  const roleInfo = await getUserRoleAndProjects()
+  const allExports = await listPdfExports()
+
+  // For PMs, only show exports from users assigned to their projects
+  let exports = allExports
+  if (roleInfo?.pmProjectIds) {
+    const assignedUserSets = await Promise.all(
+      roleInfo.pmProjectIds.map(pid => getProjectAssignments(pid))
+    )
+    const allowedUserIds = new Set(assignedUserSets.flat())
+    exports = allExports.filter((exp: any) => allowedUserIds.has(exp.user_id))
+  }
 
   return (
     <div className="space-y-6">

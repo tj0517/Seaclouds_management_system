@@ -1,4 +1,5 @@
 import { getAdminExpenseTableDetail, getExpenseEntries } from '@/app/data/actions/expenses'
+import { getUserRoleAndProjects, hasProjectAccess } from '@/app/data/actions/auth-helpers'
 import { redirect } from 'next/navigation'
 import AdminExpenseDetail from './AdminExpenseDetail'
 
@@ -11,6 +12,10 @@ export default async function AdminExpenseDetailPage(props: Props) {
     const table = await getAdminExpenseTableDetail(id)
 
     if (!table) redirect('/admin/expenses')
+
+    // Verify PM has access to this project
+    const roleInfo = await getUserRoleAndProjects()
+    if (roleInfo && !hasProjectAccess(roleInfo, table.project_id)) redirect('/admin/expenses')
 
     const entries = await getExpenseEntries(id)
 

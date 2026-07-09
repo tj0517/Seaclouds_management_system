@@ -4,24 +4,28 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { LayoutDashboard, FolderKanban, Users, LogOut, FileText, Clock, Menu, X, Download, Receipt, TrendingUp } from 'lucide-react'
 
-const navLinks = [
+const allNavLinks = [
     { href: '/admin', icon: LayoutDashboard, label: 'Dashboard' },
     { href: '/admin/projects', icon: FolderKanban, label: 'Projects' },
-    { href: '/admin/users', icon: Users, label: 'Employees' },
+    { href: '/admin/users', icon: Users, label: 'Employees', adminOnly: true },
     { href: '/admin/reports', icon: FileText, label: 'Reports' },
     { href: '/admin/expenses', icon: Receipt, label: 'Expenses' },
-    { href: '/admin/earnings', icon: TrendingUp, label: 'Earnings' },
+    { href: '/admin/earnings', icon: TrendingUp, label: 'Earnings', adminOnly: true },
     { href: '/admin/exports', icon: Download, label: 'PDF Exports' },
     { href: '/', icon: Clock, label: 'Log Hours' },
 ]
 
-export default function AdminSidebar({ email }: { email: string }) {
+export default function AdminSidebar({ email, role }: { email: string; role: string }) {
     const [open, setOpen] = useState(false)
+
+    const isLead = role === 'project_lead'
+    const navLinks = isLead ? allNavLinks.filter(l => !l.adminOnly) : allNavLinks
+    const panelTitle = isLead ? 'Lead Panel' : 'Admin Panel'
 
     const sidebarContent = (
         <>
             <div className="p-6 border-b">
-                <h1 className="text-xl font-bold text-blue-600">Admin Panel</h1>
+                <h1 className="text-xl font-bold text-blue-600">{panelTitle}</h1>
                 <p className="text-xs text-gray-500 mt-1">{email}</p>
             </div>
             <nav className="flex-1 p-4 space-y-2">

@@ -14,6 +14,48 @@ export type Database = {
   }
   public: {
     Tables: {
+      earnings_month_status: {
+        Row: {
+          id: string
+          status: string
+          updated_at: string | null
+          updated_by: string | null
+          user_id: string
+          year_month: string
+        }
+        Insert: {
+          id?: string
+          status?: string
+          updated_at?: string | null
+          updated_by?: string | null
+          user_id: string
+          year_month: string
+        }
+        Update: {
+          id?: string
+          status?: string
+          updated_at?: string | null
+          updated_by?: string | null
+          user_id?: string
+          year_month?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "earnings_month_status_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "earnings_month_status_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       expense_entries: {
         Row: {
           amount: number
@@ -523,6 +565,8 @@ export type Database = {
     }
     Functions: {
       is_admin: { Args: never; Returns: boolean }
+      is_admin_or_pm: { Args: never; Returns: boolean }
+      is_pm_for_project: { Args: { p_project_id: string }; Returns: boolean }
       is_week_locked:
         | { Args: { entry_date: string; entry_user: string }; Returns: boolean }
         | {
@@ -533,6 +577,10 @@ export type Database = {
             }
             Returns: boolean
           }
+      resubmit_rejected: {
+        Args: { p_submission_id: string; p_user_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
       expense_currency: "PLN" | "EUR" | "USD" | "GBP"
@@ -547,7 +595,7 @@ export type Database = {
         | "other"
         | "bus"
         | "train"
-      user_role: "admin" | "employee"
+      user_role: "admin" | "employee" | "project_lead"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -688,7 +736,7 @@ export const Constants = {
         "bus",
         "train",
       ],
-      user_role: ["admin", "employee"],
+      user_role: ["admin", "employee", "project_lead"],
     },
   },
 } as const

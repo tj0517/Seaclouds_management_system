@@ -37,8 +37,8 @@ export default function UsersTable({ users }: { users: Profile[] }) {
                                 {user.full_name || 'No name'}
                             </TableCell>
                             <TableCell>
-                                <Badge variant={user.role === 'admin' ? "default" : "secondary"}>
-                                    {user.role}
+                                <Badge variant={user.role === 'admin' ? "default" : (user.role as string) === 'project_lead' ? "outline" : "secondary"}>
+                                    {(user.role as string) === 'project_lead' ? 'Lead' : user.role}
                                 </Badge>
                             </TableCell>
                             <TableCell className="text-right">

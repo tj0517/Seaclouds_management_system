@@ -1,4 +1,5 @@
 import { getProjects, getUsers } from '@/app/data/actions'
+import { getUserRoleAndProjects } from '@/app/data/actions/auth-helpers'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
@@ -7,8 +8,14 @@ import ProjectsTable from '@/app/components/ProjectsTable'
 import UsersTable from '@/app/components/UsersTable'
 
 export default async function AdminDashboard() {
-  const projects = await getProjects()
+  const roleInfo = await getUserRoleAndProjects()
+  const allProjects = await getProjects()
   const users = await getUsers()
+
+  const isAdmin = roleInfo?.role === 'admin'
+  const projects = roleInfo?.pmProjectIds
+    ? allProjects.filter(p => roleInfo.pmProjectIds!.includes(p.id))
+    : allProjects
 
   return (
     <div className="space-y-6">
@@ -17,9 +24,11 @@ export default async function AdminDashboard() {
           <h2 className="text-3xl font-bold tracking-tight">Projects</h2>
           <p className="text-muted-foreground mt-1">Manage active projects and assignments.</p>
         </div>
-        <Button asChild>
-          <Link href="/admin/projects/new">Add Project</Link>
-        </Button>
+        {isAdmin && (
+          <Button asChild>
+            <Link href="/admin/projects/new">Add Project</Link>
+          </Button>
+        )}
       </div>
 
       <Separator />
@@ -33,18 +42,19 @@ export default async function AdminDashboard() {
             <ProjectsTable projects={projects} />
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Employees List</CardTitle>
-            <CardDescription>
-              All users registered in the system.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <UsersTable users={users} />
-          </CardContent>
-        </Card>
-
+        {isAdmin && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Employees List</CardTitle>
+              <CardDescription>
+                All users registered in the system.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <UsersTable users={users} />
+            </CardContent>
+          </Card>
+        )}
 
         {projects.length === 0 && (
           <div className="col-span-full text-center py-12 text-muted-foreground">

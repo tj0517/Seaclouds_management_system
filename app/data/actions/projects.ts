@@ -3,6 +3,7 @@
 import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { Database } from '@/utils/supabase/types'
+import { getUserRoleAndProjects, hasProjectAccess } from './auth-helpers'
 
 type Project = Database['public']['Tables']['projects']['Row']
 type SubProject = Database['public']['Tables']['sub_projects']['Row']
@@ -60,6 +61,11 @@ export async function getProjectById(id: string): Promise<Project | null> {
 // 3. Dodaj nowy projekt (Server Action do formularzy)
 export async function createProject(formData: FormData) {
     const supabase = await createClient()
+
+    // Only admins can create projects
+    const roleInfo = await getUserRoleAndProjects()
+    if (!roleInfo || roleInfo.role !== 'admin') return { error: 'Unauthorized' }
+
     const name = formData.get('name') as string
     const project_code = (formData.get('project_code') as string)?.trim() || null
     const user_ids = formData.getAll('user_id') as string[]
@@ -125,6 +131,10 @@ export async function getProjectAssignments(projectId: string) {
 export async function toggleProjectAssignment(userId: string, projectId: string, isAssigned: boolean) {
     const supabase = await createClient()
 
+    // Only admins can assign users to projects
+    const roleInfo = await getUserRoleAndProjects()
+    if (!roleInfo || roleInfo.role !== 'admin') return { error: 'Unauthorized' }
+
     if (isAssigned) {
         // Jeśli ma być przypisany -> Dodajemy (Insert)
         // ignoreDuplicates: true sprawia, że jak już jest, to nie wywali błędu
@@ -180,6 +190,10 @@ export async function createSubProject(formData: FormData) {
     if (!code) return { error: 'Code is required' }
     if (!projectId) return { error: 'Project ID is required' }
 
+    // Only admins can create sub-projects
+    const roleInfo = await getUserRoleAndProjects()
+    if (!roleInfo || roleInfo.role !== 'admin') return { error: 'Unauthorized' }
+
     const { error } = await supabase
         .from('sub_projects')
         .insert({
@@ -205,6 +219,10 @@ export async function updateSubProject(id: string, projectId: string, formData: 
     const tracking_type = (formData.get('tracking_type') as string) || 'hours'
 
     if (!code) return { error: 'Code is required' }
+
+    // Only admins can update sub-projects
+    const roleInfo = await getUserRoleAndProjects()
+    if (!roleInfo || roleInfo.role !== 'admin') return { error: 'Unauthorized' }
 
     const { error } = await supabase
         .from('sub_projects')
@@ -240,6 +258,10 @@ export async function updateProject(id: string, formData: FormData) {
 
 export async function deleteProject(id: string) {
     const supabase = await createClient()
+
+    // Only admins can delete projects
+    const roleInfo = await getUserRoleAndProjects()
+    if (!roleInfo || roleInfo.role !== 'admin') return { error: 'Unauthorized' }
 
     // Check for timesheet entries through sub_projects
     const { data: subProjects } = await supabase
@@ -343,6 +365,10 @@ export async function getMyAssignedSubProjects(projectIds: string[]) {
 export async function toggleSubProjectAssignment(subProjectId: string, userId: string, projectId: string, isAssigned: boolean) {
     const supabase = await createClient()
 
+    // Only admins can assign users to sub-projects
+    const roleInfo = await getUserRoleAndProjects()
+    if (!roleInfo || roleInfo.role !== 'admin') return { error: 'Unauthorized' }
+
     if (isAssigned) {
         await (supabase as any)
             .from('sub_project_assignments')
@@ -362,6 +388,10 @@ export async function toggleSubProjectAssignment(subProjectId: string, userId: s
 export async function deleteSubProject(id: string, projectId: string) {
     const supabase = await createClient()
 
+    // Only admins can delete sub-projects
+    const roleInfo = await getUserRoleAndProjects()
+    if (!roleInfo || roleInfo.role !== 'admin') return { error: 'Unauthorized' }
+
     // Soft-delete: mark as deleted to hide from all UI but preserve DB records and connected data
     const { error } = await supabase
         .from('sub_projects')
@@ -376,6 +406,10 @@ export async function deleteSubProject(id: string, projectId: string) {
 
 export async function toggleSubProjectStatus(id: string, projectId: string, isActive: boolean) {
     const supabase = await createClient()
+
+    // Only admins can toggle sub-project status
+    const roleInfo = await getUserRoleAndProjects()
+    if (!roleInfo || roleInfo.role !== 'admin') return { error: 'Unauthorized' }
 
     const { error } = await supabase
         .from('sub_projects')

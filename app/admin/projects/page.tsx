@@ -1,4 +1,5 @@
 import { getProjects } from '@/app/data/actions'
+import { getUserRoleAndProjects } from '@/app/data/actions/auth-helpers'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
@@ -6,7 +7,13 @@ import { Separator } from '@/components/ui/separator'
 import ProjectsTable from '@/app/components/ProjectsTable'
 
 export default async function ProjectsPage() {
-  const projects = await getProjects()
+  const roleInfo = await getUserRoleAndProjects()
+  const allProjects = await getProjects()
+
+  const isAdmin = roleInfo?.role === 'admin'
+  const projects = roleInfo?.pmProjectIds
+    ? allProjects.filter(p => roleInfo.pmProjectIds!.includes(p.id))
+    : allProjects
 
   return (
     <div className="space-y-6">
@@ -14,12 +21,14 @@ export default async function ProjectsPage() {
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Project Management</h2>
           <p className="text-muted-foreground mt-1">
-            Add new projects and monitor their status.
+            {isAdmin ? 'Add new projects and monitor their status.' : 'Manage your assigned projects.'}
           </p>
         </div>
-        <Button asChild>
-          <Link href="/admin/projects/new">Add Project</Link>
-        </Button>
+        {isAdmin && (
+          <Button asChild>
+            <Link href="/admin/projects/new">Add Project</Link>
+          </Button>
+        )}
       </div>
       <Separator />
 
