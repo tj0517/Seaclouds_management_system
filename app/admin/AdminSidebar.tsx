@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { LayoutDashboard, FolderKanban, Users, LogOut, FileText, Clock, Menu, X, Download, Receipt, TrendingUp } from 'lucide-react'
 
 const allNavLinks = [
@@ -20,13 +21,12 @@ export default function AdminSidebar({ email, role }: { email: string; role: str
 
     const isLead = role === 'project_lead'
     const navLinks = isLead ? allNavLinks.filter(l => !l.adminOnly) : allNavLinks
-    const panelTitle = isLead ? 'Lead Panel' : 'Admin Panel'
 
     const sidebarContent = (
         <>
-            <div className="p-6 border-b">
-                <h1 className="text-xl font-bold text-blue-600">{panelTitle}</h1>
-                <p className="text-xs text-gray-500 mt-1">{email}</p>
+            <div className="p-6 border-b flex flex-col items-center">
+                <Image src="/logo.png" alt="Sea Clouds" width={110} height={110} />
+                <p className="text-xs text-gray-500 mt-1 text-center">{email}</p>
             </div>
             <nav className="flex-1 p-4 space-y-2">
                 {navLinks.map(({ href, icon: Icon, label }) => (

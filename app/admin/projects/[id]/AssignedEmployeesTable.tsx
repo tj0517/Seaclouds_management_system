@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { getInitials } from '@/lib/utils'
 import AssignmentCheckbox from './assignmentCheckbox'
 
 type User = {
@@ -85,7 +86,7 @@ export default function AssignedEmployeesTable({ users, projectId, assignedUserI
                                             <div className="flex items-center gap-3">
                                                 <Avatar className="h-8 w-8">
                                                     <AvatarFallback className="text-xs bg-primary/10 text-primary">
-                                                        {user.full_name?.charAt(0) || 'U'}
+                                                        {getInitials(user.full_name)}
                                                     </AvatarFallback>
                                                 </Avatar>
                                                 <span className="font-medium text-sm">{user.full_name || 'User'}</span>

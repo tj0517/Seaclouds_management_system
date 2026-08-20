@@ -13,6 +13,7 @@ import { toast } from 'sonner'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
+import { getInitials } from '@/lib/utils'
 
 function RejectReasonTooltip({ reason }: { reason: string }) {
   return (
@@ -603,8 +604,8 @@ export default function WeeklyReportSlider({ weeks, showEmpty, showEarnings = tr
                           </td>
                           <td className="px-3 py-2">
                             <div className="flex items-center gap-2">
-                              <div className="h-6 w-6 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-bold flex-shrink-0">
-                                {user.userName.charAt(0)}
+                              <div className="h-6 w-6 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[9px] font-bold flex-shrink-0">
+                                {getInitials(user.userName)}
                               </div>
                               {user.userName}
                             </div>
@@ -690,8 +691,8 @@ export default function WeeklyReportSlider({ weeks, showEmpty, showEarnings = tr
                           </td>
                           <td className="px-3 py-2">
                             <div className="flex items-center gap-2">
-                              <div className="h-6 w-6 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-bold flex-shrink-0">
-                                {userRow.userName.charAt(0)}
+                              <div className="h-6 w-6 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[9px] font-bold flex-shrink-0">
+                                {getInitials(userRow.userName)}
                               </div>
                               {userRow.userName}
                             </div>
@@ -796,8 +797,8 @@ export default function WeeklyReportSlider({ weeks, showEmpty, showEarnings = tr
                           </td>
                           <td className="px-3 py-2">
                             <div className="flex items-center gap-2">
-                              <div className="h-6 w-6 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-bold flex-shrink-0">
-                                {user.userName.charAt(0)}
+                              <div className="h-6 w-6 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[9px] font-bold flex-shrink-0">
+                                {getInitials(user.userName)}
                               </div>
                               {user.userName}
                             </div>

@@ -16,6 +16,7 @@ import { Plus, Users, Loader2, Pencil, Trash2, Search } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { getInitials } from '@/lib/utils'
 
 type SubProject = {
     id: string
@@ -290,7 +291,7 @@ export default function SubProjectsList({ projectId, initialSubProjects, assigne
                                                         {spAssignedUsers.slice(0, 3).map(u => (
                                                             <Avatar key={u.id} className="h-7 w-7 border-2 border-background">
                                                                 <AvatarFallback className="text-[10px] bg-primary/10 text-primary">
-                                                                    {u.full_name?.charAt(0) || 'U'}
+                                                                    {getInitials(u.full_name)}
                                                                 </AvatarFallback>
                                                             </Avatar>
                                                         ))}
@@ -454,7 +455,7 @@ export default function SubProjectsList({ projectId, initialSubProjects, assigne
                                         />
                                         <Avatar className="h-8 w-8">
                                             <AvatarFallback className="text-xs bg-primary/10 text-primary">
-                                                {user.full_name?.charAt(0) || 'U'}
+                                                {getInitials(user.full_name)}
                                             </AvatarFallback>
                                         </Avatar>
                                         <div className="flex-1 min-w-0">

@@ -9,6 +9,7 @@ import { ArrowLeft, ShieldOff, ChevronDown, ChevronRight, Pencil, Mail } from 'l
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { getInitials } from '@/lib/utils'
 import {
     Dialog,
     DialogContent,
@@ -153,7 +154,7 @@ export default function UserDetailsClient({
                             <Avatar className="h-12 w-12">
                                 <AvatarImage src="" />
                                 <AvatarFallback className="text-lg bg-primary/10 text-primary">
-                                    {currentUser?.full_name?.charAt(0) || 'U'}
+                                    {getInitials(currentUser?.full_name)}
                                 </AvatarFallback>
                             </Avatar>
                             <div>

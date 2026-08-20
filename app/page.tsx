@@ -3,6 +3,7 @@ import { getUserProfile, getMyProjects, getWeeklyEntries, isWeekSubmitted, getMy
 import TimesheetGrid from './components/timesheetGrid'
 import { startOfWeek, endOfWeek, format, addWeeks, subWeeks, parseISO, isValid } from 'date-fns'
 import Link from 'next/link'
+import Image from 'next/image'
 import { Shield, ChevronLeft, ChevronRight, Calendar, Receipt } from 'lucide-react'
 import AccountMenu from './components/AccountMenu'
 import ExportPdfButton from './components/ExportPdfButton'
@@ -72,7 +73,9 @@ export default async function Home(props: Props) {
         <div className="max-w-7xl mx-auto px-4 py-3 sm:px-6 lg:px-8">
           {/* Top row: title + nav links + account */}
           <div className="flex items-center justify-between gap-3">
-            <h1 className="text-xl font-bold text-gray-900 shrink-0">Timesheet</h1>
+            <div className="shrink-0">
+              <Image src="/logo.png" alt="Sea Clouds" width={96} height={96} />
+            </div>
 
             <nav className="flex items-center gap-1 sm:gap-2">
               <Link href="/expenses" className="text-sm font-medium text-gray-600 hover:text-gray-800 flex items-center gap-1.5 px-2.5 py-1.5 rounded-md hover:bg-gray-100 transition">

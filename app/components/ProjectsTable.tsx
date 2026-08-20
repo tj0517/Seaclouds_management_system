@@ -24,7 +24,7 @@ export default function ProjectsTable({ projects }: { projects: Project[] }) {
                 <TableBody>
                     {projects?.map((project) => (
                         <TableRow key={project.id}>
-                            <TableCell className="font-medium">{project.name.slice(0, 10) + (project.name.length > 10 ? '...' : '')}</TableCell>
+                            <TableCell className="font-medium max-w-xs whitespace-normal break-words">{project.name}</TableCell>
                             <TableCell>
                                 <Badge variant={project.is_active ? "default" : "destructive"} className={project.is_active ? "bg-emerald-600 hover:bg-emerald-700" : ""}>
                                     {project.is_active ? 'Active' : 'Completed'}

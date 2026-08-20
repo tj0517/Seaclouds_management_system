@@ -90,7 +90,7 @@ function DatePicker({ value, onChange, placeholder = 'Pick a date' }: {
 function FileUploadButton({ fileRef }: { fileRef: React.RefObject<HTMLInputElement | null> }) {
     const [fileName, setFileName] = useState<string | null>(null)
     return (
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 w-full min-w-0">
             <input
                 ref={fileRef}
                 type="file"
@@ -101,14 +101,14 @@ function FileUploadButton({ fileRef }: { fileRef: React.RefObject<HTMLInputEleme
                 type="button"
                 variant="outline"
                 size="sm"
-                className="h-9"
+                className="h-9 shrink-0"
                 onClick={() => fileRef.current?.click()}
             >
                 <Upload size={14} className="mr-2" />
-                {fileName || 'Choose file'}
+                Choose file
             </Button>
             {fileName && (
-                <span className="text-sm text-muted-foreground truncate max-w-[180px]">{fileName}</span>
+                <span className="text-sm text-muted-foreground truncate min-w-0 flex-1">{fileName}</span>
             )}
         </div>
     )
