@@ -1278,9 +1278,19 @@ ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TAB
 -- so pg_dump omits it; re-declared here to keep the baseline faithful.
 CREATE TRIGGER "on_auth_user_created" AFTER INSERT ON "auth"."users" FOR EACH ROW EXECUTE FUNCTION "public"."handle_new_user"();
 
--- Local dev images auto-enable pg_net; prod does not have it. Dropped so the
--- schema produced by this baseline matches prod exactly.
+-- The local dev/shadow database image auto-enables pg_net, but prod does not
+-- have this extension. Without this DROP, `supabase db diff --linked` will
+-- never come back clean: every diff would propose dropping pg_net.
 DROP EXTENSION IF EXISTS "pg_net";
+
+-- Storage buckets referenced by the policies below and by the app. Kept in the
+-- migration (not seed.sql) because seeds do not run on `db push` to a remote
+-- project, which would leave a fresh environment with policies but no buckets.
+-- Values mirror prod.
+INSERT INTO "storage"."buckets" ("id", "name", "public", "file_size_limit", "allowed_mime_types") VALUES
+  ('timesheet-exports', 'timesheet-exports', false, NULL, NULL),
+  ('expense-receipts', 'expense-receipts', false, 15728640, ARRAY['image/jpeg', 'image/png', 'image/webp', 'application/pdf'])
+ON CONFLICT ("id") DO NOTHING;
 
 -- Storage RLS policies exist on prod but live in the "storage" schema, which
 -- the public-schema dump omits; re-declared here to keep the baseline faithful.

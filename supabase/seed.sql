@@ -6,13 +6,6 @@
 -- so unqualified table names below resolve.
 SET search_path = public, extensions;
 
--- Storage buckets (bucket rows are data, not schema, so the baseline migration
--- cannot carry them; values mirror prod).
-INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types) VALUES
-  ('timesheet-exports', 'timesheet-exports', false, NULL, NULL),
-  ('expense-receipts', 'expense-receipts', false, 15728640, ARRAY['image/jpeg','image/png','image/webp','application/pdf'])
-ON CONFLICT (id) DO NOTHING;
-
 -- ============================================================
 -- Step 1: Create auth users with proper password + identity
 -- ============================================================
