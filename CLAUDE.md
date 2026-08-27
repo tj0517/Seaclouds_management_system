@@ -47,6 +47,12 @@ Six tables: `profiles`, `projects`, `sub_projects`, `project_assignments`, `time
 
 Types are auto-generated in `utils/supabase/types.ts` — run `npm run update-types` after schema changes. Row types are derived as `Database['public']['Tables']['<table>']['Row']`.
 
+## Database change policy (production)
+
+- Supabase MCP tools on the production project (`tfbzivfsqsgebegcvfah`) are READ-ONLY: `SELECT` queries, `list_*`, `gen types`. Never `apply_migration` or DDL via `execute_sql` on prod.
+- All DDL reaches prod exclusively through migration files committed to `supabase/migrations/` and applied via `supabase db push` after review.
+- Never edit a migration that has already been applied — a change means a new migration file.
+
 ## Conventions
 
 - Server actions: `'use server'` directive, placed in `app/data/actions/`, re-exported from `index.ts`.
