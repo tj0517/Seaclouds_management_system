@@ -2,6 +2,17 @@
 -- Fully automated: creates auth users, profiles, projects, and sample data.
 -- All test users have password: password123
 
+-- The baseline migration clears search_path for its own session; restore it
+-- so unqualified table names below resolve.
+SET search_path = public, extensions;
+
+-- Storage buckets (bucket rows are data, not schema, so the baseline migration
+-- cannot carry them; values mirror prod).
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types) VALUES
+  ('timesheet-exports', 'timesheet-exports', false, NULL, NULL),
+  ('expense-receipts', 'expense-receipts', false, 15728640, ARRAY['image/jpeg','image/png','image/webp','application/pdf'])
+ON CONFLICT (id) DO NOTHING;
+
 -- ============================================================
 -- Step 1: Create auth users with proper password + identity
 -- ============================================================
@@ -13,7 +24,7 @@ DECLARE
   uid_ernest UUID := gen_random_uuid();
   uid_tymon UUID := gen_random_uuid();
   uid_admin UUID := gen_random_uuid();
-  pwd_hash TEXT := crypt('password123', gen_salt('bf'));
+  pwd_hash TEXT := extensions.crypt('password123', extensions.gen_salt('bf'));
   now_ts TIMESTAMPTZ := now();
   pid_it UUID := '094e130b-599b-4295-87fa-697fb71e7fc4';
   pid_pej UUID := '6c0909ce-9b74-4bda-8e92-10811ff5a0fc';
