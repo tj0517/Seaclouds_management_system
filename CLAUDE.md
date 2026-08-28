@@ -54,6 +54,10 @@ Types are auto-generated in `utils/supabase/types.ts` — run `npm run update-ty
 - Never edit a migration that has already been applied — a change means a new migration file.
 - Project configuration (storage bucket limits/MIME types, Auth, SMTP, retention, etc.) is NOT changed by clicking in the dashboard — only through migrations or `supabase/config.toml`. Dashboard drift is invisible to the repo and to `db diff`: the `expense-receipts` bucket read 5 MB in the migration but 15 MB on prod because someone raised it by hand, which silently broke schema reproducibility.
 
+## Build environment variables
+
+Every environment variable read at build time must be declared in the `env` list of the `build` task in `turbo.json`. Vercel and CI both run `turbo run build` in strict env mode, which strips undeclared variables — a var that "works locally" (loaded from `.env.local` by Next) will be missing there and fail the deploy (this broke the first monorepo deploy: the Resend client got no API key). `NEXT_PUBLIC_*` variables pass through framework inference and need no declaration.
+
 ## Conventions
 
 - Server actions: `'use server'` directive, placed in `app/data/actions/`, re-exported from `index.ts`.

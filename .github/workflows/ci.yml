@@ -1,0 +1,97 @@
+# PR checks. The database steps run against a local Supabase stack rebuilt
+# from supabase/migrations + seed — no remote project is touched here.
+#
+# Supabase CLI version is PINNED (see docs/toolchain.md): database.ts must be
+# byte-identical to generator output, so a CLI bump in CI without the same
+# bump locally (and a type regen) would fail the drift check with no schema
+# change. Bump the version here and in docs/toolchain.md together, in a PR
+# that also regenerates packages/db/src/database.ts.
+name: CI
+
+on:
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  SUPABASE_CLI_VERSION: 2.75.0
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: "Guard: supabase project dir exists only at the repo root"
+        run: |
+          # A "Supabase project dir" is a supabase/ directory holding
+          # config.toml or migrations/ — plain source folders named
+          # "supabase" (e.g. apps/*/utils/supabase) are fine.
+          found=$(find . -type d -name supabase -not -path '*/node_modules/*' -not -path './.git/*' \
+            | while read -r d; do
+                if [ -f "$d/config.toml" ] || [ -d "$d/migrations" ]; then echo "$d"; fi
+              done)
+          if [ "$found" != "./supabase" ]; then
+            echo "::error::Expected exactly ./supabase as the only Supabase project dir, found:"; echo "$found"; exit 1
+          fi
+
+      - name: "Guard: service_role only in server-only modules"
+        run: |
+          bad=0
+          for f in $(grep -rl --include='*.ts' --include='*.tsx' -i -e 'SERVICE_ROLE' apps packages 2>/dev/null); do
+            if ! grep -q "server-only" "$f"; then
+              echo "::error file=$f::references the service_role key but is not marked server-only"
+              bad=1
+            fi
+          done
+          exit $bad
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: ${{ env.SUPABASE_CLI_VERSION }}
+
+      # pgTAP, db reset, and gen types talk straight to Postgres, so every
+      # other service is excluded — cuts stack startup from ~165s to seconds.
+      - name: Start local Supabase stack (database only)
+        run: supabase start -x gotrue,realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
+
+      - name: Rebuild database from migrations + seed
+        run: supabase db reset
+
+      - name: pgTAP tests
+        run: supabase test db
+
+      - name: "Type drift: database.ts must match migrations"
+        run: |
+          supabase gen types typescript --local > packages/db/src/database.ts
+          git diff --exit-code packages/db/src/database.ts || {
+            echo "::error::packages/db/src/database.ts is stale — run 'pnpm db:gen' and commit the result"
+            exit 1
+          }
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      # Same execution path and env mode as Vercel: turbo run build in strict
+      # env mode — vars not declared in turbo.json are stripped. Values below
+      # are local-stack/dummy values; the build only needs them to exist.
+      - name: Build (turbo, strict env — same as Vercel)
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH
+          SUPABASE_SERVICE_ROLE_KEY: ci-dummy-value
+          RESEND_API_KEY: re_ci_dummy_value
+          ADMIN_NOTIFICATION_EMAIL: ci@example.invalid
+        run: pnpm build

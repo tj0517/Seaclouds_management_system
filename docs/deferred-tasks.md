@@ -35,3 +35,19 @@ before acting — the list above is a snapshot.
   builds the app from its new location. Env vars (`NEXT_PUBLIC_SUPABASE_URL`,
   `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`,
   `RESEND_API_KEY`, `ADMIN_NOTIFICATION_EMAIL`) carry over unchanged.
+
+## d) `<Database>` generic in the browser client factory
+
+`@scl/db/client` (`createBrowserClient`) is untyped — moved 1:1 from the app,
+where it was already untyped. Adding the `<Database>` generic will surface new
+type errors in client components, so it is a deliberate, separate change.
+**Clause: `apps/dcs` uses a typed client (with the generic) from day one —
+Timesheet catches up later; DCS must not inherit the untyped path.**
+
+## e) Lazy Resend initialization
+
+The Resend client in the Timesheet app is instantiated at module scope, so it
+runs during `next build` page-data collection — this is what broke the first
+monorepo deploy on Vercel (PR #3) when the API key env var was stripped.
+Switch to lazy initialization (instantiate on first use inside the server
+action), which also removes the need for a dummy `RESEND_API_KEY` in CI builds.
