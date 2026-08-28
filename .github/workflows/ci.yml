@@ -59,8 +59,10 @@ jobs:
         with:
           version: ${{ env.SUPABASE_CLI_VERSION }}
 
-      - name: Start local Supabase stack
-        run: supabase start
+      # pgTAP, db reset, and gen types talk straight to Postgres, so every
+      # other service is excluded — cuts stack startup from ~165s to seconds.
+      - name: Start local Supabase stack (database only)
+        run: supabase start -x gotrue,realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
 
       - name: Rebuild database from migrations + seed
         run: supabase db reset
