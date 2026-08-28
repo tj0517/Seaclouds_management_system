@@ -1,4 +1,4 @@
-import { createClient } from '@/utils/supabase/server'
+import { createClient } from '@scl/db/server'
 
 export type UserRoleInfo = {
     role: 'admin' | 'employee' | 'project_lead'

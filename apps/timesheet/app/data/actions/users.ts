@@ -1,9 +1,9 @@
 'use server'
 
-import { createClient } from '@/utils/supabase/server'
+import { createClient } from '@scl/db/server'
 import { getSupabaseAdmin } from '@/utils/supabase/admin'
 import { revalidatePath } from 'next/cache'
-import { Database } from '@/utils/supabase/types'
+import { Database } from '@scl/db'
 import { getUserRoleAndProjects } from './auth-helpers'
 
 type Profile = Database['public']['Tables']['profiles']['Row']

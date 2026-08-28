@@ -1,6 +1,6 @@
 import { format } from 'date-fns'
 import { TrendingUp } from 'lucide-react'
-import { createClient } from '@/utils/supabase/server'
+import { createClient } from '@scl/db/server'
 import { getMonthlyEarnings, getStatusesForMonth } from '@/app/data/actions/earnings'
 import { getUserRoleAndProjects } from '@/app/data/actions/auth-helpers'
 import { redirect } from 'next/navigation'

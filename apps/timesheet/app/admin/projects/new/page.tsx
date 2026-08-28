@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input'
 import { createProject, getUsers } from '@/app/data/actions'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import Link from 'next/link'
-import { Database } from '@/utils/supabase/types'
+import { Database } from '@scl/db'
 
 export default function NewProjectPage() {
   const [name, setName] = useState('')
