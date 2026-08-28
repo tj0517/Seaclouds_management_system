@@ -24,11 +24,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: "Guard: supabase/ exists only at the repo root"
+      - name: "Guard: supabase project dir exists only at the repo root"
         run: |
-          found=$(find . -type d -name supabase -not -path '*/node_modules/*' -not -path './.git/*')
+          # A "Supabase project dir" is a supabase/ directory holding
+          # config.toml or migrations/ — plain source folders named
+          # "supabase" (e.g. apps/*/utils/supabase) are fine.
+          found=$(find . -type d -name supabase -not -path '*/node_modules/*' -not -path './.git/*' \
+            | while read -r d; do
+                if [ -f "$d/config.toml" ] || [ -d "$d/migrations" ]; then echo "$d"; fi
+              done)
           if [ "$found" != "./supabase" ]; then
-            echo "::error::Expected exactly ./supabase, found:"; echo "$found"; exit 1
+            echo "::error::Expected exactly ./supabase as the only Supabase project dir, found:"; echo "$found"; exit 1
           fi
 
       - name: "Guard: service_role only in server-only modules"
