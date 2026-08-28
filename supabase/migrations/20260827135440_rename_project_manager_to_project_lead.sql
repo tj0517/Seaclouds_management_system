@@ -1,7 +1,12 @@
--- Rename project_manager enum value to project_lead
+-- Rename the project_manager enum value to project_lead and update both
+-- helper functions in the same migration. The rename and the function bodies
+-- must change together: these functions are called from RLS policies, and a
+-- stale 'project_manager' literal inside them would not fail at rename time,
+-- only at first call — locking users out. db push runs this file in a single
+-- transaction.
+
 ALTER TYPE public.user_role RENAME VALUE 'project_manager' TO 'project_lead';
 
--- Update is_admin_or_pm to check for project_lead instead of project_manager
 CREATE OR REPLACE FUNCTION public.is_admin_or_pm()
 RETURNS BOOLEAN AS $$
 BEGIN
@@ -12,7 +17,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Update is_pm_for_project to check for project_lead instead of project_manager
 CREATE OR REPLACE FUNCTION public.is_pm_for_project(p_project_id UUID)
 RETURNS BOOLEAN AS $$
 BEGIN
