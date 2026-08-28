@@ -52,6 +52,7 @@ Types are auto-generated in `utils/supabase/types.ts` — run `npm run update-ty
 - Supabase MCP tools on the production project (`tfbzivfsqsgebegcvfah`) are READ-ONLY: `SELECT` queries, `list_*`, `gen types`. Never `apply_migration` or DDL via `execute_sql` on prod.
 - All DDL reaches prod exclusively through migration files committed to `supabase/migrations/` and applied via `supabase db push` after review.
 - Never edit a migration that has already been applied — a change means a new migration file.
+- Project configuration (storage bucket limits/MIME types, Auth, SMTP, retention, etc.) is NOT changed by clicking in the dashboard — only through migrations or `supabase/config.toml`. Dashboard drift is invisible to the repo and to `db diff`: the `expense-receipts` bucket read 5 MB in the migration but 15 MB on prod because someone raised it by hand, which silently broke schema reproducibility.
 
 ## Conventions
 
