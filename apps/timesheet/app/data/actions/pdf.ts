@@ -1,6 +1,6 @@
 'use server'
 
-import { createClient } from '@/utils/supabase/server'
+import { createClient } from '@scl/db/server'
 import { getSupabaseAdmin } from '@/utils/supabase/admin'
 import { format, startOfMonth, endOfMonth, parseISO, eachDayOfInterval, startOfWeek } from 'date-fns'
 import { getGroupedReportData, type GroupedReportRow } from './timesheet'

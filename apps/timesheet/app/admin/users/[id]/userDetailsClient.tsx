@@ -20,7 +20,7 @@ import {
 } from '@/components/ui/dialog'
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Database } from '@/utils/supabase/types'
+import { Database } from '@scl/db'
 import { deactivateUser, updateUserProfile, changeUserEmail } from '@/app/data/actions'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'

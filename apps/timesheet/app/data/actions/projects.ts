@@ -1,8 +1,8 @@
 'use server'
 
-import { createClient } from '@/utils/supabase/server'
+import { createClient } from '@scl/db/server'
 import { revalidatePath } from 'next/cache'
-import { Database } from '@/utils/supabase/types'
+import { Database } from '@scl/db'
 import { getUserRoleAndProjects, hasProjectAccess } from './auth-helpers'
 
 type Project = Database['public']['Tables']['projects']['Row']

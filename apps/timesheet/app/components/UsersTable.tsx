@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import Link from 'next/link'
 import { ArrowDown, ArrowUp, ArrowUpDown, UserCog, X } from 'lucide-react'
-import { Database } from '@/utils/supabase/types'
+import { Database } from '@scl/db'
 import { getInitials } from '@/lib/utils'
 
 type Profile = Database['public']['Tables']['profiles']['Row']

@@ -2,7 +2,7 @@
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
-import { Database } from '@/utils/supabase/types'
+import { Database } from '@scl/db'
 import { UserCog } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'

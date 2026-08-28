@@ -1,6 +1,6 @@
 'use server'
 
-import { createClient } from '@/utils/supabase/server'
+import { createClient } from '@scl/db/server'
 import { revalidatePath } from 'next/cache'
 import { addDays, subDays, format } from 'date-fns'
 import { sendAdminNotification, sendTimesheetWithdrawNotification } from '@/lib/email'

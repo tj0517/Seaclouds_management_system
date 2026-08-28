@@ -1,6 +1,6 @@
 import { getGroupedReportData, getReportFilterOptions } from '@/app/data/actions/timesheet'
 import { getUserRoleAndProjects } from '@/app/data/actions/auth-helpers'
-import { createClient } from '@/utils/supabase/server'
+import { createClient } from '@scl/db/server'
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, eachWeekOfInterval, addDays, parseISO, startOfWeek, min, max } from 'date-fns'
 import { enUS } from 'date-fns/locale'
 import { Filter, FileText, Calendar, CheckCircle2, Clock, Users, X, CalendarDays, DollarSign, ClipboardList } from 'lucide-react'

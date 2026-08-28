@@ -15,7 +15,7 @@ import {
     DialogFooter,
 } from '@/components/ui/dialog'
 import { updateProject } from '@/app/data/actions'
-import { Database } from '@/utils/supabase/types'
+import { Database } from '@scl/db'
 
 type Project = Database['public']['Tables']['projects']['Row']
 
