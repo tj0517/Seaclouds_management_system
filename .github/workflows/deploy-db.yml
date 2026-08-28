@@ -26,7 +26,11 @@ jobs:
     name: db push → scl-dev
     runs-on: ubuntu-latest
     env:
-      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      # Token scoped to the SCL-DEV project only. Deliberately NOT a
+      # prod-capable token: repository secrets are readable by any workflow
+      # on any branch, so a prod-scoped token here would let a custom
+      # workflow bypass the production-db approval gate.
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN_DEV }}
       SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD_DEV }}
     steps:
       - uses: actions/checkout@v4
@@ -42,7 +46,9 @@ jobs:
     runs-on: ubuntu-latest
     environment: production-db
     env:
-      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      # Prod-scoped token lives ONLY in the production-db environment, so it
+      # is released exclusively to runs that passed the manual approval gate.
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN_PROD }}
       SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD_PROD }}
     steps:
       - uses: actions/checkout@v4
