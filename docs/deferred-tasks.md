@@ -51,3 +51,18 @@ runs during `next build` page-data collection — this is what broke the first
 monorepo deploy on Vercel (PR #3) when the API key env var was stripped.
 Switch to lazy initialization (instantiate on first use inside the server
 action), which also removes the need for a dummy `RESEND_API_KEY` in CI builds.
+
+## f) Warn when prod migrations lag behind main
+
+A check that compares migration files on `main` with the applied history on
+prod (read-only: `supabase migration list` against the prod project, or a
+`SELECT version FROM supabase_migrations.schema_migrations`) and warns when
+prod is missing migrations that `main` already has.
+
+Since the prod push moved to `workflow_dispatch` (PR #8), nothing reminds
+anyone that a migration is waiting to be pushed — a merged migration reaches
+scl-dev automatically and then sits silently until someone remembers to
+dispatch the prod job. Possible shapes: a scheduled workflow that opens/updates
+an issue, a step in the dev-push job that prints a `::warning`, or a badge in
+the README. Needs a prod-readable credential, so mind the token-scoping rules
+from `deploy-db.yml`.
