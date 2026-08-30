@@ -1,10 +1,16 @@
-# Database deployments on merge to main.
+# Database deployments.
 #
-# push-dev: applies pending migrations to scl-dev automatically.
-# push-prod: exists and is ready, but is gated by the `production-db`
-#   GitHub Environment (required reviewer approval). Approving it is a
-#   deliberate, manual decision — the first real use will be the
-#   project_lead rename migration.
+# push (main): applies pending migrations to scl-dev automatically.
+# workflow_dispatch: applies pending migrations to PRODUCTION. Still gated by
+#   the `production-db` GitHub Environment (required reviewer approval), and
+#   additionally must be dispatched from main. The first real use will be the
+#   project_lead rename migration — a deliberate, manual decision.
+#
+# Prod is a separate trigger on purpose: a push-triggered prod job waiting for
+# approval used to hold the run-level `deploy-db` concurrency group, which
+# left every subsequent merge's deploy run pending with no jobs. Split
+# triggers + per-event groups mean push runs finish as soon as the dev push
+# does, and a waiting prod dispatch can never block dev deploys.
 name: Deploy DB
 
 on:
@@ -13,9 +19,10 @@ on:
     paths:
       - "supabase/migrations/**"
       - ".github/workflows/deploy-db.yml"
+  workflow_dispatch:
 
 concurrency:
-  group: deploy-db
+  group: deploy-db-${{ github.event_name }}
   cancel-in-progress: false
 
 env:
@@ -24,6 +31,7 @@ env:
 jobs:
   push-dev:
     name: db push → scl-dev
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     env:
       # Token scoped to the SCL-DEV project only. Deliberately NOT a
@@ -42,7 +50,7 @@ jobs:
 
   push-prod:
     name: db push → production (manual approval)
-    needs: push-dev
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment: production-db
     env:
