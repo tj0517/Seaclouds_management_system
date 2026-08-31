@@ -34,9 +34,10 @@ erDiagram
 `id (uuid, FK auth.users)`, `full_name`, `role user_role
 (admin | employee | project_lead)`, `employee_id`, `position`, stawki.
 RLS: użytkownik czyta siebie, admin wszystko.
-⚠️ WYMAGA DECYZJI (O-12): mapowanie ról projektowych DCS
-(ORIG/REV/CHK/APP/DC/VIEW) na globalny enum `user_role` — brief wymaga ról
-per projekt, nie globalnych.
+Rozstrzygnięte ([ADR-0006](adr/0006-role-dcs-per-projekt.md)): enum
+`user_role` należy do TES i nie rośnie o role DCS; role DCS wyłącznie
+w `dcs.project_members`; `project_lead` nie jest mapowany na żadną rolę
+DCS; administrator DCS = `role = 'admin'`.
 
 ### ✅ `public.projects`
 `id`, `name`, `description`, `is_active`, `project_code (unique, nullable)`.
@@ -84,8 +85,11 @@ RLS: odczyt członkowie projektu, zapis DC/admin.
 
 ### `dcs.project_members`
 `project_id`, `user_id (FK profiles)`, `dcs_role
-(orig|rev|chk|app|dc|viewer)`, `active`. Źródło listy recenzentów IDC
-i podstawa polityk RLS pozostałych tabel. Ograniczenie: Originator dokumentu
+(orig|rev|chk|app|dc|viewer)`, `active`. Jedyne źródło ról DCS
+([ADR-0006](adr/0006-role-dcs-per-projekt.md)) — mówi, kto **może** pełnić
+rolę w projekcie: źródło listy recenzentów IDC, walidacja obsady
+`documents`/`approval_tasks` i podstawa polityk RLS pozostałych tabel
+(globalny `user_role` uczestniczy tylko przez `is_admin()`). Ograniczenie: Originator dokumentu
 ≠ Checker tej samej rewizji (egzekwowane w bazie).
 RLS: odczyt członkowie projektu, zapis DC/admin.
 
@@ -97,6 +101,11 @@ DC)`, `title`, `doc_type (FK słownik)`, `discipline (FK)`, `area (FK)`,
 (FK profiles), `ctr_code (FK sub_projects)`, `budget_hours` (default z typu
 dokumentu, załącznik A briefu), `workflow_status (not_started|started|idc|ifr|
 retcom|ifc|ifi|ifb|void)`, `current_revision_id (FK revisions)`.
+`originator_id/checker_id/approver_id` to **domyślna obsada dokumentu**
+(z MDR), nie źródło prawdy dla obiegu — przy tworzeniu rewizji kopiowana
+do `approval_tasks` (patrz tam); zmiana na dokumencie działa tylko na
+przyszłe rewizje. Każda z tych osób musi być aktywnym członkiem
+`project_members` z odpowiednią rolą (walidacja w bazie).
 Numer SCL: `PROJEKT-ORIG-TYPE-SEQ-LANG` (np. `SC2601-SCL-RA-0012-EN`);
 SEQ atomowo per PROJEKT+TYPE, luki niewypełniane, ręczny wpis niemożliwy.
 RLS: odczyt członkowie projektu; insert/update wg roli (ORIG tworzy, DC
@@ -109,7 +118,8 @@ zmienia numery i status).
 A,B,…/00,01,…/1,2,…)`, `cpy_revision (dowolny format)`, `step (idc|ifr|
 retcom|ifc|ifi|ifb)`, `reason_for_issue`, `revision_date`,
 `acceptance_code (1–4, nullable)`, `status (draft|in_review|approved|
-rejected|superseded|void)`, `created_by`.
+rejected|superseded|void)`, `created_by`. `step` używa wspólnego enuma
+`dcs.step` — patrz `plan_dates`.
 Rewizje finalne (IFC/IFI/IFB): niemodyfikowalność plików i rekordu
 egzekwowana **triggerem w bazie**, nie we frontendzie.
 RLS: jak `documents`.
@@ -132,15 +142,24 @@ doc_controller)`, `mode (parallel|sequential)`, `sequence int`,
 parallel: etap kończy się, gdy wszystkie zadania `sequence=1` Completed;
 sequential: `n+1` staje się Pending po zaliczeniu `n`; kod 3 anuluje
 pozostałe Pending. Recenzent z wystawionym kodem nieusuwalny.
+Źródła prawdy obsady: `project_members` = kto **może** (pula + RLS);
+`documents.*_id` = domyślna obsada kopiowana tu przy utworzeniu rewizji;
+po skopiowaniu `assignee_id` jest źródłem prawdy dla tej rewizji —
+zmiany składu (DC/ORIG wg §7.2.1) edytują zadania, nie dokument.
 RLS: assignee widzi i wypełnia swoje zadanie; oceny innych niewidoczne do
 zamknięcia etapu; DC/ORIG zarządzają składem wg reguł §7.2.1.
 
 ### `dcs.plan_dates`
-`id`, `document_id (FK)`, `project_id`, `step (start|idc|ifr|retcom|ifc)`,
-`planned` (z cyklu MDR, nadpisywalne przez DC), `planned_overridden bool`
+`id`, `document_id (FK)`, `project_id`, `step`, `planned` (z cyklu MDR,
+nadpisywalne przez DC), `planned_overridden bool`
 (blokuje automatyczne przeliczenie), `forecast` (edytuje ORIG), `actual`
 (zapisuje wyłącznie system przy zamknięciu etapu — bez uprawnienia update
 dla ról). Reguły przeliczania: brief §8.3.
+Kroki: jeden enum `dcs.step (start|idc|ifr|retcom|ifc|ifi|ifb)` wspólny
+z `revisions`; różnice zakresu egzekwują CHECK-i, nie osobne enumy —
+`plan_dates` tylko kroki planowalne (`start…ifc`; IFI/IFB to wydania
+finalne poza cyklem planowania MDR), `revisions` bez `start` (start nie
+jest rewizją).
 RLS: odczyt członkowie projektu; update kolumnowo wg roli.
 
 ### `dcs.comments`
