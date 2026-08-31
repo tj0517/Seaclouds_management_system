@@ -46,7 +46,12 @@ odstępstwa: `""` (IT admin), `SCC005`, `SCMS_TEST` — ⚠️ WYMAGA DECYZJI (O
 📐 Rozszerzenia dla MDR wg briefu §5.2: `process_type
 (Internal|Tender|Project|Course)`, `client_id`, `year`, `status` — część
 w `projects`, część w `dcs.mdr_settings` (podział do ustalenia w Fazie 1a).
-RLS: odczyt dla zalogowanych, zapis dla admina.
+RLS: odczyt dla zalogowanych, zapis dla admina. Uwaga: odczyt NIE jest
+ograniczony per użytkownik — jedyna polityka SELECT (`Widoczność projektów`)
+przepuszcza każdego zalogowanego, więc wszyscy widzą wszystkie projekty
+(zweryfikowane odczytem prod 2026-08-31). Jeśli członek projektu DCS ma
+widzieć wyłącznie swoje projekty, wymaga to NOWEJ polityki (Faza 1a, razem
+z `dcs.project_members`) — odziedziczona tego nie daje.
 
 ### ✅ `public.sub_projects` = kody CTR
 `id`, `project_id (FK)`, `code`, `description`, `is_active`, `is_deleted`,

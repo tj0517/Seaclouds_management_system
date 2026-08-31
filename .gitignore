@@ -48,3 +48,9 @@ next-env.d.ts
 # supabase local state
 supabase/.temp/
 supabase/.branches/
+
+# stray artifacts (screenshots etc.) — app assets are re-allowed below
+*.png
+*.jpg
+!apps/*/public/*.png
+!apps/*/app/icon.png
