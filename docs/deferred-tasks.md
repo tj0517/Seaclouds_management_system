@@ -66,3 +66,15 @@ dispatch the prod job. Possible shapes: a scheduled workflow that opens/updates
 an issue, a step in the dev-push job that prints a `::warning`, or a badge in
 the README. Needs a prod-readable credential, so mind the token-scoping rules
 from `deploy-db.yml`.
+
+## g) Remove the temporary RLS probe from `apps/dcs`
+
+`apps/dcs/app/page.tsx` runs an unfiltered `select` on
+`public.timesheet_entries` as the only live proof that RLS is enforced for
+queries made from the DCS app. It deliberately violates the "DCS does not
+read TES tables" rule (`docs/02-data-model.md`) — `timesheet_entries` is
+currently the only table whose SELECT policy filters by `auth.uid()`.
+
+Removal condition: the first `dcs.*` table with its own policies lands.
+Move the RLS proof onto that table (as a pgTAP test and/or probe) and delete
+the probe section from the page.

@@ -30,11 +30,13 @@ export default async function ProjectsPage() {
     throw new Error(`Failed to load projects: ${error.message}`)
   }
 
-  // Skeleton-only RLS probe, remove with the first dcs.* table (it breaks the
-  // "DCS does not read TES tables" rule on purpose, as timesheet_entries is
-  // currently the only table whose SELECT policy filters by auth.uid()).
-  // The query has NO filter in code — any difference between users in what
-  // comes back is produced solely by RLS in the database.
+  // Skeleton-only RLS probe — removal is docs/deferred-tasks.md point g)
+  // (condition: first dcs.* table with its own policies; the proof moves
+  // there). Breaks the "DCS does not read TES tables" rule on purpose, as
+  // timesheet_entries is currently the only table whose SELECT policy
+  // filters by auth.uid(). The query has NO filter in code — any difference
+  // between users in what comes back is produced solely by RLS in the
+  // database.
   const { data: rlsProbe, error: rlsProbeError } = await supabase
     .from('timesheet_entries')
     .select('id, user_id')
