@@ -4,7 +4,7 @@
 -- (lints 0027/0029 are accepted deliberately — do not "fix" them).
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(8);
+select plan(12);
 
 -- ============================================================
 -- 0011: every public function has a pinned search_path
@@ -78,6 +78,79 @@ select ok(
 select ok(
   has_table_privilege('authenticated', 'public.projects', 'select'),
   'authenticated keeps select on projects (row security is RLS, not grants)'
+);
+
+-- ============================================================
+-- Runtime invocation of the functions the metadata checks above never execute.
+-- An empty search_path qualifies neither TABLE nor TYPE names, so a bare
+-- reference (e.g. 'admin'::user_role or an unqualified table) fails on the
+-- first CALL, not at migration time. These assertions actually run
+-- is_admin_or_pm, is_pm_for_project and set_updated_at to prove the bodies
+-- resolve the user_role enum and their tables at runtime.
+-- ============================================================
+create temp table t_inv as
+select
+  (select id from auth.users where email = 'tjezionekspam@gmail.com') as admin_id,
+  (select id from auth.users where email = 'tjezionek2000@gmail.com') as employee_id,
+  (select pa.project_id
+     from public.project_assignments pa
+     join public.profiles pr on pr.id = pa.user_id
+    where pr.role = 'admin'
+    limit 1) as assigned_project_id,
+  (select p.id from public.projects p
+    where p.id not in (
+      select pa.project_id from public.project_assignments pa
+      join auth.users u on u.id = pa.user_id
+      where u.email = 'tjezionekspam@gmail.com')
+    limit 1) as unassigned_project_id;
+grant select on t_inv to authenticated;
+
+-- is_admin_or_pm(): exercises `role IN ('admin', 'project_lead')`.
+set local role authenticated;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', (select admin_id from t_inv), 'role', 'authenticated')::text,
+  true);
+select ok(
+  public.is_admin_or_pm(),
+  'is_admin_or_pm() runs and returns true for an admin (user_role enum resolves at runtime)'
+);
+reset role;
+
+-- is_pm_for_project(uuid): make the admin a project_lead for the duration of
+-- the (rolled-back) tx so the `pr.role = 'project_lead'` branch returns a row.
+update public.profiles set role = 'project_lead'
+  where id = (select admin_id from t_inv);
+set local role authenticated;
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', (select admin_id from t_inv), 'role', 'authenticated')::text,
+  true);
+select ok(
+  public.is_pm_for_project((select assigned_project_id from t_inv)),
+  'is_pm_for_project() runs and returns true for a project_lead on an assigned project'
+);
+select ok(
+  not public.is_pm_for_project((select unassigned_project_id from t_inv)),
+  'is_pm_for_project() runs and returns false for an unassigned project'
+);
+reset role;
+
+-- set_updated_at(): BEFORE UPDATE trigger on user_monthly_earnings. Insert a
+-- row with a stale updated_at, UPDATE it, and confirm the trigger advanced the
+-- timestamp — proves the trigger body (now()) runs under empty search_path.
+insert into public.user_monthly_earnings
+  (id, user_id, year_month, amount, currency, created_by, created_at, updated_at)
+values
+  (gen_random_uuid(), (select employee_id from t_inv), '2026-01', 100, 'PLN',
+   (select admin_id from t_inv), now(), timestamptz '2000-01-01');
+update public.user_monthly_earnings set amount = 200
+  where user_id = (select employee_id from t_inv) and year_month = '2026-01';
+select cmp_ok(
+  (select updated_at from public.user_monthly_earnings
+    where user_id = (select employee_id from t_inv) and year_month = '2026-01'),
+  '>', timestamptz '2020-01-01',
+  'set_updated_at() trigger ran on UPDATE and advanced updated_at'
 );
 
 select * from finish();

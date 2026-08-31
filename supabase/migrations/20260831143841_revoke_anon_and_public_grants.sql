@@ -19,3 +19,16 @@ revoke execute on all functions in schema public from anon, public;
 alter default privileges for role postgres in schema public revoke all on tables from anon;
 alter default privileges for role postgres in schema public revoke all on sequences from anon;
 alter default privileges for role postgres in schema public revoke execute on functions from anon, public;
+
+-- Re-assert EXECUTE for authenticated on the functions invoked from RLS
+-- policies (is_admin, is_week_locked) and via RPC (resubmit_rejected, and the
+-- PM helpers reserved for upcoming policies). remote_schema.sql already grants
+-- these, but the revoke of PUBLIC above plus the default-privilege change would
+-- otherwise leave the guarantee implicit — pin it next to what threatens it so
+-- these stay callable regardless of how the functions are later recreated.
+grant execute on function public.is_admin() to authenticated;
+grant execute on function public.is_admin_or_pm() to authenticated;
+grant execute on function public.is_pm_for_project(uuid) to authenticated;
+grant execute on function public.is_week_locked(date, uuid) to authenticated;
+grant execute on function public.is_week_locked(date, uuid, uuid) to authenticated;
+grant execute on function public.resubmit_rejected(uuid, uuid) to authenticated;
