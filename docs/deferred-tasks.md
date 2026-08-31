@@ -17,16 +17,17 @@ because it was raised by hand in the dashboard. Dashboard drift is invisible to
 
 ## b) Supabase advisor cleanup
 
-From the Supabase advisor / linter:
-- functions without a pinned `search_path` (`is_admin`, `is_admin_or_pm`,
-  `is_pm_for_project`, `handle_new_user`, `resubmit_rejected`, `set_updated_at`,
-  `is_week_locked`) — set `SET search_path = ''` or an explicit schema list;
-- `REVOKE` overly-broad grants from the `anon` role where not needed;
-- enable leaked-password protection in Auth.
+Done 2026-08-31 (migrations `20260831143840_pin_function_search_path` and
+`20260831143841_revoke_anon_and_public_grants` + pgTAP guard
+`supabase/tests/advisor_grants.test.sql`): pinned `search_path` on all public
+functions and revoked `anon`/`PUBLIC` grants on `public` tables, sequences and
+functions (current objects and `postgres` default privileges). Lints 0027/0029
+for the `authenticated` role stay **deliberately** — see the "Advisor" section
+in `docs/03-conventions.md` before touching anything the advisor recommends.
 
-Each is a schema/config change, so it goes through a migration (or `config.toml`
-for the Auth setting), never the dashboard. Do a fresh `get_advisors` read
-before acting — the list above is a snapshot.
+Remaining:
+- enable leaked-password protection in Auth — blocked on a decision (STOP 2);
+  the change goes through `config.toml`/migration, never the dashboard.
 
 ## c) CI and Vercel configuration
 

@@ -43,6 +43,38 @@ Architektura i droga migracji: [01-architecture.md](01-architecture.md).
   musi robić sama baza. Ekran, który filtruje po stronie aplikacji, nie
   dowodzi niczego o politykach.
 
+## Advisor — świadomie akceptowane ostrzeżenia
+
+Baseline advisora security: **zero** lintów `function_search_path_mutable`
+(0011), `pg_graphql_anon_table_exposed` (0026) i
+`anon_security_definer_function_executable` (0028). Utrzymują go migracje
+`20260831143840_pin_function_search_path` /
+`20260831143841_revoke_anon_and_public_grants` oraz test
+`supabase/tests/advisor_grants.test.sql` (pilnuje też domyślnych uprawnień,
+żeby nowe tabele nie przywróciły grantów `anon`).
+
+Poniższe ostrzeżenia advisora są akceptowane **świadomie** — nie wykonuj ich
+rekomendacji, bo odebranie uprawnień roli `authenticated` wyłączy TES:
+
+- **0027 `pg_graphql_authenticated_table_exposed`** (po jednym na każdą
+  tabelę `public`) — PostgREST obsługuje zalogowanych użytkowników właśnie
+  jako rolę `authenticated`; bez jej `SELECT` żadne zapytanie aplikacji nie
+  zwróci danych. Widoczność wierszy ogranicza RLS, nie granty.
+- **0029 `authenticated_security_definer_function_executable`** (po jednym na
+  każdą funkcję SECURITY DEFINER) — wyrażenia polityk RLS wykonują się jako
+  rola zapytania, więc `authenticated` musi mieć `EXECUTE`: `is_admin()` woła
+  m.in. polityka „Admin zarządza projektami” na `public.projects` i polityki
+  storage, `is_week_locked(...)` — polityki `timesheet_entries`,
+  a `resubmit_rejected` aplikacja przez RPC.
+- **`auth_leaked_password_protection`** — otwarte do czasu decyzji o
+  konfiguracji Auth (`docs/deferred-tasks.md` b); zmiana wyłącznie przez
+  `config.toml`/migrację, nie dashboard.
+
+Uzasadnienie 0027/0029 zweryfikowano odczytem na prod (2026-08-31):
+`pg_policy` (wyrażenia polityk wołające te funkcje) oraz
+`has_function_privilege('authenticated', …)`. „Pusta lista advisora” nie jest
+osiągalnym celem dla tego projektu.
+
 ## Nazewnictwo
 
 - Baza: snake_case; tabele w liczbie mnogiej (`documents`, `revisions`);
