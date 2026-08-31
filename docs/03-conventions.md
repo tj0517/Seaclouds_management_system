@@ -37,6 +37,11 @@ Architektura i droga migracji: [01-architecture.md](01-architecture.md).
 - Minimalny zakres testu tabeli `dcs.*`: członek projektu widzi, nie-członek
   nie widzi, zapis dozwolony tylko dla właściwej roli, zapis zabroniony
   odrzucany.
+- Dowód na RLS (test, ekran, demo) jest ważny wyłącznie, gdy zapytanie nie
+  zawiera żadnego warunku w kodzie — czysty `select` z tabeli, bez `.eq()`,
+  bez embedów `!inner`, bez filtrów. Różnicę zbiorów między użytkownikami
+  musi robić sama baza. Ekran, który filtruje po stronie aplikacji, nie
+  dowodzi niczego o politykach.
 
 ## Nazewnictwo
 

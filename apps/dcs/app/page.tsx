@@ -17,18 +17,32 @@ export default async function ProjectsPage() {
     .eq('id', user.id)
     .single()
 
-  // `projects` itself is readable by every authenticated user (inherited TES
-  // policy), so per-user filtering comes from RLS on `project_assignments`:
-  // the !inner embed drops projects with no assignment rows visible to the
-  // current session. Members see their projects, admins see all assigned ones.
+  // Deliberately unfiltered: `projects` carries an inherited TES policy that
+  // grants SELECT to every authenticated user, so everyone sees the full list.
+  // Per-member visibility for DCS needs a NEW policy (Phase 1a, alongside
+  // dcs.project_members) — see docs/02-data-model.md.
   const { data: projects, error } = await supabase
     .from('projects')
-    .select('id, name, description, project_code, is_active, project_assignments!inner(user_id)')
+    .select('id, name, description, project_code, is_active')
     .order('name')
 
   if (error) {
     throw new Error(`Failed to load projects: ${error.message}`)
   }
+
+  // Skeleton-only RLS probe, remove with the first dcs.* table (it breaks the
+  // "DCS does not read TES tables" rule on purpose, as timesheet_entries is
+  // currently the only table whose SELECT policy filters by auth.uid()).
+  // The query has NO filter in code — any difference between users in what
+  // comes back is produced solely by RLS in the database.
+  const { data: rlsProbe, error: rlsProbeError } = await supabase
+    .from('timesheet_entries')
+    .select('id, user_id')
+
+  if (rlsProbeError) {
+    throw new Error(`RLS probe failed: ${rlsProbeError.message}`)
+  }
+  const probeUserCount = new Set(rlsProbe.map((row) => row.user_id)).size
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-10">
@@ -49,11 +63,13 @@ export default async function ProjectsPage() {
         </form>
       </header>
 
-      <h2 className="mb-3 text-lg font-semibold">Your projects</h2>
+      <h2 className="mb-1 text-lg font-semibold">Projects</h2>
+      <p className="mb-3 text-xs text-gray-500">
+        Unfiltered read of public.projects — the inherited policy shows every
+        project to every signed-in user.
+      </p>
       {projects.length === 0 ? (
-        <p className="text-sm text-gray-500">
-          You are not assigned to any project.
-        </p>
+        <p className="text-sm text-gray-500">No projects visible.</p>
       ) : (
         <table className="w-full border-collapse overflow-hidden rounded-lg border border-gray-200 bg-white text-sm">
           <thead>
@@ -89,6 +105,18 @@ export default async function ProjectsPage() {
           </tbody>
         </table>
       )}
+
+      <section className="mt-8 rounded-lg border border-blue-200 bg-blue-50 p-4">
+        <h2 className="text-sm font-semibold text-blue-900">
+          RLS probe (skeleton only): timesheet_entries
+        </h2>
+        <p className="mt-1 text-sm text-blue-900">
+          Unfiltered <code className="font-mono">select</code> returned{' '}
+          <strong>{rlsProbe.length}</strong> row(s) belonging to{' '}
+          <strong>{probeUserCount}</strong> user(s). The query has no filter in
+          code — row visibility is enforced entirely by the database.
+        </p>
+      </section>
     </main>
   )
 }
