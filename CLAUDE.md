@@ -1,67 +1,78 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+SCL Portal — monorepo systemów wewnętrznych Sea Clouds: Timesheet (SCL-TES,
+na produkcji) i Document Control System (SCL-DCS, w budowie). Wspólna baza
+Supabase, prod ref `tfbzivfsqsgebegcvfah`.
 
-## Commands
+## Mapa repo
 
-| Command | Purpose |
+| Ścieżka | Zawartość |
 |---|---|
-| `npm run dev` | Start Next.js dev server |
-| `npm run build` | Production build |
-| `npm run lint` | Run ESLint |
-| `npm run update-types` | Regenerate Supabase TypeScript types into `utils/supabase/types.ts` |
+| `apps/timesheet/` | `@scl/timesheet` — Next.js 16 (App Router, RSC, server actions), działa na Vercelu |
+| `apps/dcs/` | planowana aplikacja DCS |
+| `packages/db/` | `@scl/db` — typy bazy (`src/database.ts`, generowany — nie edytować) + fabryki klientów |
+| `supabase/` | JEDYNY katalog projektu Supabase: `config.toml`, `migrations/`, `seed.sql`, `tests/` (pgTAP) |
+| `docs/` | dokumentacja kontekstowa — patrz niżej |
+| `.github/workflows/` | `ci.yml` (PR), `deploy-db.yml` (migracje → scl-dev auto, prod ręcznie) |
 
-No test framework is configured.
+## Przed taskiem DCS przeczytaj
 
-## Architecture
+1. `docs/00-glossary.md` — pojęcia domenowe (zawsze pierwszy)
+2. `docs/01-architecture.md` — stan faktyczny, środowiska, droga migracji
+3. `docs/02-data-model.md` — model danych core + `dcs.*`
+4. `docs/03-conventions.md` — migracje, RLS, pgTAP, nazewnictwo, PR-y
+5. `docs/04-open-questions.md` — punkty otwarte; nie zgaduj rozstrzygnięć
+6. `docs/adr/` — podjęte decyzje; `docs/toolchain.md` — przypięte wersje;
+   `docs/deferred-tasks.md` — prace odłożone (nie zaczynaj bez zgody)
 
-**Stack:** Next.js 16 (App Router, RSC), React 19, TypeScript, Supabase (auth + Postgres), TailwindCSS 3, shadcn/ui (new-york style), date-fns 4.
+## Komendy
 
-**What it does:** Employee timesheet management system. Employees log hours against sub-projects; admins manage projects, users, and view reports/stats.
+| Komenda | Cel |
+|---|---|
+| `pnpm install` | instalacja (pnpm workspace) |
+| `pnpm dev` / `pnpm build` / `pnpm lint` / `pnpm typecheck` | przez turbo, wszystkie pakiety |
+| `pnpm db:gen` | regeneracja `packages/db/src/database.ts` z lokalnej bazy + typecheck |
+| `supabase start` / `supabase db reset` | lokalny stack; baza z migracji + seed |
+| `supabase test db` | testy pgTAP z `supabase/tests/` |
+| `supabase migration new <opis>` | nowa migracja |
 
-### Data flow pattern
+## Reguły nienegocjowalne
 
-- **Pages** are async React Server Components that fetch data directly via Supabase queries, then pass props to client components.
-- **Mutations** use Next.js Server Actions (`'use server'`) in `app/data/actions/` — no REST API routes. After mutations, `revalidatePath()` invalidates the cache and client components call `router.refresh()`.
-- **No client-side data fetching** — all data loading happens server-side at render time.
+### Baza produkcyjna
+- MCP Supabase na prod (`tfbzivfsqsgebegcvfah`) jest READ-ONLY: `SELECT`,
+  `list_*`, `gen types`. Nigdy `apply_migration` ani DDL przez `execute_sql`.
+- Stan proda ustalaj odczytem, nie z pamięci.
+- Całe DDL trafia na prod wyłącznie przez pliki w `supabase/migrations/`
+  i `supabase db push` (workflow_dispatch za bramką `production-db`).
+- Nigdy nie edytuj wypchniętej migracji — poprawka = nowa migracja.
+- Konfiguracja projektu (buckety, Auth, SMTP, retencja…) nie przez dashboard —
+  tylko migracje lub `supabase/config.toml`. Drift z dashboardu jest
+  niewidoczny dla repo i `db diff` (bucket `expense-receipts`: 5 MB
+  w migracji, 15 MB na prodzie po ręcznej zmianie).
 
-### Auth & middleware
+### Schemat i RLS
+- Każda tabela `dcs.*`: kolumna `project_id` + włączone RLS + polityki
+  + test pgTAP — wszystko w tym samym PR.
+- Rewizje finalne (IFC/IFI/IFB) są niemodyfikowalne przez trigger w bazie,
+  nie przez walidację we frontendzie.
+- Generator numeracji SCL jest atomowy (blokada w bazie); ręczny wpis numeru
+  SCL musi być niemożliwy w każdym formularzu i akcji.
 
-- Supabase email/password auth with three client variants:
-  - `utils/supabase/client.ts` — browser client
-  - `utils/supabase/server.ts` — server client (cookie-based SSR)
-  - `utils/supabase/admin.ts` — admin client (service role key, for `inviteUser`)
-- `proxy.ts` is the Next.js middleware (Next 16 convention) — redirects unauthenticated users to `/login`.
-- `app/admin/layout.tsx` does a server-side role check, redirecting non-admins to `/`.
+### Kod
+- `service_role` nigdy w kodzie klienckim — wyłącznie moduły z
+  `import 'server-only'` (CI to egzekwuje).
+- `apps/dcs` używa typowanego klienta `@scl/db` z generykiem `<Database>`
+  od pierwszego dnia; bez `as any` na zapytaniach.
+- Po każdej migracji `pnpm db:gen` i commit — CI odrzuca stale typy.
+- Każda zmienna środowiskowa czytana w buildzie musi być w liście `env`
+  taska `build` w `turbo.json` (Vercel i CI budują w strict env mode —
+  niezadeklarowane zmienne są wycinane). `NEXT_PUBLIC_*` przechodzą same.
 
-### Key directories
+## Konwencje aplikacji (Timesheet — wzorzec dla DCS)
 
-- `app/data/actions/` — all server actions, grouped by domain (`timesheet.ts`, `projects.ts`, `users.ts`, `stats.ts`), barrel-exported from `index.ts`
-- `components/ui/` — shadcn/ui primitives (don't edit manually; use `npx shadcn@latest add`)
-- `lib/utils.ts` — `cn()` helper (clsx + tailwind-merge)
-- `docs/plans/` — project audit and implementation plans
-
-### Database schema (Supabase)
-
-Six tables: `profiles`, `projects`, `sub_projects`, `project_assignments`, `timesheet_entries`, `timesheet_submissions`. Two DB functions: `is_admin()` and `is_week_locked()`. One enum: `user_role` (`admin` | `employee`).
-
-Types are auto-generated in `utils/supabase/types.ts` — run `npm run update-types` after schema changes. Row types are derived as `Database['public']['Tables']['<table>']['Row']`.
-
-## Database change policy (production)
-
-- Supabase MCP tools on the production project (`tfbzivfsqsgebegcvfah`) are READ-ONLY: `SELECT` queries, `list_*`, `gen types`. Never `apply_migration` or DDL via `execute_sql` on prod.
-- All DDL reaches prod exclusively through migration files committed to `supabase/migrations/` and applied via `supabase db push` after review.
-- Never edit a migration that has already been applied — a change means a new migration file.
-- Project configuration (storage bucket limits/MIME types, Auth, SMTP, retention, etc.) is NOT changed by clicking in the dashboard — only through migrations or `supabase/config.toml`. Dashboard drift is invisible to the repo and to `db diff`: the `expense-receipts` bucket read 5 MB in the migration but 15 MB on prod because someone raised it by hand, which silently broke schema reproducibility.
-
-## Build environment variables
-
-Every environment variable read at build time must be declared in the `env` list of the `build` task in `turbo.json`. Vercel and CI both run `turbo run build` in strict env mode, which strips undeclared variables — a var that "works locally" (loaded from `.env.local` by Next) will be missing there and fail the deploy (this broke the first monorepo deploy: the Resend client got no API key). `NEXT_PUBLIC_*` variables pass through framework inference and need no declaration.
-
-## Conventions
-
-- Server actions: `'use server'` directive, placed in `app/data/actions/`, re-exported from `index.ts`.
-- Client components: `'use client'` directive, co-located PascalCase files next to their page.
-- Styling: Tailwind utilities + `cn()` for conditional classes. CSS variables for theming in `globals.css`.
-- Path alias: `@/*` maps to project root.
-- Supabase upsert calls sometimes use `as any` to work around type inference — this is intentional.
+- Strony = async RSC pobierające dane przez Supabase; mutacje = server
+  actions (`'use server'`) + `revalidatePath()` + `router.refresh()`;
+  brak fetchowania po stronie klienta i brak REST-owych route'ów.
+- Komponenty klienckie: `'use client'`, PascalCase, obok strony.
+- shadcn/ui w `components/ui/` (nie edytować ręcznie), Tailwind + `cn()`.
+- Szczegóły i wyjątki: `docs/03-conventions.md`.
