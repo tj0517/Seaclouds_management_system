@@ -214,3 +214,24 @@ behaves oddly in a way scl-dev does not reproduce, the image gap is checked
 early instead of after hours of debugging. Upgrading prod's image to match
 (dashboard/infrastructure operation, not a migration) is the eventual
 resolution; revisit when planning the next maintenance window.
+
+## n) Secrets review and rotation at the Sea Clouds org transfer
+
+When the repo moves to the Sea Clouds GitHub organization, run one combined
+review-and-rotation of all secrets instead of piecemeal fixes:
+
+- **`RESEND_API_KEY`** — rotate; the pre-2026-09-01 key sat for months in
+  a developer-machine `.env.local` alongside credentials of a foreign
+  Supabase project (`qyrf…`, not in the Sea Clouds org), so treat it as
+  potentially overexposed. Canonical copy lives in Vercel env vars.
+- **Supabase `service_role` keys** (prod + scl-dev) — rotate and update
+  Vercel env vars.
+- **CI tokens** — `SUPABASE_ACCESS_TOKEN_DEV` and the prod token scoped to
+  the `production-db` environment (ADR-0005): reissue under the org account
+  so they stop depending on a personal account.
+
+Trigger: the org transfer. Context: the old `apps/timesheet/.env.local`
+(backed up to `~/Desktop/seaclouds/backups/timesheet-env-local-qyrf-2026-09-01.txt`,
+chmod 600) was found on 2026-09-01 pointing at the foreign `qyrf…` project
+with a live `service_role` key; the fate of that project is the owner's
+open question and is deliberately NOT part of this task.
