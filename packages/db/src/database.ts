@@ -306,7 +306,7 @@ export type Database = {
           id: string
           is_active: boolean | null
           name: string
-          project_code: string | null
+          project_code: string
         }
         Insert: {
           created_at?: string
@@ -314,7 +314,7 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           name: string
-          project_code?: string | null
+          project_code: string
         }
         Update: {
           created_at?: string
@@ -322,7 +322,7 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           name?: string
-          project_code?: string | null
+          project_code?: string
         }
         Relationships: []
       }

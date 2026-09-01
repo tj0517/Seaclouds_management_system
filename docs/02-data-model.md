@@ -40,9 +40,12 @@ w `dcs.project_members`; `project_lead` nie jest mapowany na żadną rolę
 DCS; administrator DCS = `role = 'admin'`.
 
 ### ✅ `public.projects`
-`id`, `name`, `description`, `is_active`, `project_code (unique, nullable)`.
-Na prod `project_code` przeważnie ma format SCYYNN (SC2505…SC2605), ale są
-odstępstwa: `""` (IT admin), `SCC005`, `SCMS_TEST` — ⚠️ WYMAGA DECYZJI (O-11).
+`id`, `name`, `description`, `is_active`, `project_code (unique, NOT NULL)`.
+`project_code` to pierwszy człon numeru dokumentu DCS, więc od migracji
+`20260901082600_enforce_project_code_format` ma `CHECK (^SC\d{4}$ OR ^SCMS OR
+= 'SCC005')`. `IT admin` dostał kod `SCMS-IT` (był pusty). Jedyne odstępstwo
+`SCC005` (ISO Certyfikacja) to wyjątek **imienny**, nie wzorzec — patrz O-11
+i `docs/deferred-tasks.md`.
 📐 Rozszerzenia dla MDR wg briefu §5.2: `process_type
 (Internal|Tender|Project|Course)`, `client_id`, `year`, `status` — część
 w `projects`, część w `dcs.mdr_settings` (podział do ustalenia w Fazie 1a).
