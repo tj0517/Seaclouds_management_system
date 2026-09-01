@@ -29,9 +29,12 @@ is on in the base (both envs, for task 1a.11 / O-14); email confirmations,
 `[remotes.production]` (scl-dev has no SMTP and the seed recreates users each
 `db reset`); real per-env URLs live in `[remotes.<name>]` blocks keyed by
 `project_id` (verified: `config push` logs `Loading config override`). That PR
-also fixes a live prod bug — prod `site_url` pointed at `http://localhost:3000`,
-so password-reset links were broken for all users. Leaked-password protection
-is handled as a dashboard exception, see (h) below. **Still open for this task
+also corrects prod `site_url`, which pointed at `http://localhost:3000` — config
+hygiene, not an outage: Timesheet has no self-service email password reset
+(passwords change in a panel form), so no user-facing flow was broken. `site_url`
+still backs email confirmations and any future email link flows, so the real
+domain belongs there. Leaked-password protection is handled as a dashboard
+exception, see (h) below. **Still open for this task
 (a):** everything non-Auth — storage buckets (the `expense-receipts` 5→15 MB
 drift), SMTP, session/JWT and retention settings.
 
@@ -119,21 +122,9 @@ Trigger: a Supabase CLI version that adds the key. When bumping the pinned CLI
 the base `[auth]` block, push to both projects, and delete this task plus the
 dashboard exception note.
 
-## i) Audit prod data possibly written from preview deployments
+## i) Preview → prod Supabase (closed 2026-09-01)
 
-Discovered 2026-09-01: the Timesheet Vercel project's **Preview** environment
-pointed `NEXT_PUBLIC_SUPABASE_URL` at the **prod** Supabase
-(`tfbzivfsqsgebegcvfah`) for ~67 days (Preview env var created ~2026-06-26,
-scl-dev did not exist until 2026-08-27). So any preview deployment in that
-window could read/write prod data with unreviewed branch code — a broken
-environment separation (brief §12.2), now being fixed by repointing Preview to
-scl-dev (see the "Środowiska i deploymenty" rule in `docs/03-conventions.md`).
-
-Task: with the team, check whether any production rows originated from preview
-deployments in that window — timesheet entries, expense entries, PDF exports
-(`pdf_exports` / storage `timesheet-exports`) — and decide whether they need
-verification or cleanup. There is no per-request "which deployment wrote this"
-field, so scope by `created_at` ranges and cross-check with known legitimate
-activity; the service-role key was the same for preview and prod, so writes are
-indistinguishable at the DB layer. Prioritise before any data-integrity-
-sensitive reporting.
+The Timesheet Vercel project's Preview env pointed at the prod Supabase for
+~67 days (until repointed to scl-dev — see the "Środowiska i deploymenty" rule
+in `docs/03-conventions.md`). Checked and closed: Preview was used only by the
+repo owner in that window, with no impact on production data.
