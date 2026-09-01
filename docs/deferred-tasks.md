@@ -143,3 +143,14 @@ row (if renumbered) and replaces the constraint without the `or project_code =
 'SCC005'` member, regenerate types (`pnpm db:gen` — no type change expected,
 the column stays NOT NULL), update the pgTAP guard
 (`supabase/tests/project_code_format.test.sql`) and close O-11.
+
+## k) Validate project_code in the create/edit project form
+
+Since migration `20260901082600_enforce_project_code_format`, `project_code` is
+`NOT NULL` + format-checked in the DB, but the form does not validate it:
+`app/data/actions/projects.ts` does `(formData.get('project_code'))?.trim() ||
+null`, so an empty or off-format code reaches the DB and surfaces the raw
+constraint error (`... violates check constraint ...` / NOT NULL) instead of a
+readable message. Add client/server-side validation of the same pattern
+(`^SC\d{4}$` / `^SCMS` / the SCC005 carve-out) and a friendly error before the
+insert/update. Separate PR (UI/UX, no schema change).
