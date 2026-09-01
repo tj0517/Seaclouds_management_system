@@ -107,3 +107,16 @@ osiągalnym celem dla tego projektu.
   ręczny `workflow_dispatch` (patrz 01-architecture).
 - Opis PR: co i dlaczego, plus jak zweryfikowano (wynik `supabase test db`,
   zrzut ekranu dla UI).
+
+## Środowiska i deploymenty
+
+- Podglądowe i deweloperskie deploymenty NIGDY nie wskazują na produkcyjny
+  projekt Supabase. Preview → scl-dev, Production → prod. Wykryte 2026-09-01:
+  Preview Timesheetu celował w prod od ~67 dni.
+- Konsekwencja praktyczna: zmienne środowiskowe Supabase
+  (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
+  `SUPABASE_SERVICE_ROLE_KEY`) w Vercelu muszą mieć osobne wartości dla
+  Preview (scl-dev) i Production (prod). Naprawa allowlisty redirectów tego nie
+  rozwiązuje — nieprzejrzany kod z gałęzi mógłby mutować dane produkcyjne
+  (sprzeczne z §12.2 briefu). Dlatego `[remotes.production].additional_redirect_urls`
+  w `config.toml` celowo NIE zawiera wildcardu preview Vercela.
