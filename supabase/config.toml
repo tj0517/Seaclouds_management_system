@@ -420,6 +420,9 @@ project_id = "mzotiurydmhibqhxxzoh"
 site_url = "https://dcs-steel.vercel.app"
 additional_redirect_urls = [
   "https://dcs-steel.vercel.app/**",
+  # Vercel preview deployments of the dcs-steel project — scoped to this
+  # project's subdomains, deliberately not https://*.vercel.app (open redirect).
+  "https://dcs-steel-*.vercel.app/**",
   "http://localhost:3000/**",
   "http://localhost:3001/**",
   "http://127.0.0.1:3000/**",
