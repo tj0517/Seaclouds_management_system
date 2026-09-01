@@ -34,6 +34,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      clients: {
+        Row: {
+          code: string
+          contact_email: string | null
+          created_at: string
+          id: string
+          is_active: boolean
+          name: string
+          notes: string | null
+        }
+        Insert: {
+          code: string
+          contact_email?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name: string
+          notes?: string | null
+        }
+        Update: {
+          code?: string
+          contact_email?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          notes?: string | null
+        }
+        Relationships: []
+      }
       earnings_month_status: {
         Row: {
           id: string
@@ -301,6 +331,7 @@ export type Database = {
       }
       projects: {
         Row: {
+          client_id: string | null
           created_at: string
           description: string | null
           id: string
@@ -309,6 +340,7 @@ export type Database = {
           project_code: string
         }
         Insert: {
+          client_id?: string | null
           created_at?: string
           description?: string | null
           id?: string
@@ -317,6 +349,7 @@ export type Database = {
           project_code: string
         }
         Update: {
+          client_id?: string | null
           created_at?: string
           description?: string | null
           id?: string
@@ -324,7 +357,15 @@ export type Database = {
           name?: string
           project_code?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "projects_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       sub_project_assignments: {
         Row: {

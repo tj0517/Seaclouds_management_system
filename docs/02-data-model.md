@@ -46,8 +46,11 @@ DCS; administrator DCS = `role = 'admin'`.
 = 'SCC005')`. `IT admin` dostał kod `SCMS-IT` (był pusty). Jedyne odstępstwo
 `SCC005` (ISO Certyfikacja) to wyjątek **imienny**, nie wzorzec — patrz O-11
 i `docs/deferred-tasks.md`.
-📐 Rozszerzenia dla MDR wg briefu §5.2: `process_type
-(Internal|Tender|Project|Course)`, `client_id`, `year`, `status` — część
+`client_id (uuid, nullable, FK clients, ON DELETE RESTRICT)` — od migracji
+`20260901123548_add_clients_table`; NULL = projekt wewnętrzny (patrz
+`public.clients` niżej).
+📐 Pozostałe rozszerzenia dla MDR wg briefu §5.2: `process_type
+(Internal|Tender|Project|Course)`, `year`, `status` — część
 w `projects`, część w `dcs.mdr_settings` (podział do ustalenia w Fazie 1a).
 RLS: odczyt dla zalogowanych, zapis dla admina. Uwaga: odczyt NIE jest
 ograniczony per użytkownik — jedyna polityka SELECT (`Widoczność projektów`)
@@ -64,10 +67,23 @@ z `dcs.project_members`) — odziedziczona tego nie daje.
 projekt, FK traci warunek „z listy projektu”, a słownik przestaje wisieć pod
 `project_id` — zmienia to też walidację w kreatorze Create Project MDR.
 
-### 📐 `public.clients`
-Rejestr klientów nie istnieje (zweryfikowane odczytem). Nowa tabela:
-`id`, `name`, `code`, `is_active`. `projects.client_id` — puste dla
-`process_type = Internal`. RLS: odczyt zalogowani, zapis admin/DC.
+### ✅ `public.clients`
+`id`, `name (not null, niepusty)`, `code (unique, not null, `^[A-Z0-9]{2,10}$`)`,
+`contact_email`, `notes`, `is_active (default true)`, `created_at`.
+Utworzona migracją `20260901123548_add_clients_table` (DCS 1a.04). Format
+kodu bez separatorów, bo `code` staje się członem numeru dokumentu w numeracji
+CPY (§6.3) rozdzielanego myślnikami — myślnik w kodzie uniemożliwiłby
+parsowanie numeru. `projects.client_id` — FK nullable (NULL = projekt
+wewnętrzny, `process_type = Internal`), **ON DELETE RESTRICT**: klienta
+z projektami się nie usuwa (SET NULL po cichu przemianowałoby jego projekty
+na wewnętrzne), tylko dezaktywuje (`is_active = false`).
+RLS: SELECT dla każdego zalogowanego, INSERT/UPDATE/DELETE wyłącznie admin
+(`is_admin()`) — ten sam model co `public.projects`. Świadome odstępstwo od
+pierwotnego zakresu zadania („SELECT dla członków projektów tego klienta"):
+`dcs.project_members` jeszcze nie istnieje (1a.06), a oparcie polityki na
+`project_assignments` z TES oznaczałoby przepisanie jej dwa zadania później.
+Ewentualne zawężenie widoczności — razem z 1a.06, tym samym ruchem co dla
+`projects` (patrz uwaga wyżej). Test: `supabase/tests/rls_clients.test.sql`.
 
 ### 📐 `public.audit_log`
 Wspólny dla modułów (brief §5.9): `user_id`, `ts`, `table_name`, `record_id`,
