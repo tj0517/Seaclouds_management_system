@@ -66,9 +66,18 @@ rekomendacji, bo odebranie uprawnień roli `authenticated` wyłączy TES:
   m.in. polityka „Admin zarządza projektami” na `public.projects` i polityki
   storage, `is_week_locked(...)` — polityki `timesheet_entries`,
   a `resubmit_rejected` aplikacja przez RPC.
-- **`auth_leaked_password_protection`** — otwarte do czasu decyzji o
-  konfiguracji Auth (`docs/deferred-tasks.md` b); zmiana wyłącznie przez
-  `config.toml`/migrację, nie dashboard.
+- **`auth_leaked_password_protection`** — **rozstrzygnięte 2026-08-31**:
+  ochrona przed skompromitowanymi hasłami (HaveIBeenPwned) jest włączona
+  ręcznie w dashboardzie na obu projektach (scl-dev i prod). To **świadomy,
+  datowany wyjątek** od reguły „konfiguracja nie przez dashboard”. Powód:
+  CLI 2.75.0 nie ma dla tej flagi klucza w `config.toml` — dekoder `[auth]`
+  odrzuca `enable_leaked_password_protection` oraz `password_hibp_enabled`
+  („invalid keys”), a flagi nie ma w referencji CLI. Odrzucone alternatywy:
+  podbicie wersji CLI (przypięcie determinuje obraz Postgresa i wymusiłoby
+  regenerację typów — nieproporcjonalne do jednej flagi) oraz jednorazowy
+  skrypt do Management API. Funkcja dostępna, bo organizacja jest na planie
+  Pro. **Warunek wygaśnięcia wyjątku:** przenieść ustawienie do `config.toml`,
+  gdy CLI zacznie obsługiwać ten klucz — patrz `docs/deferred-tasks.md` (h).
 
 Uzasadnienie 0027/0029 zweryfikowano odczytem na prod (2026-08-31):
 `pg_policy` (wyrażenia polityk wołające te funkcje) oraz

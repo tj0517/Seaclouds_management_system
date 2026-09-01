@@ -15,6 +15,26 @@ Trigger: `expense-receipts` bucket was 5 MB in the migration but 15 MB on prod
 because it was raised by hand in the dashboard. Dashboard drift is invisible to
 `db diff`. See the "Database change policy" section in `CLAUDE.md`.
 
+**WARNING — `config.toml` is today the CLI scaffold, not the intended remote
+state.** It describes the default local stack, and several Auth values in it
+are *weaker* than what the remote projects run. Read on scl-dev + prod
+(2026-08-31): pushing the scaffold as-is would **regress prod security** —
+`mfa.totp.enroll_enabled`/`verify_enabled` true→false, `email.enable_confirmations`
+true→false, `email.max_frequency` 1m0s→1s, `email.otp_length` 8→6. scl-dev
+already sits at the weak values (dev), so its diff looked empty and hid the
+problem. Never run `supabase config push` against prod until `config.toml`
+holds the intended state. **Auth part done in PR #14** (2026-09-01): MFA TOTP
+is on in the base (both envs, for task 1a.11 / O-14); email confirmations,
+`otp_length = 8` and `max_frequency = "1m0s"` are prod-only under
+`[remotes.production]` (scl-dev has no SMTP and the seed recreates users each
+`db reset`); real per-env URLs live in `[remotes.<name>]` blocks keyed by
+`project_id` (verified: `config push` logs `Loading config override`). That PR
+also fixes a live prod bug — prod `site_url` pointed at `http://localhost:3000`,
+so password-reset links were broken for all users. Leaked-password protection
+is handled as a dashboard exception, see (h) below. **Still open for this task
+(a):** everything non-Auth — storage buckets (the `expense-receipts` 5→15 MB
+drift), SMTP, session/JWT and retention settings.
+
 ## b) Supabase advisor cleanup
 
 Done 2026-08-31 (migrations `20260831143840_pin_function_search_path` and
@@ -26,8 +46,11 @@ for the `authenticated` role stay **deliberately** — see the "Advisor" section
 in `docs/03-conventions.md` before touching anything the advisor recommends.
 
 Remaining:
-- enable leaked-password protection in Auth — blocked on a decision (STOP 2);
-  the change goes through `config.toml`/migration, never the dashboard.
+- enable leaked-password protection in Auth — **resolved 2026-08-31**: enabled
+  by hand in the dashboard on both projects as a conscious, dated exception,
+  because CLI 2.75.0 cannot represent it in `config.toml`. Rationale and expiry
+  condition in `docs/03-conventions.md` ("Advisor — świadomie akceptowane
+  ostrzeżenia"); follow-up to move it into `config.toml` is (h) below.
 
 ## c) CI and Vercel configuration
 
@@ -79,3 +102,19 @@ currently the only table whose SELECT policy filters by `auth.uid()`.
 Removal condition: the first `dcs.*` table with its own policies lands.
 Move the RLS proof onto that table (as a pgTAP test and/or probe) and delete
 the probe section from the page.
+
+## h) Move leaked-password protection into `config.toml`
+
+Leaked-password protection (HaveIBeenPwned) is currently enabled by hand in the
+dashboard on scl-dev and prod — a conscious, dated exception (see (b) and the
+"Advisor — świadomie akceptowane ostrzeżenia" section in
+`docs/03-conventions.md`) forced by CLI 2.75.0 having no `config.toml` key for
+it: the `[auth]` decoder rejects `enable_leaked_password_protection` and
+`password_hibp_enabled`. Being dashboard-only, it is invisible to `config push`
+and to review — exactly the drift class this repo tries to avoid.
+
+Trigger: a Supabase CLI version that adds the key. When bumping the pinned CLI
+(`docs/toolchain.md`) for any reason, check the auth config schema
+(`supabase config push` no longer rejects the key) and, if present, add it to
+the base `[auth]` block, push to both projects, and delete this task plus the
+dashboard exception note.
