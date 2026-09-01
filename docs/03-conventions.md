@@ -104,7 +104,9 @@ osiągalnym celem dla tego projektu.
   w trybie strict env). Nowa zmienna budowa = wpis w `env` w `turbo.json`.
 - Merge do `main` automatycznie pcha migracje na scl-dev — nie merguj
   migracji, której nie chcesz jeszcze na scl-dev. Prod wyłącznie przez
-  ręczny `workflow_dispatch` (patrz 01-architecture).
+  ręczny `workflow_dispatch` (patrz 01-architecture). Do 2026-09-01 to
+  zdanie było nieprawdziwe — patrz [ADR-0007](adr/0007-deploy-bazy-wylacznie-przez-ci.md)
+  i reguła o integracji GitHub w sekcji „Środowiska i deploymenty".
 - Opis PR: co i dlaczego, plus jak zweryfikowano (wynik `supabase test db`,
   zrzut ekranu dla UI).
 
@@ -120,3 +122,10 @@ osiągalnym celem dla tego projektu.
   rozwiązuje — nieprzejrzany kod z gałęzi mógłby mutować dane produkcyjne
   (sprzeczne z §12.2 briefu). Dlatego `[remotes.production].additional_redirect_urls`
   w `config.toml` celowo NIE zawiera wildcardu preview Vercela.
+- **Integracja GitHub Supabase (branching) musi pozostać WYŁĄCZONA na obu
+  projektach** (scl-dev i prod). Włączona w dashboardzie aplikuje migracje
+  i `config.toml` na prod przy każdym merge'u do `main`, z pominięciem
+  `deploy-db.yml` i bramki `production-db` — jej włączenie unieważnia cały
+  proces wdrożeń opisany tu i w 01-architecture. Wykryte 2026-09-01
+  (dotyczyło co najmniej PR #13 i #15) —
+  [ADR-0007](adr/0007-deploy-bazy-wylacznie-przez-ci.md).

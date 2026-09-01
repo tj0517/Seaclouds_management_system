@@ -68,6 +68,13 @@ Droga zmiany schematu:
    `production-db` (wymagany reviewer). Token prodowy istnieje wyłącznie
    w tym environmencie ([ADR-0005](adr/0005-tokeny-ci-per-projekt.md)).
 
+Uwaga historyczna: do 2026-09-01 punkt 2 był nieprawdziwy — włączona
+w dashboardzie integracja GitHub Supabase aplikowała migracje i `config.toml`
+na **prod** przy każdym merge'u do `main`, z pominięciem bramki (dotyczyło co
+najmniej PR #13 i #15). Integracja jest wyłączona i ma taka pozostać —
+[ADR-0007](adr/0007-deploy-bazy-wylacznie-przez-ci.md); skuteczność bramki
+wymaga dowodu z logów przy najbliższej migracji (`deferred-tasks.md` l).
+
 Nic nie przypomina o czekającej migracji na prod — patrz
 `docs/deferred-tasks.md` pkt f.
 

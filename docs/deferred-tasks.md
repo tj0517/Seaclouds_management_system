@@ -154,3 +154,27 @@ constraint error (`... violates check constraint ...` / NOT NULL) instead of a
 readable message. Add client/server-side validation of the same pattern
 (`^SC\d{4}$` / `^SCMS` / the SCC005 carve-out) and a friendly error before the
 insert/update. Separate PR (UI/UX, no schema change).
+
+## l) Prove the production-db gate with prod logs on the next migration
+
+The Supabase GitHub integration used to apply migrations and `config.toml` to
+prod on every merge to `main`, bypassing `deploy-db.yml` and the
+`production-db` approval gate — so the gate has never actually done real work
+([ADR-0007](adr/0007-deploy-bazy-wylacznie-przez-ci.md)). The integration is
+now disabled, but disabled-in-dashboard is a claim, not a proof.
+
+Task: on the FIRST migration merged after 2026-09-01, verify from prod logs
+that the DDL came exclusively from the `deploy-db.yml` dispatch run and not
+from Supabase infrastructure:
+
+- `workflow_run_logs` (prod project) must show NO `Cloning git repo… git_ref=main`
+  / `Applying migration…` entries around the merge time;
+- `postgres_logs` must show the migration DDL only at the time of the manual
+  `workflow_dispatch` run, with `connection_from` matching a GitHub runner
+  (Azure), not Supabase infra (AWS us-east-1);
+- until then, after every merge with migrations, read
+  `supabase_migrations.schema_migrations` on prod and confirm the new version
+  is absent before the dispatch.
+
+The gate is proven only when this check passes — then close this task and note
+the date in ADR-0007.
