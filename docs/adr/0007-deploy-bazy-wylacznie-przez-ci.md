@@ -31,10 +31,13 @@ pracy** — integracja zawsze była pierwsza, a ręczne dispatche zastawały pro
 
 ## Decyzja
 
-Integracja GitHub Supabase zostaje **wyłączona na obu projektach** (prod
-`tfbzivfsqsgebegcvfah` i scl-dev `mzotiurydmhibqhxxzoh`; wyłącza właściciel
-w dashboardzie — decyzja 2026-09-01, potwierdzenie rozłączenia warunkuje
-merge'owanie czegokolwiek z migracjami). Jedynym kanałem zmian schematu i konfiguracji na
+Integracja GitHub Supabase zostaje **wyłączona**. Na prodzie
+(`tfbzivfsqsgebegcvfah`) rozłączenie potwierdzone przez właściciela
+2026-09-01. Na scl-dev (`mzotiurydmhibqhxxzoh`) integracji nigdy nie było —
+`branches list` zwraca pustą listę (odczyt 2026-09-01), podczas gdy prod ma
+rekord brancha domyślnego powiązanego z `git branch main` od 2026-06-08; nie
+powstały żadne branche per-PR (płatne na planie Pro), które trzeba by
+sprzątać. Jedynym kanałem zmian schematu i konfiguracji na
 remote pozostaje `deploy-db.yml`: merge do `main` → push na scl-dev
 automatycznie; prod → ręczny `workflow_dispatch` za bramką `production-db`.
 Ponowne włączenie integracji unieważnia cały ten proces i wymaga rewizji
