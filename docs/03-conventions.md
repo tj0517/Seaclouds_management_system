@@ -66,9 +66,18 @@ rekomendacji, bo odebranie uprawnień roli `authenticated` wyłączy TES:
   m.in. polityka „Admin zarządza projektami” na `public.projects` i polityki
   storage, `is_week_locked(...)` — polityki `timesheet_entries`,
   a `resubmit_rejected` aplikacja przez RPC.
-- **`auth_leaked_password_protection`** — otwarte do czasu decyzji o
-  konfiguracji Auth (`docs/deferred-tasks.md` b); zmiana wyłącznie przez
-  `config.toml`/migrację, nie dashboard.
+- **`auth_leaked_password_protection`** — **rozstrzygnięte 2026-08-31**:
+  ochrona przed skompromitowanymi hasłami (HaveIBeenPwned) jest włączona
+  ręcznie w dashboardzie na obu projektach (scl-dev i prod). To **świadomy,
+  datowany wyjątek** od reguły „konfiguracja nie przez dashboard”. Powód:
+  CLI 2.75.0 nie ma dla tej flagi klucza w `config.toml` — dekoder `[auth]`
+  odrzuca `enable_leaked_password_protection` oraz `password_hibp_enabled`
+  („invalid keys”), a flagi nie ma w referencji CLI. Odrzucone alternatywy:
+  podbicie wersji CLI (przypięcie determinuje obraz Postgresa i wymusiłoby
+  regenerację typów — nieproporcjonalne do jednej flagi) oraz jednorazowy
+  skrypt do Management API. Funkcja dostępna, bo organizacja jest na planie
+  Pro. **Warunek wygaśnięcia wyjątku:** przenieść ustawienie do `config.toml`,
+  gdy CLI zacznie obsługiwać ten klucz — patrz `docs/deferred-tasks.md` (h).
 
 Uzasadnienie 0027/0029 zweryfikowano odczytem na prod (2026-08-31):
 `pg_policy` (wyrażenia polityk wołające te funkcje) oraz
@@ -98,3 +107,16 @@ osiągalnym celem dla tego projektu.
   ręczny `workflow_dispatch` (patrz 01-architecture).
 - Opis PR: co i dlaczego, plus jak zweryfikowano (wynik `supabase test db`,
   zrzut ekranu dla UI).
+
+## Środowiska i deploymenty
+
+- Podglądowe i deweloperskie deploymenty NIGDY nie wskazują na produkcyjny
+  projekt Supabase. Preview → scl-dev, Production → prod. Wykryte 2026-09-01:
+  Preview Timesheetu celował w prod od ~67 dni.
+- Konsekwencja praktyczna: zmienne środowiskowe Supabase
+  (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
+  `SUPABASE_SERVICE_ROLE_KEY`) w Vercelu muszą mieć osobne wartości dla
+  Preview (scl-dev) i Production (prod). Naprawa allowlisty redirectów tego nie
+  rozwiązuje — nieprzejrzany kod z gałęzi mógłby mutować dane produkcyjne
+  (sprzeczne z §12.2 briefu). Dlatego `[remotes.production].additional_redirect_urls`
+  w `config.toml` celowo NIE zawiera wildcardu preview Vercela.
