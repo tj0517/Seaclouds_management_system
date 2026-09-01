@@ -155,7 +155,7 @@ readable message. Add client/server-side validation of the same pattern
 (`^SC\d{4}$` / `^SCMS` / the SCC005 carve-out) and a friendly error before the
 insert/update. Separate PR (UI/UX, no schema change).
 
-## l) Prove the production-db gate with prod logs on the next migration
+## l) Prove the production-db gate with prod logs on the next migration (closed 2026-09-01)
 
 The Supabase GitHub integration used to apply migrations and `config.toml` to
 prod on every merge to `main`, bypassing `deploy-db.yml` and the
@@ -178,3 +178,39 @@ from Supabase infrastructure:
 
 The gate is proven only when this check passes — then close this task and note
 the date in ADR-0007.
+
+**Closed 2026-09-01** — proven on migration `20260901123548_add_clients_table`
+(PR #17, merged 12:52:06Z; manual dispatch run 33515391851, 13:46:24–39Z):
+
+- `workflow_run_logs` (prod): zero entries over the whole 12:45–13:55Z window —
+  no `Cloning git repo…`, integration silent (previously it reacted ~30 s
+  after a merge).
+- `schema_migrations` (prod) read before the dispatch: `20260901123548`
+  absent; after the run: present.
+- `postgres_logs` (prod): the migration DDL appears exactly once, at
+  13:46:36.276–.639Z — matching the dispatch run's `Applying migration…`
+  log line (13:46:36.34Z) to the millisecond; no DDL anywhere else in the
+  merge→dispatch window.
+- **Correction to the criterion as originally written:** `connection_from`
+  shows `2a05:d018:…` (AWS eu-west-1), not an Azure runner address — GitHub
+  runners are IPv4-only, so `supabase db push` connects through the Supavisor
+  pooler (`aws-1-eu-west-1.pooler.supabase.com`) and postgres sees the
+  pooler's address. The discriminator that actually separates the gate from
+  the old integration is: eu-west-1 pooler + millisecond timing match +
+  zero `workflow_run_logs`, versus the integration's `2600:1f18:…`
+  (AWS us-east-1 Supabase workflow infra) + `Cloning git repo…` entries.
+  Zero connections from `2600:1f18:…` in the whole window.
+
+## m) Postgres patch-version gap between scl-dev and prod
+
+scl-dev runs Postgres image `17.6.1.166`, prod `17.6.1.063` (dashboard
+reading 2026-09-01; both report `server_version` 17.6 — the build suffix is
+the Supabase image revision, visible only in the platform, not in SQL).
+A patch-level difference between the integration and production environment
+is a small but real fidelity gap: behaviour verified on scl-dev can in
+principle differ on prod (planner fixes, extension builds, Supabase image
+changes). Nothing to fix right now — this note exists so that when prod
+behaves oddly in a way scl-dev does not reproduce, the image gap is checked
+early instead of after hours of debugging. Upgrading prod's image to match
+(dashboard/infrastructure operation, not a migration) is the eventual
+resolution; revisit when planning the next maintenance window.
