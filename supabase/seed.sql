@@ -98,7 +98,7 @@ BEGIN
   -- Projects
   -- ============================================================
   INSERT INTO projects (id, name, description, project_code, is_active, created_at) VALUES
-    (pid_it, 'IT admin', NULL, '', true, '2026-06-01 09:55:28.317983+00'),
+    (pid_it, 'IT admin', NULL, 'SCMS-IT', true, '2026-06-01 09:55:28.317983+00'),
     (pid_pej, 'PEJ/131/2026_UXO&GEO Oversight', 'UXO & GEO Oversight', 'SC2602', true, '2026-06-01 10:14:35.589029+00')
   ON CONFLICT (id) DO NOTHING;
 
