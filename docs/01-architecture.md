@@ -73,7 +73,8 @@ w dashboardzie integracja GitHub Supabase aplikowała migracje i `config.toml`
 na **prod** przy każdym merge'u do `main`, z pominięciem bramki (dotyczyło co
 najmniej PR #13 i #15). Integracja jest wyłączona i ma taka pozostać —
 [ADR-0007](adr/0007-deploy-bazy-wylacznie-przez-ci.md); skuteczność bramki
-wymaga dowodu z logów przy najbliższej migracji (`deferred-tasks.md` l).
+udowodniona logami proda 2026-09-01 przy migracji `20260901123548`
+(szczegóły i sygnatury: `deferred-tasks.md` l, zamknięte).
 
 Nic nie przypomina o czekającej migracji na prod — patrz
 `docs/deferred-tasks.md` pkt f.

@@ -45,10 +45,15 @@ tego ADR.
 
 ## Konsekwencje
 
-- Bramka `production-db` staje się faktyczną, a nie tylko zapisaną, kontrolą —
-  ale jej skuteczność trzeba dopiero **udowodnić** przy najbliższej migracji
-  odczytem logów proda (`docs/deferred-tasks.md` l): DDL ma pochodzić
-  wyłącznie z runu `deploy-db.yml`, nie z infrastruktury Supabase.
+- Bramka `production-db` staje się faktyczną, a nie tylko zapisaną, kontrolą.
+  **Udowodnione 2026-09-01** przy migracji `20260901123548_add_clients_table`
+  (pierwszej po rozłączeniu): zero wpisów w `workflow_run_logs` proda w całym
+  oknie merge→dispatch, DDL w `postgres_logs` wyłącznie raz, zsynchronizowany
+  co do milisekundy z runem `workflow_dispatch`, zero połączeń z infrastruktury
+  Supabase (`2600:1f18:…`, AWS us-east-1). Uwaga: `connection_from` pokazuje
+  pooler Supavisor w eu-west-1, nie adres runnera GitHuba — runnery są
+  IPv4-only i łączą się przez pooler; sygnatury rozróżniające w
+  `docs/deferred-tasks.md` (l, zamknięte).
 - Migracje zmergowane do `main` przestają samoczynnie lądować na prodzie —
   wraca problem „nic nie przypomina o czekającej migracji"
   (`docs/deferred-tasks.md` f), teraz już realny, nie teoretyczny.
@@ -61,4 +66,5 @@ tego ADR.
 
 ## Data / Status
 
-2026-09-01 / przyjęta
+2026-09-01 / przyjęta; skuteczność bramki udowodniona logami 2026-09-01
+(migracja `20260901123548`, zadanie l w `deferred-tasks.md`)
