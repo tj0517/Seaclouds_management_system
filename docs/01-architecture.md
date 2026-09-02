@@ -63,7 +63,10 @@ Droga zmiany schematu:
 1. Migracja w `supabase/migrations/` + test pgTAP → PR → CI (lokalny stack,
    `db reset`, `supabase test db`, type-drift, lint, build).
 2. Merge do `main` → workflow `deploy-db.yml` automatycznie robi
-   `supabase db push` na **scl-dev** (token scoped tylko do dev).
+   `supabase db push` **i** `supabase config push` na **scl-dev** (token
+   scoped tylko do dev; workflow reaguje też na zmiany samego
+   `config.toml`). Config push na **prod** pozostaje ręczny i za zgodą
+   ([ADR-0007](adr/0007-deploy-bazy-wylacznie-przez-ci.md)).
 3. Prod: ręczny `workflow_dispatch` z `main`, za bramką GitHub Environment
    `production-db` (wymagany reviewer). Token prodowy istnieje wyłącznie
    w tym environmencie ([ADR-0005](adr/0005-tokeny-ci-per-projekt.md)).
