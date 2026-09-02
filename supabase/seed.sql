@@ -97,9 +97,12 @@ BEGIN
   -- ============================================================
   -- Projects
   -- ============================================================
-  INSERT INTO projects (id, name, description, project_code, is_active, created_at) VALUES
-    (pid_it, 'IT admin', NULL, 'SCMS-IT', true, '2026-06-01 09:55:28.317983+00'),
-    (pid_pej, 'PEJ/131/2026_UXO&GEO Oversight', 'UXO & GEO Oversight', 'SC2602', true, '2026-06-01 10:14:35.589029+00')
+  -- process_type mirrors the 20260902114743 backfill (seed runs after
+  -- migrations, so the backfill's UPDATE never sees these rows): SCMS-* =
+  -- internal, SCYYNN = NULL (project vs tender is the DC's call).
+  INSERT INTO projects (id, name, description, project_code, is_active, process_type, created_at) VALUES
+    (pid_it, 'IT admin', NULL, 'SCMS-IT', true, 'internal', '2026-06-01 09:55:28.317983+00'),
+    (pid_pej, 'PEJ/131/2026_UXO&GEO Oversight', 'UXO & GEO Oversight', 'SC2602', true, NULL, '2026-06-01 10:14:35.589029+00')
   ON CONFLICT (id) DO NOTHING;
 
   -- ============================================================

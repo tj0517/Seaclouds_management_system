@@ -7,6 +7,58 @@ export type Json =
   | Json[]
 
 export type Database = {
+  dcs: {
+    Tables: {
+      mdr_settings: {
+        Row: {
+          budget_hours: number | null
+          cpy_numbering: boolean
+          created_at: string
+          cycle_idc_to_ifr: number
+          cycle_ifr_to_retcom: number
+          cycle_retcom_to_ifc: number
+          project_id: string
+          status: Database["dcs"]["Enums"]["mdr_status"]
+          updated_at: string
+        }
+        Insert: {
+          budget_hours?: number | null
+          cpy_numbering?: boolean
+          created_at?: string
+          cycle_idc_to_ifr?: number
+          cycle_ifr_to_retcom?: number
+          cycle_retcom_to_ifc?: number
+          project_id: string
+          status?: Database["dcs"]["Enums"]["mdr_status"]
+          updated_at?: string
+        }
+        Update: {
+          budget_hours?: number | null
+          cpy_numbering?: boolean
+          created_at?: string
+          cycle_idc_to_ifr?: number
+          cycle_ifr_to_retcom?: number
+          cycle_retcom_to_ifc?: number
+          project_id?: string
+          status?: Database["dcs"]["Enums"]["mdr_status"]
+          updated_at?: string
+        }
+        Relationships: []
+      }
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      [_ in never]: never
+    }
+    Enums: {
+      mdr_status: "active" | "closed"
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   graphql_public: {
     Tables: {
       [_ in never]: never
@@ -337,7 +389,11 @@ export type Database = {
           id: string
           is_active: boolean | null
           name: string
+          process_type:
+            | Database["public"]["Enums"]["project_process_type"]
+            | null
           project_code: string
+          year: number | null
         }
         Insert: {
           client_id?: string | null
@@ -346,7 +402,11 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           name: string
+          process_type?:
+            | Database["public"]["Enums"]["project_process_type"]
+            | null
           project_code: string
+          year?: number | null
         }
         Update: {
           client_id?: string | null
@@ -355,7 +415,11 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           name?: string
+          process_type?:
+            | Database["public"]["Enums"]["project_process_type"]
+            | null
           project_code?: string
+          year?: number | null
         }
         Relationships: [
           {
@@ -656,6 +720,7 @@ export type Database = {
         | "other"
         | "bus"
         | "train"
+      project_process_type: "internal" | "tender" | "project" | "course"
       user_role: "admin" | "employee" | "project_lead"
     }
     CompositeTypes: {
@@ -782,6 +847,11 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  dcs: {
+    Enums: {
+      mdr_status: ["active", "closed"],
+    },
+  },
   graphql_public: {
     Enums: {},
   },
@@ -800,6 +870,7 @@ export const Constants = {
         "bus",
         "train",
       ],
+      project_process_type: ["internal", "tender", "project", "course"],
       user_role: ["admin", "employee", "project_lead"],
     },
   },

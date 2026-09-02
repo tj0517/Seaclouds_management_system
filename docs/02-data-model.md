@@ -49,9 +49,15 @@ i `docs/deferred-tasks.md`.
 `client_id (uuid, nullable, FK clients, ON DELETE RESTRICT)` — od migracji
 `20260901123548_add_clients_table`; NULL = projekt wewnętrzny (patrz
 `public.clients` niżej).
-📐 Pozostałe rozszerzenia dla MDR wg briefu §5.2: `process_type
-(Internal|Tender|Project|Course)`, `year`, `status` — część
-w `projects`, część w `dcs.mdr_settings` (podział do ustalenia w Fazie 1a).
+`process_type (enum project_process_type: internal|tender|project|course,
+nullable)` i `year (int, nullable)` — od migracji `20260902114743`
+(rozstrzygnięcie O-13): to tożsamość projektu wspólna dla modułów, więc
+mieszka w `projects`; konfiguracja specyficzna dla DCS w `dcs.mdr_settings`
+(patrz niżej). Backfill objął wyłącznie pewny przypadek: kody `^SCMS` →
+`internal`; kody SCYYNN (i imienny `SCC005`) zostały NULL — czy to Project
+czy Tender wie tylko DC, migracja nie zgaduje. `status` MDR celowo NIE trafił
+do `projects`: TES ma `is_active` (czy wolno logować godziny), a status MDR
+to inne pojęcie (dokumentacja otwarta/zamknięta) — leży w `mdr_settings`.
 RLS: odczyt dla zalogowanych, zapis dla admina. Uwaga: odczyt NIE jest
 ograniczony per użytkownik — jedyna polityka SELECT (`Widoczność projektów`)
 przepuszcza każdego zalogowanego, więc wszyscy widzą wszystkie projekty
@@ -95,17 +101,35 @@ Tabele TES (`timesheet_*`, `expense_*`, `earnings_*`, `pdf_exports`,
 `weekly_contract_codes`, `*_assignments`) nie są dziedziczone przez DCS —
 DCS ich nie czyta i nie modyfikuje.
 
-## Tabele `dcs.*` — 📐 PROJEKT (całość)
+## Tabele `dcs.*`
+
+Schemat `dcs` istnieje od migracji `20260902114742` ([ADR-0003](adr/0003-osobny-schemat-dcs.md)):
+granty `usage` + default privileges wyłącznie dla `authenticated`
+i `service_role` — **bez anon i bez PUBLIC**, spójnie z `public` po migracji
+`20260831143841`. Schemat jest dopisany do `[api].schemas` w `config.toml`
+(PostgREST + `gen types`).
 
 Reguła nienegocjowalna: każda tabela `dcs.*` ma `project_id` + RLS + polityki
 + test pgTAP w tym samym PR (patrz `CLAUDE.md`). Tam, gdzie `project_id` nie
 jest kluczem naturalnym (np. `files`), jest denormalizowany właśnie pod RLS.
+Poza `mdr_settings` całość poniżej to 📐 PROJEKT.
 
-### `dcs.mdr_settings` (1:1 z `projects`)
-`project_id (PK/FK)`, `cpy_numbering bool`, `cycle_idc_to_ifr int (=7)`,
-`cycle_ifr_to_retcom int (=10)`, `cycle_retcom_to_ifc int (=7)`,
-`budget_hours numeric`, częstotliwość podsumowania e-mail.
-RLS: odczyt członkowie projektu, zapis DC/admin.
+### ✅ `dcs.mdr_settings` (1:1 z `projects`)
+`project_id (PK/FK → projects, ON DELETE CASCADE)`, `cpy_numbering bool
+(default false)`, `cycle_idc_to_ifr int (=7)`, `cycle_ifr_to_retcom int
+(=10)`, `cycle_retcom_to_ifc int (=7)` — wszystkie trzy `CHECK > 0`,
+`budget_hours numeric (nullable, CHECK >= 0)`, `status (enum dcs.mdr_status:
+active|closed, default active)`, `created_at`, `updated_at` (trigger
+`set_updated_at`). Utworzona migracją `20260902114744` (DCS 1a.05).
+Semantyka istnienia wiersza: **brak wiersza = DCS nie prowadzi tego
+projektu** — wierszy nie tworzy się hurtem dla istniejących projektów;
+wiersz powstaje przy zakładaniu MDR w DCS (kreator, 1a.17). ON DELETE
+CASCADE: ustawienia bez projektu to bezsensowna sierota, a kasowanie
+projektów i tak jest w TES admin-only. Częstotliwość podsumowania e-mail
+(brief §5.2) — dojdzie z modułem powiadomień, nie teraz.
+RLS: SELECT dla każdego zalogowanego, zapis wyłącznie admin (`is_admin()`) —
+docelowo zapis DC (rozszerzenie polityk razem z `project_members`,
+1a.06/1a.09). Test: `supabase/tests/rls_mdr_settings.test.sql`.
 
 ### `dcs.project_members`
 `project_id`, `user_id (FK profiles)`, `dcs_role
