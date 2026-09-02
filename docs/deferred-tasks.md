@@ -94,7 +94,7 @@ an issue, a step in the dev-push job that prints a `::warning`, or a badge in
 the README. Needs a prod-readable credential, so mind the token-scoping rules
 from `deploy-db.yml`.
 
-## g) Remove the temporary RLS probe from `apps/dcs`
+## g) Remove the temporary RLS probe from `apps/dcs` — **DO ZROBIENIA TERAZ (2026-09-02)**
 
 `apps/dcs/app/page.tsx` runs an unfiltered `select` on
 `public.timesheet_entries` as the only live proof that RLS is enforced for
@@ -105,6 +105,11 @@ currently the only table whose SELECT policy filters by `auth.uid()`.
 Removal condition: the first `dcs.*` table with its own policies lands.
 Move the RLS proof onto that table (as a pgTAP test and/or probe) and delete
 the probe section from the page.
+
+**Condition met 2026-09-02**: `dcs.mdr_settings` exists with its own policies
+and pgTAP coverage (`supabase/tests/rls_mdr_settings.test.sql`, DCS 1a.05).
+The probe removal is a small separate PR right after 1a.05 — deliberately kept
+out of that task's scope.
 
 ## h) Move leaked-password protection into `config.toml`
 
