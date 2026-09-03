@@ -8,7 +8,7 @@
 -- no app flow depends on clients existing yet.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(12);
+select plan(13);
 
 -- ============================================================
 -- Schema assertions (red without the migration)
@@ -29,6 +29,13 @@ insert into public.clients (id, name, code, contact_email, notes)
 values
   ('11111111-1111-4111-8111-111111111111', 'Acme Industries', 'ACME', 'contact@acme.example', 'test fixture'),
   ('22222222-2222-4222-8222-222222222222', 'Globex Corporation', 'GLOBEX', null, null);
+
+-- 1a.09: a signed-in user reads only the clients of projects they belong to.
+-- The seed employee (tjezionek2000) is assigned to IT, so tie Acme to IT and
+-- leave Globex without a project. Full member/DC/outsider matrix:
+-- rls_project_role_functions.test.sql.
+update public.projects set client_id = '11111111-1111-4111-8111-111111111111'
+ where id = '094e130b-599b-4295-87fa-697fb71e7fc4';
 
 create temp table t_fixture as
 select
@@ -59,7 +66,8 @@ select throws_ok(
 reset role;
 
 -- ============================================================
--- 2. Signed-in employee sees all clients, but cannot write
+-- 2. Signed-in employee sees the clients of their own projects only, and
+--    cannot write
 -- ============================================================
 set local role authenticated;
 select set_config(
@@ -69,9 +77,13 @@ select set_config(
 );
 
 select is(
-  (select count(*) from public.clients),
-  (select total_clients from t_fixture),
-  'employee sees all clients'
+  (select count(*) from public.clients), 1::bigint,
+  'employee sees exactly one client — the one tied to their project (IT → Acme)'
+);
+select is(
+  (select count(*) from public.clients where id = '22222222-2222-4222-8222-222222222222'),
+  0::bigint,
+  'employee cannot see Globex (no project of theirs is tied to it)'
 );
 
 select throws_ok(

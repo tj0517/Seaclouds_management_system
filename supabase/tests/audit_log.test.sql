@@ -34,8 +34,9 @@ select ok(
   'row level security is enabled on public.audit_log'
 );
 select policies_are(
-  'public', 'audit_log', array['Admins read audit log'],
-  'exactly one policy exists on audit_log'
+  'public', 'audit_log',
+  array['Admins read audit log', 'Doc controllers read own project audit log'],
+  'exactly two SELECT policies exist on audit_log (1a.08 admin, 1a.09 DC)'
 );
 select is(
   (select count(*) from pg_policies

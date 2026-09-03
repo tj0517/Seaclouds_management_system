@@ -759,9 +759,18 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      has_project_role: {
+        Args: {
+          p_project_id: string
+          p_roles: Database["dcs"]["Enums"]["project_role"][]
+        }
+        Returns: boolean
+      }
       is_admin: { Args: never; Returns: boolean }
       is_admin_or_pm: { Args: never; Returns: boolean }
+      is_doc_controller: { Args: { p_project_id: string }; Returns: boolean }
       is_pm_for_project: { Args: { p_project_id: string }; Returns: boolean }
+      is_project_member: { Args: { p_project_id: string }; Returns: boolean }
       is_week_locked:
         | { Args: { entry_date: string; entry_user: string }; Returns: boolean }
         | {
