@@ -19,8 +19,8 @@ export default async function ProjectsPage() {
 
   // Deliberately unfiltered: `projects` carries an inherited TES policy that
   // grants SELECT to every authenticated user, so everyone sees the full list.
-  // Per-member visibility for DCS needs a NEW policy (Phase 1a, alongside
-  // dcs.project_members) — see docs/02-data-model.md.
+  // Per-member visibility for DCS needs a NEW policy (1a.09, on top of
+  // dcs.project_roles + has_project_role()) — see docs/02-data-model.md.
   const { data: projects, error } = await supabase
     .from('projects')
     .select('id, name, description, project_code, is_active')

@@ -45,6 +45,33 @@ export type Database = {
         }
         Relationships: []
       }
+      project_roles: {
+        Row: {
+          assigned_at: string
+          assigned_by: string | null
+          id: string
+          project_id: string
+          role: Database["dcs"]["Enums"]["project_role"]
+          user_id: string
+        }
+        Insert: {
+          assigned_at?: string
+          assigned_by?: string | null
+          id?: string
+          project_id: string
+          role: Database["dcs"]["Enums"]["project_role"]
+          user_id: string
+        }
+        Update: {
+          assigned_at?: string
+          assigned_by?: string | null
+          id?: string
+          project_id?: string
+          role?: Database["dcs"]["Enums"]["project_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -54,6 +81,7 @@ export type Database = {
     }
     Enums: {
       mdr_status: "active" | "closed"
+      project_role: "orig" | "rev" | "chk" | "app" | "dc" | "view"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -850,6 +878,7 @@ export const Constants = {
   dcs: {
     Enums: {
       mdr_status: ["active", "closed"],
+      project_role: ["orig", "rev", "chk", "app", "dc", "view"],
     },
   },
   graphql_public: {
