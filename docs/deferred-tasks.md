@@ -286,12 +286,15 @@ PR (one topic per PR). Each item names its owner task or trigger:
   the table is created (the trigger requires an `id uuid` PK — keep that
   shape). Tables with another PK (`dcs.mdr_settings`, PK = `project_id`)
   need a dedicated branch in `audit_trigger()` before attaching.
-- **Notion "Gotowe, gdy" for 1a.08 names `projects.cycle_idc_to_ifr`** —
-  that column lives in `dcs.mdr_settings` (O-13, 1a.05), which is explicitly
-  NOT under the trigger in 1a.08. Whether cycle configuration should be
-  audited (brief §5.9 lists "cycle configuration" among mandatory events)
-  is the owner's call; if yes, it is one `create trigger` plus the PK
-  branch above — a separate small task.
+- **Audit of `dcs.mdr_settings` (cycle configuration) — separate task,
+  Phase 1b** (owner's decision 2026-09-03 at the 1a.08 review). Notion
+  "Gotowe, gdy" for 1a.08 names `projects.cycle_idc_to_ifr`, but the cycle
+  columns live in `dcs.mdr_settings` (O-13, 1a.05), which 1a.08 deliberately
+  left outside the trigger. Brief §5.9 lists "cycle configuration" among
+  mandatory audit events, so the task is: add the PK branch to
+  `audit_trigger()` (`mdr_settings` PK = `project_id`, no `id`; `project_id`
+  scope = that column) and `create trigger audit_mdr_settings`. Not in
+  PR #24.
 - **TRUNCATE granted to `authenticated`/`service_role` on every other
   `public` table** (Supabase default privileges; TRUNCATE ignores RLS).
   Observed while locking down `audit_log`; TES tables were left untouched

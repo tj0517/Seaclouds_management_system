@@ -7,7 +7,7 @@
 -- Users are looked up by e-mail (seed generates their UUIDs at runtime).
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(41);
+select plan(44);
 
 -- ============================================================
 -- Schema assertions (red without the migration)
@@ -112,6 +112,40 @@ select results_eq(
   $$values ('UPDATE', 'year', null::jsonb, '2026'::jsonb, null::uuid, null::text,
             (select pej_id from t_fixture))$$,
   'sessionless UPDATE: one row, NULL old_value (was NULL), new_value 2026, user_id NULL, ip NULL, project_id = record'
+);
+
+-- 1b. TES sign-up path: GoTrue inserts into auth.users → on_auth_user_created
+--     → handle_new_user() (SECURITY DEFINER, no user session, no
+--     request.headers) → INSERT into public.profiles → audit_trigger().
+--     If this threw, registration in TES would break silently.
+select lives_ok(
+  $$insert into auth.users (
+      instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
+      raw_app_meta_data, raw_user_meta_data, created_at, updated_at,
+      confirmation_token, email_change, email_change_token_new, recovery_token,
+      phone_change, phone_change_token, email_change_token_current,
+      email_change_confirm_status)
+    values (
+      '00000000-0000-0000-0000-000000000000', 'cccccccc-cccc-4ccc-8ccc-ccccccccccc8',
+      'authenticated', 'authenticated', 'audit08-signup@example.com', 'x', now(),
+      '{"provider":"email","providers":["email"]}'::jsonb,
+      '{"full_name":"Audit Signup"}'::jsonb, now(), now(),
+      '', '', '', '', '', '', '', 0)$$,
+  'sign-up (auth.users INSERT → handle_new_user → profiles INSERT) succeeds with the audit trigger attached'
+);
+select is(
+  (select count(*) from public.profiles where id = 'cccccccc-cccc-4ccc-8ccc-ccccccccccc8'),
+  1::bigint,
+  'handle_new_user() created the profile row'
+);
+select results_eq(
+  $$select action, field_name, user_id, ip, project_id,
+           new_value ->> 'role', new_value ->> 'full_name'
+      from public.audit_log
+     where table_name = 'public.profiles'
+       and record_id = 'cccccccc-cccc-4ccc-8ccc-ccccccccccc8'$$,
+  $$values ('INSERT', null::text, null::uuid, null::text, null::uuid, 'employee', 'Audit Signup')$$,
+  'sign-up is audited: one INSERT row for profiles with user_id NULL, ip NULL, project_id NULL'
 );
 
 -- ============================================================
