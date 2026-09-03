@@ -114,6 +114,48 @@ export type Database = {
   }
   public: {
     Tables: {
+      audit_log: {
+        Row: {
+          action: string
+          field_name: string | null
+          id: string
+          ip: string | null
+          new_value: Json | null
+          occurred_at: string
+          old_value: Json | null
+          project_id: string | null
+          record_id: string
+          table_name: string
+          user_id: string | null
+        }
+        Insert: {
+          action: string
+          field_name?: string | null
+          id?: string
+          ip?: string | null
+          new_value?: Json | null
+          occurred_at?: string
+          old_value?: Json | null
+          project_id?: string | null
+          record_id: string
+          table_name: string
+          user_id?: string | null
+        }
+        Update: {
+          action?: string
+          field_name?: string | null
+          id?: string
+          ip?: string | null
+          new_value?: Json | null
+          occurred_at?: string
+          old_value?: Json | null
+          project_id?: string | null
+          record_id?: string
+          table_name?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       clients: {
         Row: {
           code: string

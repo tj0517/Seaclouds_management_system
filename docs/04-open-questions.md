@@ -9,7 +9,7 @@ zaimplementuj tak, żeby decyzja była tania do wprowadzenia, i zgłoś w raporc
 | O-01 | Nazwa portalu nadrzędnego (propozycja: SCL Portal) | otwarty | Sea Clouds (MD) | Tylko naming w UI/repo; prace nie stoją |
 | O-02 | Zakres integracji z SCL-TES — wspólny core w Fazie 1a | **rozstrzygnięty** — TES reużyty jako core, [ADR-0001](adr/0001-reuzycie-tes-jako-core.md) | — | — |
 | O-03 | Hosting frontendu | **rozstrzygnięty** — Timesheet działa na Vercelu (Root Directory `apps/timesheet`); przyjęcie tego samego dla `apps/dcs` do formalnego potwierdzenia | Wykonawca (rekomendacja: Vercel) | Konfigurację deployu `apps/dcs` (część 2) |
-| O-04 | Okres retencji audit logu i kopii zapasowych (RODO) | otwarty | Sea Clouds (MD) | Definicję polityki retencji w `public.audit_log`; samą tabelę można utworzyć |
+| O-04 | Okres retencji audit logu i kopii zapasowych (RODO) | otwarty | Sea Clouds (MD) | Definicję polityki retencji w `public.audit_log` (tabela istnieje od 2026-09-03, migracja `20260903173128`, DCS 1a.08; kasować może wyłącznie `postgres` — role API nie mają DELETE/TRUNCATE) |
 | O-05 | Mapowanie kolorów z kolumny E arkusza SMDR na `workflow_status` | otwarty | Sea Clouds (DC) | Import M14 (test akceptacyjny Fazy 1b) i kolory statusów w widoku MDR — patrz [02-data-model.md](02-data-model.md) |
 | O-06 | Kody CTR wspólne firmowo czy per projekt | otwarty | Sea Clouds (MD) | Kształt FK `dcs.documents.ctr_code` i sekcję CTR kreatora Create Project MDR — patrz [02-data-model.md](02-data-model.md) |
 | O-07 | Format i szablon transmittalu (wzory klientów?) | otwarty | Sea Clouds (DC) | Moduł M11 (Faza 3); model `dcs.transmittals` można założyć wcześniej |

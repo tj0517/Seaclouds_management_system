@@ -19,6 +19,7 @@ erDiagram
     projects ||--o{ dcs_documents : "project_id (RLS)"
     projects ||--o{ sub_projects : "kody CTR"
     clients  ||--o{ projects : "client_id"
+    projects ||--o{ audit_log : "project_id (bez FK)"
     sub_projects ||--o{ dcs_documents : "ctr_code"
     dcs_documents ||--o{ dcs_revisions : ""
     dcs_documents ||--o{ dcs_plan_dates : "per etap"
@@ -95,15 +96,49 @@ funkcje do polityk (`has_project_role()`) dochodzą w 1a.09 — ewentualne
 zawężenie widoczności tam, tym samym ruchem co dla `projects` (patrz uwaga
 wyżej). Test: `supabase/tests/rls_clients.test.sql`.
 
-### 📐 `public.audit_log`
-Wspólny dla modułów (brief §5.9): `user_id`, `ts`, `table_name`, `record_id`,
-`field`, `old_value`, `new_value`, `ip`. Zapis wyłącznie triggerami /
-funkcjami `security definer`; RLS: odczyt admin + DC, brak update/delete dla
-kogokolwiek. Retencja — punkt otwarty O-04.
-Jawna lista tabel objętych triggerem audytu (uzupełniana przez zadania,
-które je tworzą; 1a.08 podpina trigger pod całą listę): `dcs.project_roles`
-(wymóg „zmiana ról → audit log” przeniesiony tu z 1a.06, bo tabeli
-`audit_log` wtedy nie było).
+### ✅ `public.audit_log`
+Wspólny dla modułów (brief §5.9, §3.5). Utworzona migracją
+`20260903173128_create_audit_log` (DCS 1a.08). Kolumny (stan faktyczny):
+`id uuid PK`, `occurred_at timestamptz (default now())`, `user_id uuid
+(nullable, bez FK — ślad ma przeżyć konto; NULL = zapis bez sesji: seed,
+migracja, psql)`, `table_name text (schemat-kwalifikowana nazwa źródła:
+`public.projects`, `dcs.project_roles` — trigger obsługuje dwa schematy)`,
+`record_id uuid`, `action text CHECK (INSERT|UPDATE|DELETE)`, `field_name
+text (NULL dla INSERT/DELETE; nazwa jednej zmienionej kolumny dla UPDATE)`,
+`old_value jsonb`, `new_value jsonb`, `ip text (pierwszy adres z nagłówka
+`x-forwarded-for` w `request.headers` PostgREST-a; NULL poza tym
+kontekstem)`, `project_id uuid (nullable, bez FK — ślad ma przeżyć
+usunięcie projektu)`. Indeksy: `(table_name, record_id, occurred_at)`
+i `(project_id, occurred_at)`.
+Semantyka `project_id` (decyzja 1a.08): dla `public.projects` = własne `id`
+wiersza; dla tabel z kolumną `project_id` (`dcs.project_roles`) = ta kolumna;
+dla tabel bez naturalnego zakresu projektowego (`public.profiles`,
+`public.clients`) = NULL. To podstawa przyszłej polityki „DC widzi wpisy
+swoich projektów”.
+Mechanizm: jedna generyczna funkcja `public.audit_trigger()` (`security
+definer`, `search_path = ''`, AFTER INSERT/UPDATE/DELETE FOR EACH ROW).
+INSERT/DELETE = jeden wiersz z całym rekordem w `new_value`/`old_value`;
+UPDATE = **jeden wiersz na każdą faktycznie zmienioną kolumnę** (`IS
+DISTINCT FROM` na jsonb; `updated_at` pomijane; JSON `null` zapisywane jako
+SQL NULL). UPDATE bez zmiany wartości nie zapisuje nic. Jedyne założenie
+strukturalne: PK `id uuid` (tabela z innym PK, np. `mdr_settings`, wymaga
+osobnej gałęzi w funkcji). Funkcja nie ma `EXECUTE` dla ról API (trigger
+odpala się bez tego uprawnienia — sprawdzane przy `CREATE TRIGGER`, nie przy
+wykonaniu), więc nie powiększa lintu 0029.
+Jawna lista tabel objętych triggerem: `public.projects`,
+`dcs.project_roles`, `public.profiles`, `public.clients` (1a.08).
+Dojdą: `dcs.dictionaries` (1a.07). Celowo NIE: `dcs.mdr_settings` (brief nie
+wymienia konfiguracji MDR jako obowiązkowego zdarzenia na tym etapie — uwaga:
+pola cykli `cycle_*` mieszkają właśnie tam, nie w `projects`), żadna tabela
+TES (izolacja TES/DCS), przyszłe `dcs.documents`/`revisions` (Faza 1b).
+Zdarzenie „pobranie pliku” loguje server action w 1b, nie trigger.
+RLS: SELECT wyłącznie `is_admin()`; **zero** polityk INSERT/UPDATE/DELETE
+i dodatkowo odebrane uprawnienia INSERT/UPDATE/DELETE/TRUNCATE rolom
+`authenticated` i `service_role` (ta druga omija RLS, a TRUNCATE nie podlega
+RLS) — z warstwy aplikacji nikt nie zmieni śladu; pisze wyłącznie trigger
+jako właściciel tabeli. Polityka „DC widzi wpisy swoich projektów” czeka na
+`is_doc_controller()` (1a.09, `docs/deferred-tasks.md` p). Retencja — O-04.
+Test: `supabase/tests/audit_log.test.sql`.
 
 Tabele TES (`timesheet_*`, `expense_*`, `earnings_*`, `pdf_exports`,
 `weekly_contract_codes`, `*_assignments`) nie są dziedziczone przez DCS —
