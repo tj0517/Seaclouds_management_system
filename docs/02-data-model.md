@@ -13,7 +13,8 @@ Pojęcia: [00-glossary.md](00-glossary.md). Punkty otwarte:
 
 ```mermaid
 erDiagram
-    profiles ||--o{ dcs_project_members : "member"
+    profiles ||--o{ dcs_project_roles : "rola per projekt"
+    projects ||--o{ dcs_project_roles : "project_id (RLS)"
     projects ||--o{ dcs_mdr_settings : "1:1 konfiguracja MDR"
     projects ||--o{ dcs_documents : "project_id (RLS)"
     projects ||--o{ sub_projects : "kody CTR"
@@ -36,8 +37,9 @@ erDiagram
 RLS: użytkownik czyta siebie, admin wszystko.
 Rozstrzygnięte ([ADR-0006](adr/0006-role-dcs-per-projekt.md)): enum
 `user_role` należy do TES i nie rośnie o role DCS; role DCS wyłącznie
-w `dcs.project_members`; `project_lead` nie jest mapowany na żadną rolę
-DCS; administrator DCS = `role = 'admin'`.
+w `dcs.project_roles` (nazwa z [ADR-0008](adr/0008-project-roles-w-schemacie-dcs.md);
+ADR-0006 mówi jeszcze `project_members`); `project_lead` nie jest mapowany
+na żadną rolę DCS; administrator DCS = `role = 'admin'`.
 
 ### ✅ `public.projects`
 `id`, `name`, `description`, `is_active`, `project_code (unique, NOT NULL)`.
@@ -62,8 +64,8 @@ RLS: odczyt dla zalogowanych, zapis dla admina. Uwaga: odczyt NIE jest
 ograniczony per użytkownik — jedyna polityka SELECT (`Widoczność projektów`)
 przepuszcza każdego zalogowanego, więc wszyscy widzą wszystkie projekty
 (zweryfikowane odczytem prod 2026-08-31). Jeśli członek projektu DCS ma
-widzieć wyłącznie swoje projekty, wymaga to NOWEJ polityki (Faza 1a, razem
-z `dcs.project_members`) — odziedziczona tego nie daje.
+widzieć wyłącznie swoje projekty, wymaga to NOWEJ polityki (1a.09, na bazie
+`dcs.project_roles` i `has_project_role()`) — odziedziczona tego nie daje.
 
 ### ✅ `public.sub_projects` = kody CTR
 `id`, `project_id (FK)`, `code`, `description`, `is_active`, `is_deleted`,
@@ -86,16 +88,22 @@ na wewnętrzne), tylko dezaktywuje (`is_active = false`).
 RLS: SELECT dla każdego zalogowanego, INSERT/UPDATE/DELETE wyłącznie admin
 (`is_admin()`) — ten sam model co `public.projects`. Świadome odstępstwo od
 pierwotnego zakresu zadania („SELECT dla członków projektów tego klienta"):
-`dcs.project_members` jeszcze nie istnieje (1a.06), a oparcie polityki na
-`project_assignments` z TES oznaczałoby przepisanie jej dwa zadania później.
-Ewentualne zawężenie widoczności — razem z 1a.06, tym samym ruchem co dla
-`projects` (patrz uwaga wyżej). Test: `supabase/tests/rls_clients.test.sql`.
+w chwili tworzenia tabeli ról projektowych jeszcze nie było, a oparcie
+polityki na `project_assignments` z TES oznaczałoby przepisanie jej dwa
+zadania później. `dcs.project_roles` istnieje od 1a.06 (2026-09-03), ale
+funkcje do polityk (`has_project_role()`) dochodzą w 1a.09 — ewentualne
+zawężenie widoczności tam, tym samym ruchem co dla `projects` (patrz uwaga
+wyżej). Test: `supabase/tests/rls_clients.test.sql`.
 
 ### 📐 `public.audit_log`
 Wspólny dla modułów (brief §5.9): `user_id`, `ts`, `table_name`, `record_id`,
 `field`, `old_value`, `new_value`, `ip`. Zapis wyłącznie triggerami /
 funkcjami `security definer`; RLS: odczyt admin + DC, brak update/delete dla
 kogokolwiek. Retencja — punkt otwarty O-04.
+Jawna lista tabel objętych triggerem audytu (uzupełniana przez zadania,
+które je tworzą; 1a.08 podpina trigger pod całą listę): `dcs.project_roles`
+(wymóg „zmiana ról → audit log” przeniesiony tu z 1a.06, bo tabeli
+`audit_log` wtedy nie było).
 
 Tabele TES (`timesheet_*`, `expense_*`, `earnings_*`, `pdf_exports`,
 `weekly_contract_codes`, `*_assignments`) nie są dziedziczone przez DCS —
@@ -112,7 +120,7 @@ i `service_role` — **bez anon i bez PUBLIC**, spójnie z `public` po migracji
 Reguła nienegocjowalna: każda tabela `dcs.*` ma `project_id` + RLS + polityki
 + test pgTAP w tym samym PR (patrz `CLAUDE.md`). Tam, gdzie `project_id` nie
 jest kluczem naturalnym (np. `files`), jest denormalizowany właśnie pod RLS.
-Poza `mdr_settings` całość poniżej to 📐 PROJEKT.
+Poza `mdr_settings` i `project_roles` całość poniżej to 📐 PROJEKT.
 
 ### ✅ `dcs.mdr_settings` (1:1 z `projects`)
 `project_id (PK/FK → projects, ON DELETE CASCADE)`, `cpy_numbering bool
@@ -128,18 +136,41 @@ CASCADE: ustawienia bez projektu to bezsensowna sierota, a kasowanie
 projektów i tak jest w TES admin-only. Częstotliwość podsumowania e-mail
 (brief §5.2) — dojdzie z modułem powiadomień, nie teraz.
 RLS: SELECT dla każdego zalogowanego, zapis wyłącznie admin (`is_admin()`) —
-docelowo zapis DC (rozszerzenie polityk razem z `project_members`,
-1a.06/1a.09). Test: `supabase/tests/rls_mdr_settings.test.sql`.
+docelowo zapis DC (rozszerzenie polityk o `is_doc_controller()` na bazie
+`project_roles`, 1a.09). Test: `supabase/tests/rls_mdr_settings.test.sql`.
 
-### `dcs.project_members`
-`project_id`, `user_id (FK profiles)`, `dcs_role
-(orig|rev|chk|app|dc|viewer)`, `active`. Jedyne źródło ról DCS
-([ADR-0006](adr/0006-role-dcs-per-projekt.md)) — mówi, kto **może** pełnić
-rolę w projekcie: źródło listy recenzentów IDC, walidacja obsady
-`documents`/`approval_tasks` i podstawa polityk RLS pozostałych tabel
-(globalny `user_role` uczestniczy tylko przez `is_admin()`). Ograniczenie: Originator dokumentu
-≠ Checker tej samej rewizji (egzekwowane w bazie).
-RLS: odczyt członkowie projektu, zapis DC/admin.
+### ✅ `dcs.project_roles`
+`id uuid PK`, `project_id (FK → projects, ON DELETE CASCADE)`, `user_id (FK
+→ profiles, bez akcji kaskadowej)`, `role (enum dcs.project_role:
+orig|rev|chk|app|dc|view)`, `assigned_at (default now())`, `assigned_by
+(nullable FK → profiles; server action ustawia z sesji)`. UNIQUE
+`(project_id, user_id, role)`; indeksy `(project_id, role)` i `(user_id)` pod
+odczyty przyszłych polityk. Utworzona migracją `20260903134914` (DCS 1a.06);
+schemat `dcs`, nie `public` — [ADR-0008](adr/0008-project-roles-w-schemacie-dcs.md)
+(tam też zmiana nazwy z `project_members` i skutek dla QMS).
+Semantyka: wiersz = **jedna rola** osoby w projekcie; ta sama osoba może mieć
+kilka wierszy w jednym projekcie (np. CHK i APP) i inne role w innych
+projektach. To **nie** jest `public.project_assignments` (TES: kto loguje
+godziny) — obie tabele istnieją obok siebie i żadna nie zastępuje drugiej.
+Globalny `profiles.role = 'admin'` = ADM z briefu, nie duplikowany tutaj.
+Jedyne źródło ról DCS ([ADR-0006](adr/0006-role-dcs-per-projekt.md)) — mówi,
+kto **może** pełnić rolę w projekcie: źródło listy recenzentów IDC, walidacja
+obsady `documents`/`approval_tasks` i podstawa polityk RLS pozostałych tabel
+(1a.09: `has_project_role()`, `is_doc_controller()`). Rozdział obowiązków
+(Originator dokumentu ≠ Checker tej samej rewizji) egzekwowany w 1b na
+poziomie rewizji, nie na tej tabeli. Rola `cpy` (kontakt klienta) — Faza 3.
+RLS (stan 1a.06, celowo wąski): SELECT — własne wiersze (`user_id =
+auth.uid()`) oraz admin wszystko; INSERT/UPDATE/DELETE — wyłącznie
+`is_admin()`. Odczyt „cały zespół projektu widzi role kolegów” wymaga
+funkcji `security definer` (polityka odwołująca się do własnej tabeli
+rekuruje) — decyzja i rozszerzenie w 1a.09. Brak kolumny `active`:
+odebranie roli = usunięcie wiersza (historia zmian → `audit_log`, 1a.08).
+Mutacje: server actions `grantProjectRole` / `revokeProjectRole`
+(`apps/dcs/app/data/actions/project-roles.ts`, logika w
+`apps/dcs/lib/project-roles.ts`) — guard admina po stronie serwera, błędy
+domenowe (`role_already_granted`, `unknown_project_or_user`,
+`role_not_found`, `forbidden`). Ekran macierzy user × projekt × rola — 1a.14.
+Test: `supabase/tests/rls_project_roles.test.sql`.
 
 ### `dcs.documents`
 `id`, `project_id (FK, RLS)`, `scl_doc_number (unique globalnie, generowany,
@@ -152,8 +183,8 @@ retcom|ifc|ifi|ifb|void)`, `current_revision_id (FK revisions)`.
 `originator_id/checker_id/approver_id` to **domyślna obsada dokumentu**
 (z MDR), nie źródło prawdy dla obiegu — przy tworzeniu rewizji kopiowana
 do `approval_tasks` (patrz tam); zmiana na dokumencie działa tylko na
-przyszłe rewizje. Każda z tych osób musi być aktywnym członkiem
-`project_members` z odpowiednią rolą (walidacja w bazie).
+przyszłe rewizje. Każda z tych osób musi mieć odpowiednią rolę
+w `project_roles` dla tego projektu (walidacja w bazie).
 Numer SCL: `PROJEKT-ORIG-TYPE-SEQ-LANG` (np. `SC2601-SCL-RA-0012-EN`);
 SEQ atomowo per PROJEKT+TYPE, luki niewypełniane, ręczny wpis niemożliwy.
 RLS: odczyt członkowie projektu; insert/update wg roli (ORIG tworzy, DC
@@ -190,7 +221,7 @@ doc_controller)`, `mode (parallel|sequential)`, `sequence int`,
 parallel: etap kończy się, gdy wszystkie zadania `sequence=1` Completed;
 sequential: `n+1` staje się Pending po zaliczeniu `n`; kod 3 anuluje
 pozostałe Pending. Recenzent z wystawionym kodem nieusuwalny.
-Źródła prawdy obsady: `project_members` = kto **może** (pula + RLS);
+Źródła prawdy obsady: `project_roles` = kto **może** (pula + RLS);
 `documents.*_id` = domyślna obsada kopiowana tu przy utworzeniu rewizji;
 po skopiowaniu `assignee_id` jest źródłem prawdy dla tej rewizji —
 zmiany składu (DC/ORIG wg §7.2.1) edytują zadania, nie dokument.

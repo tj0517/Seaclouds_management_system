@@ -246,3 +246,30 @@ Trigger: the org transfer. Context: the old `apps/timesheet/.env.local`
 chmod 600) was found on 2026-09-01 pointing at the foreign `qyrf…` project
 with a live `service_role` key; the fate of that project is the owner's
 open question and is deliberately NOT part of this task.
+
+## o) Follow-ups noted during DCS 1a.06 (PR #23, `dcs.project_roles`)
+
+Temptations recorded in the 1a.06 report and deliberately NOT fixed in that
+PR (one topic per PR). Each item names its owner task or trigger:
+
+- **`docs/01-architecture.md` says "schemat `dcs` jeszcze nie istnieje"** —
+  stale since 1a.05 (`20260902114742_create_dcs_schema`). Docs-only fix; do
+  it with the next docs PR.
+- **Comments in pushed migration `20260902114744_create_mdr_settings.sql`
+  say `project_members`** — the table landed as `dcs.project_roles`
+  (ADR-0008). Pushed migrations are never edited; this is a permanent note,
+  not a task. Same for `apps/dcs/app/page.tsx` history.
+- **ADR-0006 title and body use `project_members` / `viewer`** — accepted
+  ADRs are not rewritten; ADR-0008 supersedes the naming. If a reader trips
+  over it, add a one-line "superseded by ADR-0008 for naming" banner to
+  ADR-0006 — a docs PR, no code.
+- **`deactivateUser` in TES deletes only `project_assignments`** — a
+  "deactivated" user keeps every `dcs.project_roles` row. Whether DCS
+  deactivation should revoke roles (and who may do it) belongs to the role
+  matrix screen, task 1a.14; nothing to change in the table.
+- **No `revalidatePath()` in `grantProjectRole` / `revokeProjectRole`** —
+  no page renders project roles yet. 1a.14 adds the paths together with the
+  screen (commented in `apps/dcs/app/data/actions/project-roles.ts`).
+- **Supabase CLI 2.116.0 available (pinned 2.75.0)** — the pin determines
+  the Postgres image and `gen types` output (`docs/toolchain.md`), so a bump
+  is its own task; when it happens, also re-check (h) above.
