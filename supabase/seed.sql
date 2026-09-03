@@ -106,6 +106,15 @@ BEGIN
   ON CONFLICT (id) DO NOTHING;
 
   -- ============================================================
+  -- DCS: MDR settings (local test data only — a row means "DCS runs this
+  -- project"; remotes get rows via the Create Project MDR wizard, 1a.17).
+  -- Gives the apps/dcs RLS probe and future DCS work something to read.
+  -- ============================================================
+  INSERT INTO dcs.mdr_settings (project_id, budget_hours) VALUES
+    (pid_pej, 1200)
+  ON CONFLICT (project_id) DO NOTHING;
+
+  -- ============================================================
   -- Sub Projects
   -- ============================================================
   INSERT INTO sub_projects (id, project_id, code, description, is_active, is_deleted, tracking_type, created_at) VALUES

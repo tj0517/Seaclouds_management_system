@@ -30,21 +30,38 @@ export default async function ProjectsPage() {
     throw new Error(`Failed to load projects: ${error.message}`)
   }
 
-  // Skeleton-only RLS probe — removal is docs/deferred-tasks.md point g)
-  // (condition: first dcs.* table with its own policies; the proof moves
-  // there). Breaks the "DCS does not read TES tables" rule on purpose, as
-  // timesheet_entries is currently the only table whose SELECT policy
-  // filters by auth.uid(). The query has NO filter in code — any difference
-  // between users in what comes back is produced solely by RLS in the
-  // database.
-  const { data: rlsProbe, error: rlsProbeError } = await supabase
-    .from('timesheet_entries')
-    .select('id, user_id')
+  // RLS probe on dcs.mdr_settings — the first dcs.* table with its own
+  // policies (deferred-tasks g, closed: this replaced the temporary
+  // timesheet_entries probe, so DCS no longer reads TES tables).
+  //
+  // Read half: a clean select with NO filter in code. The current SELECT
+  // policy admits every authenticated user, so identical results for admin
+  // and employee are the EXPECTED outcome here — per-member visibility
+  // arrives with dcs.project_members (1a.06).
+  const { data: mdrSettings, error: mdrError } = await supabase
+    .schema('dcs')
+    .from('mdr_settings')
+    .select('project_id, status, cycle_idc_to_ifr, cycle_ifr_to_retcom, cycle_retcom_to_ifc')
 
-  if (rlsProbeError) {
-    throw new Error(`RLS probe failed: ${rlsProbeError.message}`)
+  if (mdrError) {
+    throw new Error(`RLS probe (select) failed: ${mdrError.message}`)
   }
-  const probeUserCount = new Set(rlsProbe.map((row) => row.user_id)).size
+
+  // Write half: this is where the database distinguishes the roles. The
+  // insert carries cycle_idc_to_ifr = 0, which violates a CHECK, so it can
+  // never persist — but the error code tells who was stopped by what:
+  // 42501 = RLS rejected the row before constraints ran (non-admin),
+  // 23514 = RLS let it through and the CHECK stopped it (admin).
+  const { error: writeProbeError } = await supabase
+    .schema('dcs')
+    .from('mdr_settings')
+    .insert({ project_id: projects[0]?.id ?? user.id, cycle_idc_to_ifr: 0 })
+  const writeProbeOutcome =
+    writeProbeError?.code === '42501'
+      ? 'blocked by RLS (42501) — this user cannot write mdr_settings'
+      : writeProbeError?.code === '23514'
+        ? 'passed RLS, stopped by CHECK (23514) — this user may write mdr_settings'
+        : `unexpected: ${writeProbeError ? `${writeProbeError.code} ${writeProbeError.message}` : 'insert succeeded — probe is broken'}`
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-10">
@@ -109,14 +126,18 @@ export default async function ProjectsPage() {
       )}
 
       <section className="mt-8 rounded-lg border border-blue-200 bg-blue-50 p-4">
-        <h2 className="text-sm font-semibold text-blue-900">
-          RLS probe (skeleton only): timesheet_entries
-        </h2>
+        <h2 className="text-sm font-semibold text-blue-900">RLS probe: dcs.mdr_settings</h2>
         <p className="mt-1 text-sm text-blue-900">
           Unfiltered <code className="font-mono">select</code> returned{' '}
-          <strong>{rlsProbe.length}</strong> row(s) belonging to{' '}
-          <strong>{probeUserCount}</strong> user(s). The query has no filter in
-          code — row visibility is enforced entirely by the database.
+          <strong>{mdrSettings.length}</strong> row(s). The query has no filter
+          in code; the current SELECT policy admits every signed-in user, so
+          admin and employee see the same rows by design.
+        </p>
+        <p className="mt-2 text-sm text-blue-900">
+          Write probe (insert that a CHECK always rejects, so it can never
+          persist): <strong>{writeProbeOutcome}</strong>. Sign in as an admin
+          and as an employee to see the database, not the app, produce the
+          difference.
         </p>
       </section>
     </main>

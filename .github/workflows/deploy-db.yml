@@ -1,6 +1,9 @@
 # Database deployments.
 #
-# push (main): applies pending migrations to scl-dev automatically.
+# push (main): applies pending migrations AND config.toml to scl-dev
+#   automatically. Config sync is dev-only by design: config push to prod
+#   stays a manual, consented operation (ADR-0007) — do not add it to
+#   push-prod.
 # workflow_dispatch: applies pending migrations to PRODUCTION. Still gated by
 #   the `production-db` GitHub Environment (required reviewer approval), and
 #   additionally must be dispatched from main. The first real use will be the
@@ -18,6 +21,7 @@ on:
     branches: [main]
     paths:
       - "supabase/migrations/**"
+      - "supabase/config.toml"
       - ".github/workflows/deploy-db.yml"
   workflow_dispatch:
 
@@ -47,6 +51,13 @@ jobs:
           version: ${{ env.SUPABASE_CLI_VERSION }}
       - run: supabase link --project-ref mzotiurydmhibqhxxzoh
       - run: supabase db push
+      # Keeps scl-dev's project configuration in sync with config.toml
+      # ([remotes.scldev] override applies by project ref) — without this a
+      # merged config change sat invisible until someone pushed it by hand
+      # (bit us with [api].schemas after DCS 1a.05). Requires the token to
+      # hold config read/write for the API, Auth, Database and Storage
+      # sections, not just what `db push` needs.
+      - run: supabase config push --yes
 
   push-prod:
     name: db push → production (manual approval)

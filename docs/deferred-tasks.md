@@ -94,7 +94,7 @@ an issue, a step in the dev-push job that prints a `::warning`, or a badge in
 the README. Needs a prod-readable credential, so mind the token-scoping rules
 from `deploy-db.yml`.
 
-## g) Remove the temporary RLS probe from `apps/dcs` — **DO ZROBIENIA TERAZ (2026-09-02)**
+## g) Remove the temporary RLS probe from `apps/dcs` (closed 2026-09-02)
 
 `apps/dcs/app/page.tsx` runs an unfiltered `select` on
 `public.timesheet_entries` as the only live proof that RLS is enforced for
@@ -106,10 +106,16 @@ Removal condition: the first `dcs.*` table with its own policies lands.
 Move the RLS proof onto that table (as a pgTAP test and/or probe) and delete
 the probe section from the page.
 
-**Condition met 2026-09-02**: `dcs.mdr_settings` exists with its own policies
-and pgTAP coverage (`supabase/tests/rls_mdr_settings.test.sql`, DCS 1a.05).
-The probe removal is a small separate PR right after 1a.05 — deliberately kept
-out of that task's scope.
+**Closed 2026-09-02**: the `timesheet_entries` probe is gone — `apps/dcs` no
+longer reads any TES table. The proof moved to `dcs.mdr_settings` (first
+`dcs.*` table with its own policies, DCS 1a.05): pgTAP
+(`supabase/tests/rls_mdr_settings.test.sql`) plus a live probe on the page —
+an unfiltered select (identical for admin and employee by design of the
+current SELECT policy) and a side-effect-free write attempt whose insert
+always trips a CHECK, so the error code alone shows who was stopped by what:
+42501 = RLS rejected a non-admin before constraints ran, 23514 = RLS admitted
+an admin and the CHECK stopped it. The role difference is produced by the
+database, not the app.
 
 ## h) Move leaked-password protection into `config.toml`
 
