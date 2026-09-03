@@ -273,3 +273,32 @@ PR (one topic per PR). Each item names its owner task or trigger:
 - **Supabase CLI 2.116.0 available (pinned 2.75.0)** — the pin determines
   the Postgres image and `gen types` output (`docs/toolchain.md`), so a bump
   is its own task; when it happens, also re-check (h) above.
+
+## p) Follow-ups noted during DCS 1a.08 (PR #24, `public.audit_log`)
+
+- **`audit_log` SELECT policy "DC reads entries of own projects"** — waits on
+  `is_doc_controller()` from 1a.09. The data is ready for it:
+  `audit_log.project_id` is populated (projects → own id, project_roles →
+  its project_id, profiles/clients → NULL) and indexed
+  `(project_id, occurred_at)`. 1a.09 adds the policy next to the function,
+  in the same migration as the other role-based policies.
+- **`dcs.dictionaries` under `audit_trigger()`** — 1a.07 attaches it when
+  the table is created (the trigger requires an `id uuid` PK — keep that
+  shape). Tables with another PK (`dcs.mdr_settings`, PK = `project_id`)
+  need a dedicated branch in `audit_trigger()` before attaching.
+- **Notion "Gotowe, gdy" for 1a.08 names `projects.cycle_idc_to_ifr`** —
+  that column lives in `dcs.mdr_settings` (O-13, 1a.05), which is explicitly
+  NOT under the trigger in 1a.08. Whether cycle configuration should be
+  audited (brief §5.9 lists "cycle configuration" among mandatory events)
+  is the owner's call; if yes, it is one `create trigger` plus the PK
+  branch above — a separate small task.
+- **TRUNCATE granted to `authenticated`/`service_role` on every other
+  `public` table** (Supabase default privileges; TRUNCATE ignores RLS).
+  Observed while locking down `audit_log`; TES tables were left untouched
+  (out of scope, TES rule). Worth a dedicated revoke migration after a
+  read of what the Timesheet app actually needs.
+- **`occurred_at` is `now()` (transaction time)** — rows written in one
+  transaction share a timestamp and have no intrinsic order. PostgREST runs
+  one transaction per request, so this only matters for multi-statement
+  server-side transactions; switch to `clock_timestamp()` or add a sequence
+  if that ever becomes a real need.
