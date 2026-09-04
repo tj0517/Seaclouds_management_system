@@ -87,6 +87,9 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      - name: Unit tests (vitest)
+        run: pnpm test:unit
+
       # Same execution path and env mode as Vercel: turbo run build in strict
       # env mode — vars not declared in turbo.json are stripped. Values below
       # are local-stack/dummy values; the build only needs them to exist.
