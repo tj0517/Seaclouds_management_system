@@ -807,6 +807,7 @@ export type Database = {
       }
       is_admin: { Args: never; Returns: boolean }
       is_admin_or_pm: { Args: never; Returns: boolean }
+      is_any_doc_controller: { Args: never; Returns: boolean }
       is_doc_controller: { Args: { p_project_id: string }; Returns: boolean }
       is_pm_for_project: { Args: { p_project_id: string }; Returns: boolean }
       is_project_member: { Args: { p_project_id: string }; Returns: boolean }
