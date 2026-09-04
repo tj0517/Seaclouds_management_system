@@ -378,3 +378,27 @@ PR (one topic per PR). Each item names its owner task or trigger:
 - **Task prompt pointed at `20260827125731_remote_schema.sql` for
   `audit_trigger()`** — the function is not in that baseline; it lives in
   `20260903173128_create_audit_log.sql`. Read from there and from scl-dev.
+
+## t) Follow-ups noted during DCS 1a.10 (RLS coverage close-out)
+
+- **Ruleset "main protection" requires the `ci` status check but zero
+  approving reviews** (`required_approving_review_count: 0`, no bypass
+  actors, strict up-to-date policy on). A red pgTAP run does block the
+  merge button (proven on PR #28), but a green run plus the author's own
+  click is enough — there is no second pair of eyes. Fine for a one-person
+  repo; revisit at the org transfer (deferred-tasks n).
+- **CI runs only on `pull_request`**, never on `push` to `main`. Combined
+  with the ruleset's PR requirement that is sufficient, but a merge of a PR
+  that was green against a *stale* base could only be caught by the strict
+  status-check policy (which is on). No action; recorded so nobody adds a
+  `push: main` trigger "to be safe" and doubles the Supabase stack cost.
+- **The anon layer-C proof depends on every table carrying an
+  `is_admin()`-based policy**. If a future table's only policies avoid
+  `is_admin()` (e.g. pure `is_project_member()`), the simulated-grant probe
+  still passes (zero rows), but the "mechanism" assertion that names
+  `is_admin` would need a sibling for that table. Keep the pattern in mind
+  when documents land in 1b.
+- **`dcs.mdr_settings` and `public.projects` SELECT are authenticated-wide**
+  — now asserted as GREEN-by-design for an unrelated user in
+  `rls_coverage_closeout.test.sql`, so the day the policy is narrowed the
+  test turns red on purpose. The narrowing itself stays deferred (q).

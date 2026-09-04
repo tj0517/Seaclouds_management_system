@@ -170,6 +170,13 @@ akceptowany lint 0029, po jednym na funkcję), bez `anon`/`PUBLIC`.
   z `role = ANY(p_roles)`.
 - `is_doc_controller(p_project_id uuid) → boolean` —
   `has_project_role(p, {dc})`.
+Pokrycie testowe domknięte w 1a.10 (`supabase/tests/rls_coverage_closeout.test.sql`):
+`has_project_role()` z tablicami wieloelementowymi, pustą tablicą i rolą
+z innego projektu; `anon` na wszystkich siedmiu tabelach z RLS z jawnym
+rozróżnieniem warstw (A: brak grantów → 42501; B: statyczny kształt
+polityk; C: symulowany grant SELECT w savepoincie nadal daje zero, bo
+polityka admina dochodzi do `is_admin()`, do której `anon` nie ma
+EXECUTE); brakujące komórki macierzy rola × tabela.
 `is_admin()` reużyte bez zmian ciała. `is_pm_for_project()` (TES) nie zna
 ról DCS i nie jest używane przez polityki DCS. Polityka `Admin zarządza
 projektami` (ALL, `is_admin()`) na `public.projects` przejrzana w 1a.09
