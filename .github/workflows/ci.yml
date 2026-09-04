@@ -70,6 +70,9 @@ jobs:
       - name: pgTAP tests
         run: supabase test db
 
+      - name: "Guard: DICT_TYPES (TS) matches the dict_type CHECK (DB)"
+        run: bash scripts/check-dict-types.sh
+
       - name: "Type drift: database.ts must match migrations"
         run: |
           supabase gen types typescript --local > packages/db/src/database.ts

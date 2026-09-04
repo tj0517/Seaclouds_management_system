@@ -51,8 +51,10 @@ Supabase, prod ref `tfbzivfsqsgebegcvfah`.
   w migracji, 15 MB na prodzie po ręcznej zmianie).
 
 ### Schemat i RLS
-- Każda tabela `dcs.*`: kolumna `project_id` + włączone RLS + polityki
-  + test pgTAP — wszystko w tym samym PR.
+- Każda tabela `dcs.*` z danymi projektowymi niesie kolumnę `project_id`;
+  tabela globalna lub słownikowa (bez `project_id`) wymaga jawnego wpisu
+  z uzasadnieniem w `docs/02-data-model.md`. Każda tabela `dcs.*`, bez
+  wyjątku: włączone RLS + polityki + test pgTAP — wszystko w tym samym PR.
 - Rewizje finalne (IFC/IFI/IFB) są niemodyfikowalne przez trigger w bazie,
   nie przez walidację we frontendzie.
 - Generator numeracji SCL jest atomowy (blokada w bazie); ręczny wpis numeru

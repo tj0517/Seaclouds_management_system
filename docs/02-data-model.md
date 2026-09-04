@@ -136,8 +136,8 @@ osobnej gałęzi w funkcji). Funkcja nie ma `EXECUTE` dla ról API (trigger
 odpala się bez tego uprawnienia — sprawdzane przy `CREATE TRIGGER`, nie przy
 wykonaniu), więc nie powiększa lintu 0029.
 Jawna lista tabel objętych triggerem: `public.projects`,
-`dcs.project_roles`, `public.profiles`, `public.clients` (1a.08).
-Dojdą: `dcs.dictionaries` (1a.07). Celowo NIE: `dcs.mdr_settings` (brief nie
+`dcs.project_roles`, `public.profiles`, `public.clients` (1a.08),
+`dcs.dictionaries` (1a.07, migracja `20260904081501`). Celowo NIE: `dcs.mdr_settings` (brief nie
 wymienia konfiguracji MDR jako obowiązkowego zdarzenia na tym etapie — uwaga:
 pola cykli `cycle_*` mieszkają właśnie tam, nie w `projects`), żadna tabela
 TES (izolacja TES/DCS), przyszłe `dcs.documents`/`revisions` (Faza 1b).
@@ -193,7 +193,10 @@ i `service_role` — **bez anon i bez PUBLIC**, spójnie z `public` po migracji
 Reguła nienegocjowalna: każda tabela `dcs.*` ma `project_id` + RLS + polityki
 + test pgTAP w tym samym PR (patrz `CLAUDE.md`). Tam, gdzie `project_id` nie
 jest kluczem naturalnym (np. `files`), jest denormalizowany właśnie pod RLS.
-Poza `mdr_settings` i `project_roles` całość poniżej to 📐 PROJEKT.
+Tabele bez danych projektowych (słownikowe/globalne) nie mają `project_id`
+i muszą być tu jawnie opisane — dziś: `dcs.dictionaries`. Poza
+`mdr_settings`, `project_roles` i `dictionaries` całość poniżej to
+📐 PROJEKT.
 
 ### ✅ `dcs.mdr_settings` (1:1 z `projects`)
 `project_id (PK/FK → projects, ON DELETE CASCADE)`, `cpy_numbering bool
@@ -256,6 +259,64 @@ w bazie, ale akcja go odrzuci; rozszerzenie guardu na DC razem z ekranem
 (`role_already_granted`, `unknown_project_or_user`, `role_not_found`,
 `forbidden`). Testy: `supabase/tests/rls_project_roles.test.sql`,
 `supabase/tests/rls_project_role_functions.test.sql`.
+
+### ✅ `dcs.dictionaries` (wszystkie słowniki DCS)
+`id uuid PK`, `dict_type text NOT NULL` z `CHECK IN (doc_type, discipline,
+area, language, acceptance_code, workflow_status, workflow_step)`, `code text`,
+`label text`, `description text (nullable)`, `meta jsonb NOT NULL default
+'{}'`, `sort_order int default 0`, `is_active bool default true`,
+`created_at`, `updated_at` (trigger `set_updated_at`). UNIQUE `(dict_type,
+code)`; indeks częściowy `(dict_type, sort_order) WHERE is_active` pod
+jedyny częsty odczyt (aktywne pozycje jednego typu w kolejności).
+Utworzona migracją `20260904081501` (DCS 1a.07), **pusta** — treść
+z załączników A/B wgrywa 1a.18; ekran administracyjny 1a.15.
+Decyzje 1a.07:
+- Jedna generyczna tabela zamiast siedmiu (`doc_types`, `disciplines`, …):
+  brief §5.8 wymaga edycji słowników z panelu bez deployu; jeden ekran
+  z zakładkami obsługuje wszystkie typy. `meta` niesie różnice per typ
+  (np. domyślny budżet godzin typu dokumentu, kolor statusu — O-05) bez
+  zmian schematu.
+- `dict_type` to **text + CHECK, nie enum**: lista typów będzie rosła
+  w kolejnych fazach, dopisanie typu ma być zwykłą migracją, nie `ALTER
+  TYPE` za bramką STOP. Konsekwencja w TS: lista `DICT_TYPES`
+  w `apps/dcs/lib/dictionaries.ts` jest ręczna i musi być utrzymywana
+  razem z CHECK-iem; rozjazd łapie guard CI `scripts/check-dict-types.sh`
+  i przypięta lista w teście pgTAP.
+- Języki (`language`) i statusy/kroki obiegu (`workflow_status`,
+  `workflow_step`) są **słownikami**, nie enumami — koryguje wcześniejszy
+  zapis w sekcji „Słowniki” niżej. Czy kolumny stanu przy
+  `plan_dates`/`revisions` używają enuma `dcs.step`, czy FK do słownika
+  `workflow_step` — punkt otwarty O-15, do rozstrzygnięcia przed 1b.
+  `projects.process_type` zostaje enumem (decyzja z taska).
+- **Bez `project_id`** — tabela słownikowa w rozumieniu reguły z `CLAUDE.md`
+  („tabela z danymi projektowymi niesie `project_id`; globalna lub
+  słownikowa wymaga wpisu tutaj”): słownik jest firmowy, kod ma jedno
+  znaczenie we wszystkich projektach, a UNIQUE `(dict_type, code)` jest
+  globalny.
+  `audit_trigger()` obsługuje ten kształt bez zmian (`project_id` NULL,
+  jak `profiles`/`clients`).
+- Dezaktywacja zamiast kasowania: `is_active = false` ukrywa pozycję
+  w formularzach (`getDictionary()` filtruje), baza nadal zwraca wiersz,
+  więc historyczne dokumenty rozwiązują kod. Aplikacja nie kasuje wierszy;
+  DELETE ma tylko admin (i tylko przez SQL/ekran, którego nie ma).
+RLS (dwie polityki): SELECT — każdy zalogowany, **wszystkie wiersze łącznie
+z nieaktywnymi** (`Authenticated users can read dictionaries`); ALL — admin
+(`Admins manage dictionaries`, `(select is_admin())`). Zapis jest
+**admin-only, nie admin-lub-DC** — świadomie, tą samą decyzją co
+`clients` w 1a.09: baza nie wydaje uprawnienia, którego żaden ekran nie
+używa. DC dostanie zapis razem z ekranem 1a.15; potrzebny będzie wtedy
+bezprojektowy helper `is_any_doc_controller()` (nowa funkcja SECURITY
+DEFINER → +1 × 0029, za bramką STOP). Test dowodzi stanu obecnego: INSERT
+DC → 42501, UPDATE DC → zero wierszy.
+Audyt: trigger `audit_dictionaries` = piąta tabela pod `audit_trigger()`
+(`project_id` NULL, więc wpisy widzi tylko admin — DC nie ma projektu, po
+którym mógłby je odczytać; do rewizji przy 1a.15).
+Odczyt w aplikacji: `getDictionary(supabase, type)` w
+`apps/dcs/lib/dictionaries.ts` — aktywne wiersze jednego typu w `sort_order`
+(remis po `code`), typowane `Tables<{schema:'dcs'}, 'dictionaries'>`;
+wzorzec jak `lib/project-roles.ts` (klient przekazywany, bez Next.js).
+Test: `supabase/tests/rls_dictionaries.test.sql` (kształt, CHECK, UNIQUE,
+anon/pracownik/outsider/DC/admin, wpisy w `audit_log`).
 
 ### `dcs.documents`
 `id`, `project_id (FK, RLS)`, `scl_doc_number (unique globalnie, generowany,
@@ -340,8 +401,11 @@ Format numeru i szablon — punkt otwarty O-07. Dane historyczne używają
 formatu siedmiopolowego, importowane po rozparsowaniu (brief §13.2).
 RLS: odczyt członkowie projektu, zapis DC.
 
-### Słowniki `dcs.*`
-Tabele (nie kod): `doc_types` (23 kody + budżet domyślny, załącznik A),
-`disciplines`, `areas` (załącznik B), kody akceptacji, kroki. Każda pozycja
-z flagą `active` (dezaktywacja ukrywa w formularzach, zachowuje historię).
-Języki i statusy jako enumy Postgres. RLS: odczyt zalogowani, zapis DC/admin.
+### Słowniki `dcs.*` — zrealizowane jako `dcs.dictionaries` (1a.07)
+Pierwotny projekt zakładał osobne tabele (`doc_types` — 23 kody + budżet
+domyślny z załącznika A, `disciplines`, `areas` z załącznika B, kody
+akceptacji, kroki) oraz języki i statusy jako enumy Postgres. Od 1a.07
+wszystkie siedem typów mieszka w jednej tabelce `dcs.dictionaries`
+(sekcja ✅ wyżej), z `is_active` per pozycja i `meta` na różnice per typ;
+języki i statusy/kroki obiegu też są słownikami. Zapis dziś admin-only;
+DC razem z ekranem 1a.15. Treść: 1a.18.

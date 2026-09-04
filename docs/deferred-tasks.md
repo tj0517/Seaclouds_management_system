@@ -281,10 +281,12 @@ PR (one topic per PR). Each item names its owner task or trigger:
   migration `20260903184934`): policy "Doc controllers read own project
   audit log", `project_id IS NOT NULL AND is_doc_controller(project_id)`;
   NULL-project rows (profiles/clients) stay admin-only.
-- **`dcs.dictionaries` under `audit_trigger()`** — 1a.07 attaches it when
+- ~~**`dcs.dictionaries` under `audit_trigger()`** — 1a.07 attaches it when
   the table is created (the trigger requires an `id uuid` PK — keep that
-  shape). Tables with another PK (`dcs.mdr_settings`, PK = `project_id`)
-  need a dedicated branch in `audit_trigger()` before attaching.
+  shape).~~ **Done** in DCS 1a.07 (migration `20260904081501`, trigger
+  `audit_dictionaries`). Still true: tables with another PK
+  (`dcs.mdr_settings`, PK = `project_id`) need a dedicated branch in
+  `audit_trigger()` before attaching.
 - **Audit of `dcs.mdr_settings` (cycle configuration) — separate task,
   Phase 1b** (owner's decision 2026-09-03 at the 1a.08 review). Notion
   "Gotowe, gdy" for 1a.08 names `projects.cycle_idc_to_ifr`, but the cycle
@@ -340,3 +342,39 @@ PR (one topic per PR). Each item names its owner task or trigger:
   Review before Phase 4 (brief §3.5: clients enter the system); the
   natural replacement is `is_project_member(project_id)` now that it
   exists. Not changed in PR #25 (owner's instruction 2026-09-04).
+
+## r) Follow-ups noted during DCS 1a.07 (`dcs.dictionaries`)
+
+- **DC write access on `dcs.dictionaries`** — ships with the dictionary
+  screen (1a.15), not before (same decision as `clients` in 1a.09). It needs
+  a project-less `is_any_doc_controller()` helper (`exists (select 1 from
+  dcs.project_roles where user_id = auth.uid() and role = 'dc')`): a new
+  SECURITY DEFINER function → +1 × 0029 and a STOP gate. With it, decide
+  whether DC may DELETE at all or only deactivate (`is_active = false`);
+  the row comment already says the app never deletes.
+- **`DICT_TYPES` in `apps/dcs/lib/dictionaries.ts` duplicates the CHECK
+  list** by hand — unavoidable while `dict_type` is text (the generated
+  types carry no literal union for a CHECK). Guarded since PR #26: CI step
+  `scripts/check-dict-types.sh` (TS list ↔ CHECK in the local DB) and a
+  pinned `bag_eq` in `rls_dictionaries.test.sql`. Adding a type = migration
+  + constant + test list, in one PR.
+- **Audit rows of `dcs.dictionaries` are admin-only** (`project_id` NULL,
+  like `profiles`/`clients`). Once DCs edit dictionaries (1a.15) they will
+  not see their own changes in the log; either widen the audit_log DC
+  policy to `table_name = 'dcs.dictionaries'` or accept admin-only review.
+- **`public.set_updated_at()` is reused** on `dcs.dictionaries` (as on
+  `mdr_settings`) — a `public` function from the TES baseline. Fine today;
+  if `dcs` ever needs to be self-contained (ADR-0003), it wants its own
+  copy.
+- **`meta jsonb` is unvalidated** — no per-type JSON schema (e.g.
+  `default_budget_hours` for `doc_type`, `colour` for `workflow_status`).
+  Define the shape with the seed (1a.18) and the screen (1a.15); a CHECK
+  per type can follow once the keys are settled (O-05 for colours).
+- ~~**CLAUDE.md wording "każda tabela `dcs.*`: kolumna `project_id`"**~~ —
+  **resolved** in PR #26 (owner's decision 2026-09-04): rule softened to
+  "every `dcs.*` table with project data carries `project_id`; a global or
+  dictionary table needs an explicit entry in `02-data-model.md`". RLS +
+  policies + pgTAP stay mandatory for every table.
+- **Task prompt pointed at `20260827125731_remote_schema.sql` for
+  `audit_trigger()`** — the function is not in that baseline; it lives in
+  `20260903173128_create_audit_log.sql`. Read from there and from scl-dev.

@@ -54,7 +54,8 @@ select is(
 );
 select col_has_check('public', 'audit_log', 'action', 'action is CHECK-constrained');
 
--- Trigger attached exactly where 1a.08 says — and nowhere in TES / mdr_settings
+-- Trigger attached exactly where 1a.08 says (+ dcs.dictionaries since 1a.07)
+-- — and nowhere in TES / mdr_settings
 select has_trigger('public', 'projects', 'audit_projects', 'audit trigger on public.projects');
 select has_trigger('dcs', 'project_roles', 'audit_project_roles', 'audit trigger on dcs.project_roles');
 select has_trigger('public', 'profiles', 'audit_profiles', 'audit trigger on public.profiles');
@@ -62,8 +63,8 @@ select has_trigger('public', 'clients', 'audit_clients', 'audit trigger on publi
 select is(
   (select count(*) from pg_trigger t
     where t.tgfoid = 'public.audit_trigger()'::regprocedure and not t.tgisinternal),
-  4::bigint,
-  'audit_trigger() is attached to exactly four tables'
+  5::bigint,
+  'audit_trigger() is attached to exactly five tables (four from 1a.08 + dcs.dictionaries from 1a.07)'
 );
 select is(
   (select count(*) from pg_trigger t
