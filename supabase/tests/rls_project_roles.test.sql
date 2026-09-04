@@ -27,10 +27,14 @@ select ok(
     where oid = 'dcs.project_roles'::regclass),
   'row level security is enabled on dcs.project_roles'
 );
+-- 1a.09 replaced the narrow "own rows" SELECT with project-wide membership
+-- and added the DC policy; the DC/member boundaries are proven in
+-- rls_project_role_functions.test.sql.
 select policies_are(
   'dcs', 'project_roles',
-  array['Users read own project roles', 'Admins manage project roles'],
-  'exactly the two 1a.06 policies exist'
+  array['Project members read project roles', 'Doc controllers manage project roles',
+        'Admins manage project roles'],
+  'exactly the three policies exist (1a.06 admin + 1a.09 member read / DC manage)'
 );
 
 -- ============================================================
@@ -121,7 +125,8 @@ select throws_ok(
 );
 
 -- ============================================================
--- 3. Employee (non-admin) sees only their own rows and cannot write
+-- 3. Employee (non-admin, member of PEJ through their roles) reads the whole
+--    PEJ team (1a.09) and cannot write
 -- ============================================================
 select set_config(
   'request.jwt.claims',
@@ -130,14 +135,14 @@ select set_config(
 );
 
 select is(
-  (select count(*) from dcs.project_roles), 2::bigint,
-  'employee sees exactly their own two role rows'
+  (select count(*) from dcs.project_roles), 3::bigint,
+  'employee (PEJ member) sees all three PEJ role rows'
 );
 select is(
   (select count(*) from dcs.project_roles
     where user_id <> (select employee_id from t_fixture)),
-  0::bigint,
-  'employee sees zero rows belonging to others'
+  1::bigint,
+  'employee sees the one PEJ row belonging to the other user (same project team)'
 );
 
 select throws_ok(
@@ -161,12 +166,12 @@ select is(
 
 delete from dcs.project_roles where user_id = (select employee_id from t_fixture);
 select is(
-  (select count(*) from dcs.project_roles), 2::bigint,
+  (select count(*) from dcs.project_roles), 3::bigint,
   'employee delete of their own rows has no effect'
 );
 
 -- ============================================================
--- 4. Another user sees only their own single row
+-- 4. The other user (dc on PEJ) also reads the whole PEJ team
 -- ============================================================
 select set_config(
   'request.jwt.claims',
@@ -174,8 +179,8 @@ select set_config(
   true
 );
 select is(
-  (select count(*) from dcs.project_roles), 1::bigint,
-  'the other user sees exactly their own single row'
+  (select count(*) from dcs.project_roles), 3::bigint,
+  'the other user (PEJ member) sees all three PEJ role rows'
 );
 
 -- ============================================================

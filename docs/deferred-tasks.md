@@ -276,12 +276,11 @@ PR (one topic per PR). Each item names its owner task or trigger:
 
 ## p) Follow-ups noted during DCS 1a.08 (PR #24, `public.audit_log`)
 
-- **`audit_log` SELECT policy "DC reads entries of own projects"** — waits on
-  `is_doc_controller()` from 1a.09. The data is ready for it:
-  `audit_log.project_id` is populated (projects → own id, project_roles →
-  its project_id, profiles/clients → NULL) and indexed
-  `(project_id, occurred_at)`. 1a.09 adds the policy next to the function,
-  in the same migration as the other role-based policies.
+- ~~**`audit_log` SELECT policy "DC reads entries of own projects"** — waits
+  on `is_doc_controller()` from 1a.09.~~ **Done** in DCS 1a.09 (PR #25,
+  migration `20260903184934`): policy "Doc controllers read own project
+  audit log", `project_id IS NOT NULL AND is_doc_controller(project_id)`;
+  NULL-project rows (profiles/clients) stay admin-only.
 - **`dcs.dictionaries` under `audit_trigger()`** — 1a.07 attaches it when
   the table is created (the trigger requires an `id uuid` PK — keep that
   shape). Tables with another PK (`dcs.mdr_settings`, PK = `project_id`)
@@ -305,3 +304,39 @@ PR (one topic per PR). Each item names its owner task or trigger:
   one transaction per request, so this only matters for multi-statement
   server-side transactions; switch to `clock_timestamp()` or add a sequence
   if that ever becomes a real need.
+
+## q) Follow-ups noted during DCS 1a.09 (PR #25, RLS helper functions)
+
+- **`grantProjectRole` / `revokeProjectRole` still guard on admin only**
+  (`requireAdmin` in `apps/dcs/lib/project-roles.ts`). Since 1a.09 the
+  database lets a project's DC manage that project's roles, so the server
+  action is now narrower than the policy. Widen the guard to "admin or DC
+  of the target project" (server-side, `is_doc_controller` via RPC or a
+  `project_roles` read) together with the role-matrix screen, task 1a.14 —
+  not before, because nothing calls the action yet.
+- **A DC can revoke their own `dc` row** and lose access to the project.
+  The database does not prevent it (policies are per row, no "last DC"
+  rule). Decide at 1a.14 whether the screen refuses it, or whether a
+  trigger should keep at least one DC per project with an MDR.
+- **`is_pm_for_project()` (TES `project_lead`) is not mapped to any DCS
+  role** (ADR-0006/O-12). A TES project lead who is not in
+  `dcs.project_roles` is a plain member for DCS (reads roles/clients of
+  the project, writes nothing). Intentional; revisit only if the business
+  wants leads to act as DC by default.
+- **`clients` SELECT walks `projects` per row** (`exists … projects p …
+  is_project_member(p.id)`). Fine at the current scale (tens of projects);
+  if `clients` listing ever shows up in query stats, a
+  `client_project_member(client_id)` helper is the cheap fix.
+- **`has_project_role()` has no policy-level coverage beyond `{dc}`** — the
+  only caller today is `is_doc_controller()`. Function-level assertions
+  exist in `rls_project_role_functions.test.sql` (multi-element array that
+  matches one held role, and one that matches none), but no policy uses
+  another role set yet. When the first such policy lands (documents:
+  ORIG/CHK/APP), add policy-level red/green assertions for it in the same
+  PR.
+- **`dcs.mdr_settings` SELECT is still open to every `authenticated`
+  user** — `budget_hours` and the cycle lengths of every project are
+  readable by any employee (policy from 1a.05, deliberately left in 1a.09).
+  Review before Phase 4 (brief §3.5: clients enter the system); the
+  natural replacement is `is_project_member(project_id)` now that it
+  exists. Not changed in PR #25 (owner's instruction 2026-09-04).

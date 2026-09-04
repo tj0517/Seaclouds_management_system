@@ -86,15 +86,25 @@ parsowanie numeru. `projects.client_id` — FK nullable (NULL = projekt
 wewnętrzny, `process_type = Internal`), **ON DELETE RESTRICT**: klienta
 z projektami się nie usuwa (SET NULL po cichu przemianowałoby jego projekty
 na wewnętrzne), tylko dezaktywuje (`is_active = false`).
-RLS: SELECT dla każdego zalogowanego, INSERT/UPDATE/DELETE wyłącznie admin
-(`is_admin()`) — ten sam model co `public.projects`. Świadome odstępstwo od
-pierwotnego zakresu zadania („SELECT dla członków projektów tego klienta"):
-w chwili tworzenia tabeli ról projektowych jeszcze nie było, a oparcie
-polityki na `project_assignments` z TES oznaczałoby przepisanie jej dwa
-zadania później. `dcs.project_roles` istnieje od 1a.06 (2026-09-03), ale
-funkcje do polityk (`has_project_role()`) dochodzą w 1a.09 — ewentualne
-zawężenie widoczności tam, tym samym ruchem co dla `projects` (patrz uwaga
-wyżej). Test: `supabase/tests/rls_clients.test.sql`.
+RLS (stan 1a.09, migracja `20260903184934`): SELECT — admin lub członek
+dowolnego projektu z `client_id` tego klienta (podzapytanie po
+`public.projects` + `is_project_member(p.id)`, patrz „Funkcje pomocnicze
+RLS” niżej); INSERT/UPDATE/DELETE — wyłącznie admin (`Admins manage
+clients`). Historia: 1a.04 dało SELECT każdemu zalogowanemu, bo tabeli ról
+jeszcze nie było; 1a.09 zawęziło.
+**Świadoma decyzja (1a.09, 2026-09-04): INSERT/UPDATE/DELETE na `clients`
+zostaje admin-only, mimo że zakres zadania mówił „admin/DC”.** Powód:
+klient może obejmować kilka projektów, a DC jest rolą per projekt — „który
+DC może edytować klienta” jest niedookreślone, dopóki Faza 4 nie rozstrzygnie
+relacji klient–projekt. To wybór, nie przeoczenie: test
+`rls_clients.test.sql` i `rls_project_role_functions.test.sql` utrwalają
+odmowę zapisu dla DC jako przypadek **czerwony** („clients RED: DC of PEJ
+cannot insert a client” / „update … has no effect”). Rozszerzenie zapisu na
+DC — razem z ekranem klientów, zadanie 1a.16. TES nie czyta `clients` ani
+`client_id` (grep `apps/` 2026-09-04, zero trafień poza artefaktami
+`.next/`), więc zawężenie SELECT nie dotyka Timesheetu. Testy:
+`supabase/tests/rls_clients.test.sql`,
+`supabase/tests/rls_project_role_functions.test.sql`.
 
 ### ✅ `public.audit_log`
 Wspólny dla modułów (brief §5.9, §3.5). Utworzona migracją
@@ -132,13 +142,41 @@ wymienia konfiguracji MDR jako obowiązkowego zdarzenia na tym etapie — uwaga:
 pola cykli `cycle_*` mieszkają właśnie tam, nie w `projects`), żadna tabela
 TES (izolacja TES/DCS), przyszłe `dcs.documents`/`revisions` (Faza 1b).
 Zdarzenie „pobranie pliku” loguje server action w 1b, nie trigger.
-RLS: SELECT wyłącznie `is_admin()`; **zero** polityk INSERT/UPDATE/DELETE
-i dodatkowo odebrane uprawnienia INSERT/UPDATE/DELETE/TRUNCATE rolom
-`authenticated` i `service_role` (ta druga omija RLS, a TRUNCATE nie podlega
-RLS) — z warstwy aplikacji nikt nie zmieni śladu; pisze wyłącznie trigger
-jako właściciel tabeli. Polityka „DC widzi wpisy swoich projektów” czeka na
-`is_doc_controller()` (1a.09, `docs/deferred-tasks.md` p). Retencja — O-04.
-Test: `supabase/tests/audit_log.test.sql`.
+RLS: SELECT — `is_admin()` (wszystko) oraz od 1a.09 „Doc controllers read
+own project audit log”: `project_id IS NOT NULL AND
+is_doc_controller(project_id)` — DC widzi ślad swoich projektów, wpisy
+z `project_id` NULL (`profiles`, `clients`) pozostają admin-only zgodnie
+z decyzją 1a.08. **Zero** polityk INSERT/UPDATE/DELETE i dodatkowo odebrane
+uprawnienia INSERT/UPDATE/DELETE/TRUNCATE rolom `authenticated`
+i `service_role` (ta druga omija RLS, a TRUNCATE nie podlega RLS) — z warstwy
+aplikacji nikt nie zmieni śladu; pisze wyłącznie trigger jako właściciel
+tabeli. Retencja — O-04. Testy: `supabase/tests/audit_log.test.sql`,
+`supabase/tests/rls_project_role_functions.test.sql`.
+
+### ✅ Funkcje pomocnicze RLS (`public`, DCS 1a.09)
+Migracja `20260903184934_add_project_role_functions_and_policies`. Wszystkie
+trzy: `security definer`, `search_path = ''`, `language sql stable`,
+identyfikatory w pełni kwalifikowane (przekraczają `public`/`dcs`),
+`EXECUTE` dla `authenticated` (polityki wykonują się jako rola zapytania —
+akceptowany lint 0029, po jednym na funkcję), bez `anon`/`PUBLIC`.
+`security definer` jest tu koniecznością, nie wygodą: polityka na
+`dcs.project_roles` czytająca `dcs.project_roles` pod RLS rekurowałaby
+([ADR-0008](adr/0008-project-roles-w-schemacie-dcs.md)).
+- `is_project_member(p_project_id uuid) → boolean` — `auth.uid()` ma wiersz
+  w `public.project_assignments` (TES: loguje godziny) **lub**
+  w `dcs.project_roles` (DCS: pełni rolę) dla projektu.
+- `has_project_role(p_project_id uuid, p_roles dcs.project_role[]) →
+  boolean` — `auth.uid()` ma w `dcs.project_roles` wiersz dla projektu
+  z `role = ANY(p_roles)`.
+- `is_doc_controller(p_project_id uuid) → boolean` —
+  `has_project_role(p, {dc})`.
+`is_admin()` reużyte bez zmian ciała. `is_pm_for_project()` (TES) nie zna
+ról DCS i nie jest używane przez polityki DCS. Polityka `Admin zarządza
+projektami` (ALL, `is_admin()`) na `public.projects` przejrzana w 1a.09
+i **pozostawiona**: kolumny, o które pytała checklista (cykle, budżet),
+mieszkają w `dcs.mdr_settings`, nie tu — `projects` niesie wyłącznie
+tożsamość projektu, a jej edycja jest w TES admin-only z założenia.
+Test: `supabase/tests/rls_project_role_functions.test.sql`.
 
 Tabele TES (`timesheet_*`, `expense_*`, `earnings_*`, `pdf_exports`,
 `weekly_contract_codes`, `*_assignments`) nie są dziedziczone przez DCS —
@@ -170,9 +208,13 @@ wiersz powstaje przy zakładaniu MDR w DCS (kreator, 1a.17). ON DELETE
 CASCADE: ustawienia bez projektu to bezsensowna sierota, a kasowanie
 projektów i tak jest w TES admin-only. Częstotliwość podsumowania e-mail
 (brief §5.2) — dojdzie z modułem powiadomień, nie teraz.
-RLS: SELECT dla każdego zalogowanego, zapis wyłącznie admin (`is_admin()`) —
-docelowo zapis DC (rozszerzenie polityk o `is_doc_controller()` na bazie
-`project_roles`, 1a.09). Test: `supabase/tests/rls_mdr_settings.test.sql`.
+RLS: SELECT dla każdego zalogowanego (bez zmian); zapis — admin
+(`Admins manage mdr settings`) oraz od 1a.09 DC tego projektu (`Doc
+controllers manage mdr settings`, ALL, `is_doc_controller(project_id)` —
+tu właśnie stosuje się kryterium Notion „cykle/budżet: tylko admin/DC”,
+bo te kolumny leżą tutaj, nie w `projects`). DC innego projektu nie ma
+dostępu do zapisu. Testy: `supabase/tests/rls_mdr_settings.test.sql`,
+`supabase/tests/rls_project_role_functions.test.sql`.
 
 ### ✅ `dcs.project_roles`
 `id uuid PK`, `project_id (FK → projects, ON DELETE CASCADE)`, `user_id (FK
@@ -194,18 +236,26 @@ obsady `documents`/`approval_tasks` i podstawa polityk RLS pozostałych tabel
 (1a.09: `has_project_role()`, `is_doc_controller()`). Rozdział obowiązków
 (Originator dokumentu ≠ Checker tej samej rewizji) egzekwowany w 1b na
 poziomie rewizji, nie na tej tabeli. Rola `cpy` (kontakt klienta) — Faza 3.
-RLS (stan 1a.06, celowo wąski): SELECT — własne wiersze (`user_id =
-auth.uid()`) oraz admin wszystko; INSERT/UPDATE/DELETE — wyłącznie
-`is_admin()`. Odczyt „cały zespół projektu widzi role kolegów” wymaga
-funkcji `security definer` (polityka odwołująca się do własnej tabeli
-rekuruje) — decyzja i rozszerzenie w 1a.09. Brak kolumny `active`:
-odebranie roli = usunięcie wiersza (historia zmian → `audit_log`, 1a.08).
+RLS (stan 1a.09, migracja `20260903184934`): SELECT — każdy członek
+projektu (`is_project_member(project_id)`: przypisanie TES **lub** rola
+DCS) widzi wszystkie wiersze ról tego projektu; ALL — admin (`Admins manage
+project roles`, 1a.06) oraz DC tego projektu (`Doc controllers manage
+project roles`, `is_doc_controller(project_id)`), więc DC nadaje i odbiera
+role w swoim projekcie bez globalnego admina. Członek bez roli DC nie
+pisze; DC projektu A nie pisze w projekcie B. Historia: 1a.06 dało tylko
+„własne wiersze”, bo funkcji `security definer` jeszcze nie było. Brak
+kolumny `active`: odebranie roli = usunięcie wiersza (historia zmian →
+`audit_log`, trigger od 1a.08). Uwaga: DC może usunąć własny wiersz `dc`
+i stracić dostęp — baza tego nie blokuje (ochrona to sprawa ekranu 1a.14).
 Mutacje: server actions `grantProjectRole` / `revokeProjectRole`
 (`apps/dcs/app/data/actions/project-roles.ts`, logika w
-`apps/dcs/lib/project-roles.ts`) — guard admina po stronie serwera, błędy
-domenowe (`role_already_granted`, `unknown_project_or_user`,
-`role_not_found`, `forbidden`). Ekran macierzy user × projekt × rola — 1a.14.
-Test: `supabase/tests/rls_project_roles.test.sql`.
+`apps/dcs/lib/project-roles.ts`) — guard **admina** po stronie serwera
+(`requireAdmin`), czyli akcja jest dziś węższa niż polityka: DC ma prawo
+w bazie, ale akcja go odrzuci; rozszerzenie guardu na DC razem z ekranem
+1a.14 (`docs/deferred-tasks.md` q). Błędy domenowe
+(`role_already_granted`, `unknown_project_or_user`, `role_not_found`,
+`forbidden`). Testy: `supabase/tests/rls_project_roles.test.sql`,
+`supabase/tests/rls_project_role_functions.test.sql`.
 
 ### `dcs.documents`
 `id`, `project_id (FK, RLS)`, `scl_doc_number (unique globalnie, generowany,

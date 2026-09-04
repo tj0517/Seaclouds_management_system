@@ -54,18 +54,29 @@ Baseline advisora security: **zero** lintów `function_search_path_mutable`
 żeby nowe tabele nie przywróciły grantów `anon`).
 
 Poniższe ostrzeżenia advisora są akceptowane **świadomie** — nie wykonuj ich
-rekomendacji, bo odebranie uprawnień roli `authenticated` wyłączy TES:
+rekomendacji, bo odebranie uprawnień roli `authenticated` wyłączy TES.
+**Przyjęty baseline (scl-dev, stan po DCS 1a.09, 2026-09-04): 17 × 0027
++ 10 × 0029**, nic innego. Każde zadanie porównuje odczyt advisora z tą
+liczbą; zmiana = nowa tabela czytana przez `authenticated` (+1 × 0027) lub
+nowa funkcja SECURITY DEFINER wołana z polityk (+1 × 0029) i musi być
+nazwana w PR, a baseline tutaj zaktualizowany.
 
 - **0027 `pg_graphql_authenticated_table_exposed`** (po jednym na każdą
-  tabelę `public`) — PostgREST obsługuje zalogowanych użytkowników właśnie
-  jako rolę `authenticated`; bez jej `SELECT` żadne zapytanie aplikacji nie
-  zwróci danych. Widoczność wierszy ogranicza RLS, nie granty.
+  tabelę `public`/`dcs` z `SELECT` dla `authenticated`; 17 = 14 tabel TES/core
+  + `dcs.mdr_settings`, `dcs.project_roles`, `public.audit_log`) — PostgREST
+  obsługuje zalogowanych użytkowników właśnie jako rolę `authenticated`; bez
+  jej `SELECT` żadne zapytanie aplikacji nie zwróci danych. Widoczność
+  wierszy ogranicza RLS, nie granty.
 - **0029 `authenticated_security_definer_function_executable`** (po jednym na
-  każdą funkcję SECURITY DEFINER) — wyrażenia polityk RLS wykonują się jako
-  rola zapytania, więc `authenticated` musi mieć `EXECUTE`: `is_admin()` woła
-  m.in. polityka „Admin zarządza projektami” na `public.projects` i polityki
-  storage, `is_week_locked(...)` — polityki `timesheet_entries`,
-  a `resubmit_rejected` aplikacja przez RPC.
+  każdą funkcję SECURITY DEFINER; 10 = 7 funkcji TES + `is_project_member`,
+  `has_project_role`, `is_doc_controller` z 1a.09) — wyrażenia polityk RLS
+  wykonują się jako rola zapytania, więc `authenticated` musi mieć
+  `EXECUTE`: `is_admin()` woła m.in. polityka „Admin zarządza projektami”
+  na `public.projects` i polityki storage, `is_week_locked(...)` — polityki
+  `timesheet_entries`, a `resubmit_rejected` aplikacja przez RPC. Trzy
+  funkcje 1a.09 są tej samej kategorii co `is_admin()`: project-scoped,
+  zwracają wyłącznie boolean o uprawnieniach wołającego (`auth.uid()`),
+  nie ujawniają danych i nie mutują niczego.
 - **`auth_leaked_password_protection`** — **rozstrzygnięte 2026-08-31**:
   ochrona przed skompromitowanymi hasłami (HaveIBeenPwned) jest włączona
   ręcznie w dashboardzie na obu projektach (scl-dev i prod). To **świadomy,
