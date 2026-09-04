@@ -10,7 +10,7 @@
 --   outsider created below            no assignment, no role anywhere
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(48);
+select plan(55);
 
 -- ============================================================
 -- Schema assertions (red without the migration)
@@ -41,13 +41,28 @@ select is(
   'audit_trigger', 'audit_dictionaries executes public.audit_trigger()');
 
 select policies_are('dcs', 'dictionaries',
-  array['Authenticated users can read dictionaries', 'Admins manage dictionaries'],
-  'dictionaries: exactly the two 1a.07 policies');
+  array['Authenticated users can read dictionaries', 'Admins manage dictionaries',
+        'Doc controllers insert dictionaries', 'Doc controllers update dictionaries'],
+  'dictionaries: the two 1a.07 policies plus the two 1a.09b DC write policies');
 select is(
   (select count(*) from pg_policies
     where schemaname = 'dcs' and tablename = 'dictionaries' and cmd = 'ALL'
       and qual like '%is_admin()%' and with_check like '%is_admin()%'),
-  1::bigint, 'the write policy is gated on is_admin() (USING and WITH CHECK)');
+  1::bigint, 'the admin write policy is gated on is_admin() (USING and WITH CHECK)');
+select is(
+  (select count(*) from pg_policies
+    where schemaname = 'dcs' and tablename = 'dictionaries' and cmd in ('INSERT', 'UPDATE')
+      and with_check like '%is_any_doc_controller()%'),
+  2::bigint, '1a.09b: DC INSERT and UPDATE policies are gated on is_any_doc_controller() in WITH CHECK');
+select is(
+  (select count(*) from pg_policies
+    where schemaname = 'dcs' and tablename = 'dictionaries' and cmd = 'UPDATE'
+      and qual like '%is_any_doc_controller()%'),
+  1::bigint, '1a.09b: DC UPDATE policy is also gated on is_any_doc_controller() in USING');
+select is(
+  (select count(*) from pg_policies
+    where schemaname = 'dcs' and tablename = 'dictionaries' and cmd = 'DELETE'),
+  0::bigint, '1a.09b: no dedicated DELETE policy exists — DELETE stays covered by admin ALL only');
 
 -- ============================================================
 -- Fixtures (as postgres)
@@ -169,24 +184,68 @@ select throws_ok(
   '42501', null, 'RED: outsider INSERT is rejected (42501)');
 
 -- ============================================================
--- 5. DC (tymon, dc on PEJ): reads, but writes are admin-only until 1a.15
+-- 5. DC (tymon, dc on PEJ): reads and writes (1a.09b) — INSERT/UPDATE only,
+-- DELETE stays admin-only. tymon's DC role is scoped to PEJ, but
+-- is_any_doc_controller() is project-less, so it applies to this
+-- project-less table regardless of which project he is DC of.
 -- ============================================================
 select set_config('request.jwt.claims',
   json_build_object('sub', (select tymon_id from t_fixture), 'role', 'authenticated')::text, true);
 select ok(public.is_doc_controller((select pej_id from t_fixture)),
   'sanity: tymon is a DC (of PEJ) in this session');
+select ok(public.is_any_doc_controller(),
+  'sanity: tymon is a DC of some project, so is_any_doc_controller() is true');
 select is((select count(*) from dcs.dictionaries), 2::bigint, 'GREEN: DC reads both rows');
+
+select lives_ok(
+  $$insert into dcs.dictionaries (id, dict_type, code, label, sort_order)
+    values ('dddddddd-dddd-4ddd-8ddd-ddddddddddd4', 'discipline', 'DC', 'DC-inserted', 40)$$,
+  'GREEN: DC INSERT succeeds (1a.09b)');
+-- audit_log has no DC-read policy for project-less rows (DC read is scoped
+-- to project_id is not null); check as postgres, which bypasses RLS, rather
+-- than reintroducing a table grant/policy out of scope for this task.
+reset role;
+select is(
+  (select count(*) from public.audit_log
+    where table_name = 'dcs.dictionaries' and action = 'INSERT'
+      and record_id = 'dddddddd-dddd-4ddd-8ddd-ddddddddddd4'
+      and user_id = (select tymon_id from t_fixture)),
+  1::bigint, 'GREEN: DC INSERT is audited with the DC''s own user_id (SECURITY DEFINER keeps caller identity)');
+set local role authenticated;
+select set_config('request.jwt.claims',
+  json_build_object('sub', (select tymon_id from t_fixture), 'role', 'authenticated')::text, true);
+
+update dcs.dictionaries set label = 'renamed by DC'
+ where id = 'dddddddd-dddd-4ddd-8ddd-ddddddddddd4';
+select is(
+  (select label from dcs.dictionaries where id = 'dddddddd-dddd-4ddd-8ddd-ddddddddddd4'),
+  'renamed by DC', 'GREEN: DC UPDATE takes effect (1a.09b)');
+
+-- No dedicated DC DELETE policy exists, so the only applicable policy for
+-- DELETE is "Admins manage dictionaries" (FOR ALL), whose USING is_admin()
+-- is false for a DC — that filters the row rather than raising 42501
+-- (42501 would require no policy at all matching the command).
+delete from dcs.dictionaries where id = 'dddddddd-dddd-4ddd-8ddd-ddddddddddd4';
+select is((select count(*) from dcs.dictionaries where id = 'dddddddd-dddd-4ddd-8ddd-ddddddddddd4'), 1::bigint,
+  'RED: DC DELETE affects zero rows — DELETE stays admin-only');
+
+-- Neither admin nor DC (ernest, plain employee): still fully rejected —
+-- the red proof this section used to carry moves here.
+select set_config('request.jwt.claims',
+  json_build_object('sub', (select ernest_id from t_fixture), 'role', 'authenticated')::text, true);
 select throws_ok(
-  $$insert into dcs.dictionaries (dict_type, code, label) values ('discipline', 'EL', 'Electrical')$$,
-  '42501', null, 'RED: DC INSERT is rejected (42501) — writes are admin-only until 1a.15');
-update dcs.dictionaries set label = 'renamed by DC' where id = (select active_id from t_fixture);
+  $$insert into dcs.dictionaries (dict_type, code, label) values ('discipline', 'NE', 'Not a DC')$$,
+  '42501', null, 'RED: non-admin non-DC INSERT is rejected (42501)');
+update dcs.dictionaries set label = 'hacked again'
+ where id = 'dddddddd-dddd-4ddd-8ddd-ddddddddddd4';
 select is(
-  (select label from dcs.dictionaries where id = (select active_id from t_fixture)),
-  'Process', 'RED: DC UPDATE affects zero rows');
-update dcs.dictionaries set is_active = true where id = (select inactive_id from t_fixture);
-select is(
-  (select is_active from dcs.dictionaries where id = (select inactive_id from t_fixture)),
-  false, 'RED: DC cannot reactivate an entry either');
+  (select label from dcs.dictionaries where id = 'dddddddd-dddd-4ddd-8ddd-ddddddddddd4'),
+  'renamed by DC', 'RED: non-admin non-DC UPDATE affects zero rows');
+
+-- Admin cleans up the DC-inserted row so later admin-section counts hold.
+reset role;
+delete from dcs.dictionaries where id = 'dddddddd-dddd-4ddd-8ddd-ddddddddddd4';
+set local role authenticated;
 
 -- ============================================================
 -- 6. Admin: full write access, every write lands in audit_log

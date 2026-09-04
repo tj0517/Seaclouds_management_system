@@ -306,12 +306,17 @@ select set_config('request.jwt.claims',
 select is((select count(*) from public.project_assignments), (select total_assignments from t_fixture),
   'project_assignments GREEN: admin sees every assignment');
 
--- 3e. dictionaries — DC of another project is just another DC (global table)
+-- 3e. dictionaries — DC of another project is just another DC (global table).
+-- 1a.09b: is_any_doc_controller() is project-less, so DC of IT can insert
+-- into this project-less table exactly like DC of PEJ.
 select set_config('request.jwt.claims',
   json_build_object('sub', (select otherdc_id from t_fixture), 'role', 'authenticated')::text, true);
-select throws_ok(
-  $$insert into dcs.dictionaries (dict_type, code, label) values ('area', 'ODC', 'x')$$, '42501', null,
-  'dictionaries RED: DC of IT cannot insert (writes admin-only, same as DC of PEJ)');
+select lives_ok(
+  $$insert into dcs.dictionaries (dict_type, code, label) values ('area', 'ODC', 'x')$$,
+  'dictionaries GREEN: DC of IT can insert (1a.09b, is_any_doc_controller is project-less)');
+reset role;
+delete from dcs.dictionaries where dict_type = 'area' and code = 'ODC';
+set local role authenticated;
 
 -- 3f. audit_log — writes impossible for every non-postgres role (no policy, no grant)
 select throws_ok($$insert into public.audit_log (table_name, record_id, action) values ('x', gen_random_uuid(), 'INSERT')$$,
