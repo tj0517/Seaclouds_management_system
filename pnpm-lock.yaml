@@ -188,6 +188,8 @@ importers:
         specifier: ^5
         version: 5.9.3
 
+  docs: {}
+
   packages/db:
     dependencies:
       '@supabase/ssr':
@@ -212,6 +214,10 @@ importers:
       typescript-eslint:
         specifier: ^8.46.4
         version: 8.68.0(eslint@9.39.5(jiti@1.21.7))(typescript@5.9.3)
+
+  scripts: {}
+
+  supabase: {}
 
 packages:
 

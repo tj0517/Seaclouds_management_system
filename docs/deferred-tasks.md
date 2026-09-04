@@ -402,3 +402,28 @@ PR (one topic per PR). Each item names its owner task or trigger:
   — now asserted as GREEN-by-design for an unrelated user in
   `rls_coverage_closeout.test.sql`, so the day the policy is narrowed the
   test turns red on purpose. The narrowing itself stays deferred (q).
+## s) Follow-ups noted during the Vercel build-scope task (`chore/vercel-build-scope`)
+
+- **HAZARD — `update-types` script in `apps/timesheet/package.json` points
+  at the PRODUCTION project ref** (`--project-id tfbzivfsqsgebegcvfah`) and
+  writes to `utils/supabase/types.ts`, a file that no longer exists (types
+  come from `@scl/db` since PR #3). Running it needs a logged-in CLI with
+  prod access, so it is a read against prod outside the CI process and a
+  second, divergent type source if anyone commits its output. Remove the
+  script; `pnpm db:gen` (local stack) is the only generator. Not touched in
+  the build-scope PR (one task, one PR).
+- **`supabase` (the CLI, `^2.72.7`) is a runtime `dependency` of
+  `@scl/timesheet`**, while the project pins CLI 2.75.0 through
+  `docs/toolchain.md` and CI. It is installed into every Timesheet build on
+  Vercel for nothing. Move it out (the CLI is a global tool here) in its own
+  PR, checking first that no script in the app calls `npx supabase`.
+- **Splitting the generated types per product (`@scl/db` → public/core +
+  a dcs-only package)** — analysed 2026-09-04, see the report in the PR for
+  `chore/vercel-build-scope`. Verdict: the generator emits clean
+  per-schema files (`--schema dcs` has no reference to `public`; cross-schema
+  FK `Relationships` are dropped in both variants — they are `[]` in the
+  combined file too), so a split is technically clean, but of the seven
+  DCS migration commits so far only two (1a.06, 1a.07) changed nothing in
+  the `public` section of `database.ts`. Five of seven would still have
+  rebuilt Timesheet. Not worth a package split at this stage; revisit when
+  Phase 1b adds many `dcs`-only tables.

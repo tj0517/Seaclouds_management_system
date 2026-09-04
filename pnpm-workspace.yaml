@@ -1,3 +1,11 @@
 packages:
   - "apps/*"
   - "packages/*"
+  # Non-code directories registered as private workspace packages on purpose:
+  # Vercel treats a change outside every workspace package as global and
+  # rebuilds all projects. Membership keeps a migration/docs/guard-script PR
+  # from rebuilding both apps. They have no scripts and nothing depends on
+  # them (docs/03-conventions.md).
+  - "docs"
+  - "supabase"
+  - "scripts"

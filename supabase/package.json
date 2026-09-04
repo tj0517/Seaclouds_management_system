@@ -1,0 +1,6 @@
+{
+  "name": "@scl/supabase",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Workspace member on purpose: makes supabase/ (migrations, tests, config) changes non-global for Vercel's affected-project detection. The Supabase project itself is driven by the CLI from the repo root; no scripts, no dependencies here."
+}
