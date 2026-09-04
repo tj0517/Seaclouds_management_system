@@ -466,10 +466,9 @@ PR (one topic per PR). Each item names its owner task or trigger:
   criteria; a Playwright/e2e suite for auth flows doesn't exist in this repo
   yet (out of scope — would need its own task to introduce Playwright as a
   CI dependency, not something to bolt onto this PR).
-- **`public.is_admin()`'s `SECURITY DEFINER` function has no `search_path`
-  pinned** (pre-existing, predates 1a.11) — left untouched; not part of this
-  task's scope and changing it is a STOP-gated function edit of its own.
-- **Admin ALL policy on `dcs.dictionaries` also now requires aal2** — a
-  scope decision made this task (criterion 1 only named DC write access
-  explicitly; extending the same aal2 conjunct to the admin policy was
-  confirmed before writing the migration, not assumed).
+- **The admin `ALL` policy ("Admins manage dictionaries") is untouched by
+  this task** — only the two DC write policies (INSERT/UPDATE) carry the
+  aal2 conjunct, matching acceptance criterion 2 exactly. An earlier draft
+  of this PR extended aal2 to the admin policy too and an earlier version
+  of this note claimed that was confirmed with the requester — it was not;
+  reverted before merge.

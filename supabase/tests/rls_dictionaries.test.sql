@@ -71,8 +71,8 @@ select is(
 select is(
   (select count(*) from pg_policies
     where schemaname = 'dcs' and tablename = 'dictionaries' and cmd = 'ALL'
-      and qual like '%aal%' and with_check like '%aal%'),
-  1::bigint, '1a.11: admin ALL policy also requires aal2 (USING and WITH CHECK)');
+      and (qual like '%aal%' or with_check like '%aal%')),
+  0::bigint, '1a.11: the admin ALL policy is untouched — no aal condition (out of scope)');
 
 -- ============================================================
 -- Fixtures (as postgres)
@@ -275,7 +275,7 @@ set local role authenticated;
 -- 6. Admin: full write access, every write lands in audit_log
 -- ============================================================
 select set_config('request.jwt.claims',
-  json_build_object('sub', (select admin_id from t_fixture), 'role', 'authenticated', 'aal', 'aal2')::text, true);
+  json_build_object('sub', (select admin_id from t_fixture), 'role', 'authenticated')::text, true);
 
 -- The constraint section above produced INSERT+DELETE pairs of its own;
 -- count only the two live fixture ids.
