@@ -1,5 +1,5 @@
 
-import { getProjects, getUserAssignments, getUsers, fetchSubProjects, getUserSubProjectAssignments } from '@/app/data/actions'
+import { getProjects, getUserAssignments, getUsers, fetchSubProjects, getUserSubProjectAssignments, getModulePermissions } from '@/app/data/actions'
 import { getUserRoleAndProjects } from '@/app/data/actions/auth-helpers'
 import { redirect } from 'next/navigation'
 import { getSupabaseAdmin } from '@/utils/supabase/admin'
@@ -16,12 +16,13 @@ export default async function UserDetailsPage({
   const { id } = await params;
   const userId = id;
 
-  const [projects, assignedProjectIds, users, userSubProjectIds, authUser] = await Promise.all([
+  const [projects, assignedProjectIds, users, userSubProjectIds, authUser, modulePermissions] = await Promise.all([
     getProjects(),
     getUserAssignments(userId),
     getUsers(),
     getUserSubProjectAssignments(userId),
     getSupabaseAdmin().auth.admin.getUserById(userId),
+    getModulePermissions(userId),
   ])
 
   const userEmail = authUser.data?.user?.email || null
@@ -46,6 +47,7 @@ export default async function UserDetailsPage({
       subProjectsByProject={subProjectsByProject}
       userSubProjectIds={userSubProjectIds}
       userEmail={userEmail}
+      modulePermissions={modulePermissions}
     />
   )
 }

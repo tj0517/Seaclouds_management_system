@@ -55,19 +55,24 @@ Baseline advisora security: **zero** lintów `function_search_path_mutable`
 
 Poniższe ostrzeżenia advisora są akceptowane **świadomie** — nie wykonuj ich
 rekomendacji, bo odebranie uprawnień roli `authenticated` wyłączy TES.
-**Przyjęty baseline (scl-dev, stan po DCS 1a.07, 2026-09-04): 18 × 0027
-+ 10 × 0029**, nic innego. 18. lint 0027 to `dcs.dictionaries` (1a.07):
-słowniki mają być czytane przez każdego zalogowanego użytkownika, więc
-`SELECT` dla `authenticated` jest zamierzony i nie wolno go odbierać, żeby
-uciszyć ostrzeżenie. Każde zadanie porównuje odczyt advisora z tą
+**Przyjęty baseline (scl-dev, stan po DCS 1a.22, 2026-09-04): 19 × 0027
++ 10 × 0029**, nic innego. 19. lint 0027 to `public.module_permissions`
+(1a.22): każdy użytkownik czyta własne wiersze (polityka "Users read own
+module permissions"), więc `SELECT` dla `authenticated` jest zamierzony i
+nie wolno go odbierać, żeby uciszyć ostrzeżenie — dokładnie ten sam wzorzec
+co `dcs.dictionaries` w 1a.07. Każde zadanie porównuje odczyt advisora z tą
 liczbą; zmiana = nowa tabela czytana przez `authenticated` (+1 × 0027) lub
 nowa funkcja SECURITY DEFINER wołana z polityk (+1 × 0029) i musi być
-nazwana w PR, a baseline tutaj zaktualizowany.
+nazwana w PR, a baseline tutaj zaktualizowany. Uwaga: 1a.22 dodaje też
+`public.grant_default_module_access()` (SECURITY DEFINER), ale jak
+`audit_trigger()` to czysta funkcja triggera bez `EXECUTE` dla żadnej roli
+API (EXECUTE jest sprawdzane przy `CREATE TRIGGER`, nie przy wykonaniu) —
+nie liczy się do 0029.
 
 - **0027 `pg_graphql_authenticated_table_exposed`** (po jednym na każdą
-  tabelę `public`/`dcs` z `SELECT` dla `authenticated`; 18 = 14 tabel TES/core
+  tabelę `public`/`dcs` z `SELECT` dla `authenticated`; 19 = 14 tabel TES/core
   + `dcs.mdr_settings`, `dcs.project_roles`, `public.audit_log`,
-  `dcs.dictionaries`) — PostgREST
+  `dcs.dictionaries`, `public.module_permissions`) — PostgREST
   obsługuje zalogowanych użytkowników właśnie jako rolę `authenticated`; bez
   jej `SELECT` żadne zapytanie aplikacji nie zwróci danych. Widoczność
   wierszy ogranicza RLS, nie granty.

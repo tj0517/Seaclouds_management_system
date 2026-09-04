@@ -472,3 +472,37 @@ PR (one topic per PR). Each item names its owner task or trigger:
   of this PR extended aal2 to the admin policy too and an earlier version
   of this note claimed that was confirmed with the requester — it was not;
   reverted before merge.
+
+## w) Follow-ups noted during DCS 1a.22 (`public.module_permissions`)
+
+- **`proxy.ts` (both apps) and `apps/timesheet/app/admin/layout.tsx` do not
+  consume this table** — by design, acceptance criterion 5. This is the
+  table the DC-without-admin mismatch found in 1a.11 (see (v) above) is
+  meant to eventually resolve through, but wiring either gate to read
+  `module_permissions` is its own task, not folded in here.
+- **`apps/dcs` has no admin routes yet**, so the "Module Access" screen
+  lives only in Timesheet's existing `admin/users/[id]` page — the one
+  admin user-management screen that currently exists in the monorepo. When
+  DCS gets its own admin panel (or the two panels merge — an open question,
+  not decided here), revisit whether module grants belong there too or stay
+  Timesheet-only.
+- **No auto-revoke on role demotion.** The data migration grants DCS to
+  every `profiles.role = 'admin'` account once, at migration time; nothing
+  keeps that in sync afterwards — an admin later demoted to `employee` keeps
+  DCS access until a human unchecks it on the Module Access screen. Same
+  shape as `deferred-tasks.md` (o)'s note on `deactivateUser` and DCS role
+  rows: intentional, not an oversight — auto-revoke tied to a role change is
+  a policy decision (who decides, does it apply to BMS too) that belongs
+  with whichever task next touches this table.
+- **`supabase/seed.sql`'s admin fixture (`tjezionekspam@gmail.com`) does not
+  end up with DCS access after a local `supabase db reset`.** The seed
+  creates the auth user (role defaults to `employee` via
+  `handle_new_user()`), then `UPDATE`s `profiles.role = 'admin'` — by then
+  the 1a.22 data migration has already run, over zero rows, so the
+  admin-gets-DCS backfill never sees this account. `rls_module_permissions.test.sql`
+  works around it by inserting the DCS row directly, as `postgres`, matching
+  how other tests (e.g. `rls_dictionaries.test.sql` with `dcs.project_roles`)
+  already set up role-like fixtures by hand rather than relying on seed
+  order. Not fixed here: no acceptance criterion needs the local seed's
+  admin fixture to have DCS access, and teaching the seed script about this
+  ordering is separate from the table itself.
