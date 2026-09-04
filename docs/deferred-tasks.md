@@ -327,3 +327,16 @@ PR (one topic per PR). Each item names its owner task or trigger:
   is_project_member(p.id)`). Fine at the current scale (tens of projects);
   if `clients` listing ever shows up in query stats, a
   `client_project_member(client_id)` helper is the cheap fix.
+- **`has_project_role()` has no policy-level coverage beyond `{dc}`** — the
+  only caller today is `is_doc_controller()`. Function-level assertions
+  exist in `rls_project_role_functions.test.sql` (multi-element array that
+  matches one held role, and one that matches none), but no policy uses
+  another role set yet. When the first such policy lands (documents:
+  ORIG/CHK/APP), add policy-level red/green assertions for it in the same
+  PR.
+- **`dcs.mdr_settings` SELECT is still open to every `authenticated`
+  user** — `budget_hours` and the cycle lengths of every project are
+  readable by any employee (policy from 1a.05, deliberately left in 1a.09).
+  Review before Phase 4 (brief §3.5: clients enter the system); the
+  natural replacement is `is_project_member(project_id)` now that it
+  exists. Not changed in PR #25 (owner's instruction 2026-09-04).

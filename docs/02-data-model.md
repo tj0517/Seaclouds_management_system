@@ -91,11 +91,18 @@ dowolnego projektu z `client_id` tego klienta (podzapytanie po
 `public.projects` + `is_project_member(p.id)`, patrz „Funkcje pomocnicze
 RLS” niżej); INSERT/UPDATE/DELETE — wyłącznie admin (`Admins manage
 clients`). Historia: 1a.04 dało SELECT każdemu zalogowanemu, bo tabeli ról
-jeszcze nie było; 1a.09 zawęziło. Zapis celowo NIE dla DC (Notion mówiło
-„admin/DC”): klient może obejmować kilka projektów, a DC jest rolą per
-projekt — „który DC” jest niedookreślone do czasu, aż Faza 4 rozstrzygnie
-relację klient–projekt. TES nie czyta `clients` (sprawdzone grep-em
-2026-09-03), więc zawężenie nie dotyka Timesheetu. Testy:
+jeszcze nie było; 1a.09 zawęziło.
+**Świadoma decyzja (1a.09, 2026-09-04): INSERT/UPDATE/DELETE na `clients`
+zostaje admin-only, mimo że zakres zadania mówił „admin/DC”.** Powód:
+klient może obejmować kilka projektów, a DC jest rolą per projekt — „który
+DC może edytować klienta” jest niedookreślone, dopóki Faza 4 nie rozstrzygnie
+relacji klient–projekt. To wybór, nie przeoczenie: test
+`rls_clients.test.sql` i `rls_project_role_functions.test.sql` utrwalają
+odmowę zapisu dla DC jako przypadek **czerwony** („clients RED: DC of PEJ
+cannot insert a client” / „update … has no effect”). Rozszerzenie zapisu na
+DC — razem z ekranem klientów, zadanie 1a.16. TES nie czyta `clients` ani
+`client_id` (grep `apps/` 2026-09-04, zero trafień poza artefaktami
+`.next/`), więc zawężenie SELECT nie dotyka Timesheetu. Testy:
 `supabase/tests/rls_clients.test.sql`,
 `supabase/tests/rls_project_role_functions.test.sql`.
 
