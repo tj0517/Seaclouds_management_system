@@ -106,6 +106,35 @@ DC — razem z ekranem klientów, zadanie 1a.16. TES nie czyta `clients` ani
 `supabase/tests/rls_clients.test.sql`,
 `supabase/tests/rls_project_role_functions.test.sql`.
 
+### ✅ `public.module_permissions`
+`id uuid PK`, `user_id (uuid, FK → profiles, ON DELETE CASCADE)`, `module
+(enum public.portal_module: tes|dcs|bms)`, `granted_at (default now())`.
+UNIQUE `(user_id, module)`. Utworzona migracją `20260904170000` (DCS 1a.22,
+[ADR-0009](adr/0009-module-permissions-per-uzytkownik.md)) — Client plan item
+1a.03: nie każdy użytkownik TES ma trafiać do DCS. Kształt: wiersz =
+przyznanie (obecność, nie kolumna `bool`) — brak wiersza = brak dostępu.
+Żyje w `public`, nie `dcs` ([ADR-0009](adr/0009-module-permissions-per-uzytkownik.md)):
+to warstwa wspólna dla wszystkich modułów, symetrycznie do `profiles`, nie
+DCS-specyficzna jak `dcs.project_roles`. Bez `project_id` — dostęp do modułu
+jest globalny dla konta, nie per projekt; wpis uzasadniający jak
+`dcs.dictionaries` (1a.07).
+Domyślne przyznanie: trigger `grant_default_module_access()` (`AFTER INSERT
+ON public.profiles`) daje TES każdemu nowemu kontu; DCS i BMS wymagają
+akcji administratora. Migracja backfilluje istniejące konta raz przy
+wdrożeniu: TES wszystkim, DCS kontom z `profiles.role = 'admin'`
+(zweryfikowane na prod 2026-09-04: 15 profili, 2 admin), BMS nikomu.
+RLS: SELECT — właściciel wiersza (`auth.uid() = user_id`); zapis (ALL) —
+wyłącznie admin (`is_admin()`). Audytowana przez `audit_trigger()` (1a.08) —
+`project_id` w logu `NULL`, jak dla `profiles`/`clients`.
+**Świadomie NIE konsumowana jeszcze przez żaden gate** ([ADR-0009](adr/0009-module-permissions-per-uzytkownik.md)):
+`proxy.ts` (oba apps) i `apps/timesheet/app/admin/layout.tsx` pozostają
+nietknięte — to osobne zadanie, tak samo jak rozbieżność DC-bez-admina
+znaleziona w 1a.11, której ta tabela jest docelowym domem. Ekran
+administracyjny: karta "Module Access" w
+`apps/timesheet/app/admin/users/[id]` (checkbox per moduł, wzorzec
+identyczny z kartą dostępu do projektów). Test:
+`supabase/tests/rls_module_permissions.test.sql`.
+
 ### ✅ `public.audit_log`
 Wspólny dla modułów (brief §5.9, §3.5). Utworzona migracją
 `20260903173128_create_audit_log` (DCS 1a.08). Kolumny (stan faktyczny):
@@ -137,7 +166,8 @@ odpala się bez tego uprawnienia — sprawdzane przy `CREATE TRIGGER`, nie przy
 wykonaniu), więc nie powiększa lintu 0029.
 Jawna lista tabel objętych triggerem: `public.projects`,
 `dcs.project_roles`, `public.profiles`, `public.clients` (1a.08),
-`dcs.dictionaries` (1a.07, migracja `20260904081501`). Celowo NIE: `dcs.mdr_settings` (brief nie
+`dcs.dictionaries` (1a.07, migracja `20260904081501`),
+`public.module_permissions` (1a.22, migracja `20260904170000`). Celowo NIE: `dcs.mdr_settings` (brief nie
 wymienia konfiguracji MDR jako obowiązkowego zdarzenia na tym etapie — uwaga:
 pola cykli `cycle_*` mieszkają właśnie tam, nie w `projects`), żadna tabela
 TES (izolacja TES/DCS), przyszłe `dcs.documents`/`revisions` (Faza 1b).

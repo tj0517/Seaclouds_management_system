@@ -4,6 +4,7 @@ import { toast } from "sonner"
 
 import AssignmentCheckbox from './assignmentCheckbox'
 import SubProjectAssignmentCheckbox from './subProjectAssignmentCheckbox'
+import ModuleAccessCheckbox from './moduleAccessCheckbox'
 import Link from 'next/link'
 import { ArrowLeft, ShieldOff, ChevronDown, ChevronRight, Pencil, Mail } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -51,7 +52,14 @@ interface UserDetailsClientProps {
     subProjectsByProject: Record<string, SubProject[]>
     userSubProjectIds: string[]
     userEmail: string | null
+    modulePermissions: ('tes' | 'dcs' | 'bms')[]
 }
+
+const MODULES: { key: 'tes' | 'dcs' | 'bms'; label: string; description: string }[] = [
+    { key: 'tes', label: 'Timesheet (TES)', description: 'Log hours, expenses and view own reports.' },
+    { key: 'dcs', label: 'Document Control (DCS)', description: 'Document control system — in build.' },
+    { key: 'bms', label: 'BMS', description: 'Not built yet — reserved module slot.' },
+]
 
 export default function UserDetailsClient({
     currentUser,
@@ -60,7 +68,8 @@ export default function UserDetailsClient({
     assignedProjectIds,
     subProjectsByProject,
     userSubProjectIds,
-    userEmail
+    userEmail,
+    modulePermissions
 }: UserDetailsClientProps) {
     const [isPending, startTransition] = useTransition()
     const [deactivateOpen, setDeactivateOpen] = useState(false)
@@ -265,6 +274,36 @@ export default function UserDetailsClient({
                                 <Button variant="outline" size="sm" className="w-full border-amber-300 text-amber-700 hover:bg-amber-50 hover:text-amber-800" onClick={() => setDeactivateOpen(true)}>
                                     <ShieldOff className="mr-2 h-4 w-4" /> Revoke All Access
                                 </Button>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
+
+                {/* Module Access */}
+                <div className="md:col-span-2">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Module Access</CardTitle>
+                            <CardDescription>
+                                Which SCL Portal modules this account may open. TES is granted by
+                                default to every new account; DCS and BMS are admin-only.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="space-y-2">
+                                {MODULES.map((mod) => (
+                                    <div key={mod.key} className="flex items-center justify-between p-4 border rounded-lg">
+                                        <div className="flex flex-col">
+                                            <span className="font-medium text-sm">{mod.label}</span>
+                                            <span className="text-xs text-muted-foreground">{mod.description}</span>
+                                        </div>
+                                        <ModuleAccessCheckbox
+                                            userId={userId}
+                                            module={mod.key}
+                                            initialChecked={modulePermissions.includes(mod.key)}
+                                        />
+                                    </div>
+                                ))}
                             </div>
                         </CardContent>
                     </Card>

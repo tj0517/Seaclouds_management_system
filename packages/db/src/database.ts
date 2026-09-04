@@ -389,6 +389,35 @@ export type Database = {
           },
         ]
       }
+      module_permissions: {
+        Row: {
+          granted_at: string
+          id: string
+          module: Database["public"]["Enums"]["portal_module"]
+          user_id: string
+        }
+        Insert: {
+          granted_at?: string
+          id?: string
+          module: Database["public"]["Enums"]["portal_module"]
+          user_id: string
+        }
+        Update: {
+          granted_at?: string
+          id?: string
+          module?: Database["public"]["Enums"]["portal_module"]
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "module_permissions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pdf_exports: {
         Row: {
           created_at: string | null
@@ -839,6 +868,7 @@ export type Database = {
         | "other"
         | "bus"
         | "train"
+      portal_module: "tes" | "dcs" | "bms"
       project_process_type: "internal" | "tender" | "project" | "course"
       user_role: "admin" | "employee" | "project_lead"
     }
@@ -990,6 +1020,7 @@ export const Constants = {
         "bus",
         "train",
       ],
+      portal_module: ["tes", "dcs", "bms"],
       project_process_type: ["internal", "tender", "project", "course"],
       user_role: ["admin", "employee", "project_lead"],
     },
