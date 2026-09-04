@@ -446,3 +446,30 @@ PR (one topic per PR). Each item names its owner task or trigger:
   modification time the newest/largest file is actually
   `rls_coverage_closeout.test.sql` (1a.10). The convention pointer is
   stale; fix it in a docs-only PR, not here.
+
+## v) Follow-ups noted during DCS 1a.11 (2FA / aal2)
+
+- **`apps/dcs` has no `/admin*` routes yet** (the app is still under
+  construction) — the aal2 gate added to `apps/dcs/proxy.ts` is real code
+  but currently inert there; it starts mattering the moment an `/admin`
+  route is added. Confirmed by reading `apps/dcs/app` (only `login`, `auth`,
+  `data` exist).
+  Nothing was invented to make this "testable" — the RLS-level red proof
+  (dev, direct SQL) is what actually exercises the aal2 logic today.
+- **No forced re-challenge on session refresh beyond `proxy.ts`'s per-request
+  check.** If Supabase ever changes a session's `aal` back to `aal1`
+  mid-session (e.g. after a long-lived refresh token rotation), the next
+  `/admin*` navigation catches it — there is no separate expiry/heartbeat
+  mechanism, none was requested.
+- **No automated (CI) test exercises the `proxy.ts` redirect.** Verified
+  manually against the local stack (Playwright) per the acceptance
+  criteria; a Playwright/e2e suite for auth flows doesn't exist in this repo
+  yet (out of scope — would need its own task to introduce Playwright as a
+  CI dependency, not something to bolt onto this PR).
+- **`public.is_admin()`'s `SECURITY DEFINER` function has no `search_path`
+  pinned** (pre-existing, predates 1a.11) — left untouched; not part of this
+  task's scope and changing it is a STOP-gated function edit of its own.
+- **Admin ALL policy on `dcs.dictionaries` also now requires aal2** — a
+  scope decision made this task (criterion 1 only named DC write access
+  explicitly; extending the same aal2 conjunct to the admin policy was
+  confirmed before writing the migration, not assumed).

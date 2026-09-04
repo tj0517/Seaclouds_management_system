@@ -63,6 +63,33 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
+  // DCS 1a.11 / O-14: admin and DC routes require a verified second factor.
+  // This is UX only — the guarantee that survives a direct API call lives in
+  // the aal2 conjunct on the dcs.dictionaries RLS policies (see
+  // supabase/migrations/20260904160000_dictionaries_dc_aal2.sql). Regular
+  // employees never reach this check.
+  if (
+    user &&
+    request.nextUrl.pathname.startsWith('/admin') &&
+    !request.nextUrl.pathname.startsWith('/mfa')
+  ) {
+    const [{ data: profile }, { data: dcRoles }] = await Promise.all([
+      supabase.from('profiles').select('role').eq('id', user.id).maybeSingle(),
+      supabase.schema('dcs').from('project_roles').select('role').eq('user_id', user.id).eq('role', 'dc').limit(1),
+    ])
+    const isAdmin = profile?.role === 'admin'
+    const isDocController = (dcRoles?.length ?? 0) > 0
+
+    if (isAdmin || isDocController) {
+      const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+      if (aal?.currentLevel !== 'aal2') {
+        const mfaUrl = new URL('/mfa', request.url)
+        mfaUrl.searchParams.set('next', request.nextUrl.pathname)
+        return NextResponse.redirect(mfaUrl)
+      }
+    }
+  }
+
   return response
 }
 

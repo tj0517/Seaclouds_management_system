@@ -10,7 +10,7 @@
 --   outsider created below            no assignment, no role anywhere
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(55);
+select plan(59);
 
 -- ============================================================
 -- Schema assertions (red without the migration)
@@ -63,6 +63,16 @@ select is(
   (select count(*) from pg_policies
     where schemaname = 'dcs' and tablename = 'dictionaries' and cmd = 'DELETE'),
   0::bigint, '1a.09b: no dedicated DELETE policy exists — DELETE stays covered by admin ALL only');
+select is(
+  (select count(*) from pg_policies
+    where schemaname = 'dcs' and tablename = 'dictionaries' and cmd in ('INSERT', 'UPDATE')
+      and with_check like '%aal%'),
+  2::bigint, '1a.11: DC INSERT and UPDATE policies also require aal2 in WITH CHECK');
+select is(
+  (select count(*) from pg_policies
+    where schemaname = 'dcs' and tablename = 'dictionaries' and cmd = 'ALL'
+      and qual like '%aal%' and with_check like '%aal%'),
+  1::bigint, '1a.11: admin ALL policy also requires aal2 (USING and WITH CHECK)');
 
 -- ============================================================
 -- Fixtures (as postgres)
@@ -190,17 +200,31 @@ select throws_ok(
 -- project-less table regardless of which project he is DC of.
 -- ============================================================
 select set_config('request.jwt.claims',
-  json_build_object('sub', (select tymon_id from t_fixture), 'role', 'authenticated')::text, true);
+  json_build_object('sub', (select tymon_id from t_fixture), 'role', 'authenticated', 'aal', 'aal1')::text, true);
 select ok(public.is_doc_controller((select pej_id from t_fixture)),
   'sanity: tymon is a DC (of PEJ) in this session');
 select ok(public.is_any_doc_controller(),
   'sanity: tymon is a DC of some project, so is_any_doc_controller() is true');
-select is((select count(*) from dcs.dictionaries), 2::bigint, 'GREEN: DC reads both rows');
+select is((select count(*) from dcs.dictionaries), 2::bigint, 'GREEN: DC reads both rows (aal2 is not required for SELECT)');
 
+-- RED (1a.11): DC session at aal1 (no verified second factor) is rejected —
+-- is_any_doc_controller() alone is no longer sufficient.
+select throws_ok(
+  $$insert into dcs.dictionaries (dict_type, code, label) values ('discipline', 'A1', 'aal1 insert')$$,
+  '42501', null, 'RED: DC INSERT at aal1 is rejected (42501) — 1a.11');
+update dcs.dictionaries set label = 'aal1 hack' where id = (select active_id from t_fixture);
+select is(
+  (select label from dcs.dictionaries where id = (select active_id from t_fixture)),
+  'Process', 'RED: DC UPDATE at aal1 affects zero rows — 1a.11');
+
+-- Same DC, now at aal2 (second factor verified this session) — 1a.09b's
+-- write access resumes.
+select set_config('request.jwt.claims',
+  json_build_object('sub', (select tymon_id from t_fixture), 'role', 'authenticated', 'aal', 'aal2')::text, true);
 select lives_ok(
   $$insert into dcs.dictionaries (id, dict_type, code, label, sort_order)
     values ('dddddddd-dddd-4ddd-8ddd-ddddddddddd4', 'discipline', 'DC', 'DC-inserted', 40)$$,
-  'GREEN: DC INSERT succeeds (1a.09b)');
+  'GREEN: DC INSERT succeeds at aal2 (1a.09b + 1a.11)');
 -- audit_log has no DC-read policy for project-less rows (DC read is scoped
 -- to project_id is not null); check as postgres, which bypasses RLS, rather
 -- than reintroducing a table grant/policy out of scope for this task.
@@ -213,13 +237,13 @@ select is(
   1::bigint, 'GREEN: DC INSERT is audited with the DC''s own user_id (SECURITY DEFINER keeps caller identity)');
 set local role authenticated;
 select set_config('request.jwt.claims',
-  json_build_object('sub', (select tymon_id from t_fixture), 'role', 'authenticated')::text, true);
+  json_build_object('sub', (select tymon_id from t_fixture), 'role', 'authenticated', 'aal', 'aal2')::text, true);
 
 update dcs.dictionaries set label = 'renamed by DC'
  where id = 'dddddddd-dddd-4ddd-8ddd-ddddddddddd4';
 select is(
   (select label from dcs.dictionaries where id = 'dddddddd-dddd-4ddd-8ddd-ddddddddddd4'),
-  'renamed by DC', 'GREEN: DC UPDATE takes effect (1a.09b)');
+  'renamed by DC', 'GREEN: DC UPDATE takes effect at aal2 (1a.09b + 1a.11)');
 
 -- No dedicated DC DELETE policy exists, so the only applicable policy for
 -- DELETE is "Admins manage dictionaries" (FOR ALL), whose USING is_admin()
@@ -232,10 +256,10 @@ select is((select count(*) from dcs.dictionaries where id = 'dddddddd-dddd-4ddd-
 -- Neither admin nor DC (ernest, plain employee): still fully rejected —
 -- the red proof this section used to carry moves here.
 select set_config('request.jwt.claims',
-  json_build_object('sub', (select ernest_id from t_fixture), 'role', 'authenticated')::text, true);
+  json_build_object('sub', (select ernest_id from t_fixture), 'role', 'authenticated', 'aal', 'aal2')::text, true);
 select throws_ok(
   $$insert into dcs.dictionaries (dict_type, code, label) values ('discipline', 'NE', 'Not a DC')$$,
-  '42501', null, 'RED: non-admin non-DC INSERT is rejected (42501)');
+  '42501', null, 'RED: non-admin non-DC INSERT is rejected (42501) even at aal2');
 update dcs.dictionaries set label = 'hacked again'
  where id = 'dddddddd-dddd-4ddd-8ddd-ddddddddddd4';
 select is(
@@ -251,7 +275,7 @@ set local role authenticated;
 -- 6. Admin: full write access, every write lands in audit_log
 -- ============================================================
 select set_config('request.jwt.claims',
-  json_build_object('sub', (select admin_id from t_fixture), 'role', 'authenticated')::text, true);
+  json_build_object('sub', (select admin_id from t_fixture), 'role', 'authenticated', 'aal', 'aal2')::text, true);
 
 -- The constraint section above produced INSERT+DELETE pairs of its own;
 -- count only the two live fixture ids.

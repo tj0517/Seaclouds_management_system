@@ -310,10 +310,10 @@ select is((select count(*) from public.project_assignments), (select total_assig
 -- 1a.09b: is_any_doc_controller() is project-less, so DC of IT can insert
 -- into this project-less table exactly like DC of PEJ.
 select set_config('request.jwt.claims',
-  json_build_object('sub', (select otherdc_id from t_fixture), 'role', 'authenticated')::text, true);
+  json_build_object('sub', (select otherdc_id from t_fixture), 'role', 'authenticated', 'aal', 'aal2')::text, true);
 select lives_ok(
   $$insert into dcs.dictionaries (dict_type, code, label) values ('area', 'ODC', 'x')$$,
-  'dictionaries GREEN: DC of IT can insert (1a.09b, is_any_doc_controller is project-less)');
+  'dictionaries GREEN: DC of IT can insert at aal2 (1a.09b is_any_doc_controller is project-less; 1a.11 aal2)');
 reset role;
 delete from dcs.dictionaries where dict_type = 'area' and code = 'ODC';
 set local role authenticated;
