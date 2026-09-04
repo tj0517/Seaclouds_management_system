@@ -8,6 +8,7 @@
     "build": "turbo run build",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
+    "test:unit": "turbo run test:unit",
     "db:gen": "supabase gen types typescript --local > packages/db/src/database.ts && turbo run typecheck"
   },
   "devDependencies": {

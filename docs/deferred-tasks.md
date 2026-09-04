@@ -427,3 +427,22 @@ PR (one topic per PR). Each item names its owner task or trigger:
   the `public` section of `database.ts`. Five of seven would still have
   rebuilt Timesheet. Not worth a package split at this stage; revisit when
   Phase 1b adds many `dcs`-only tables.
+
+## u) Follow-ups noted during DCS 1a.12 (`auth-helpers.ts` project-role guard)
+
+- **The `cache()` wiring in `apps/dcs/app/data/actions/auth-helpers.ts` is
+  not independently unit-tested.** React's `cache()` is a verified no-op
+  outside a Next.js render (checked directly against
+  `node_modules/react/cjs/react.production.js`: `exports.cache = fn =>
+  (...args) => fn.apply(null, args)`), so a Vitest/node process can't
+  exercise its per-request dedup. `apps/dcs/lib/auth-helpers.test.ts` tests
+  `loadUserProjectRoles` — the dedup logic itself — against an explicit
+  `Map` the caller owns, which is correct by construction under Next.js but
+  leaves the `cache()` glue itself unverified by any automated test. No
+  action proposed; same limitation Next's own `fetch` dedup has.
+- **`docs/03-conventions.md` names `rls_timesheet_entries.test.sql` as the
+  pgTAP pattern to follow**, but the current DCS pattern is
+  `rls_project_roles.test.sql` (which superseded it), and by file
+  modification time the newest/largest file is actually
+  `rls_coverage_closeout.test.sql` (1a.10). The convention pointer is
+  stale; fix it in a docs-only PR, not here.
