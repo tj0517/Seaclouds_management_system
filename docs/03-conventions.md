@@ -112,6 +112,26 @@ osiągalnym celem dla tego projektu.
 - `apps/dcs`: klient Supabase zawsze z generykiem `<Database>`; zakaz
   `as any` na zapytaniach (dług Timesheet nie przechodzi do DCS).
 
+## Workspace (pnpm) i zakres buildów Vercela
+
+- Członkami workspace (`pnpm-workspace.yaml`) są `apps/*`, `packages/*`
+  oraz — celowo — trzy katalogi bez kodu: `docs`, `supabase`, `scripts`,
+  każdy z własnym `package.json` (`@scl/docs`, `@scl/supabase`,
+  `@scl/scripts`; `private: true`, wersja `0.0.0`, bez skryptów, bez
+  zależności). Powód: Vercel pomija build projektu nieobjętego zmianą tylko
+  wtedy, gdy zmienione pliki należą do jakiegoś pakietu workspace; zmiana
+  poza pakietami jest „globalna” i przebudowuje oba projekty. Dzięki
+  członkostwu PR z samą migracją, testem pgTAP, dokumentacją lub skryptem
+  CI nie buduje aplikacji. Nic nie może zależeć od tych trzech pakietów
+  i nie wolno dodawać im skryptu `build` — turbo ma je widzieć jako
+  no-op (`<NONEXISTENT>` w `turbo run build --dry`).
+- Ograniczenie, którego to nie usuwa: `packages/db/src/database.ts` jest
+  jednym plikiem dla obu produktów, a `@scl/db` jest zależnością obu
+  aplikacji, więc każda migracja z regeneracją typów przebudowuje
+  Timesheet i DCS. Podział typów — `docs/deferred-tasks.md` (s).
+- Nowy katalog top-level, który będzie dotykany w zwykłych PR-ach, dostaje
+  taki sam pusty `package.json` i wpis w `pnpm-workspace.yaml`.
+
 ## PR-y
 
 - Jeden temat na PR; migracja + RLS + test pgTAP + regeneracja typów razem.
