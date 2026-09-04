@@ -6,7 +6,7 @@
 // enrol (QR + verify); a verified factor but an aal1 session -> challenge
 // (code only). Employees never reach this route (proxy.ts only redirects
 // admin/DC paths).
-import { useEffect, useRef, useState } from 'react'
+import { Suspense, useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@scl/db/client'
 import { Loader2, AlertCircle } from 'lucide-react'
@@ -18,6 +18,22 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 type Factor = { id: string; status: string }
 
 export default function MfaPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      }
+    >
+      <MfaPageInner />
+    </Suspense>
+  )
+}
+
+// useSearchParams() opts the page out of static generation unless wrapped in
+// its own Suspense boundary (Next.js requirement for the production build).
+function MfaPageInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const next = searchParams.get('next') ?? '/'
