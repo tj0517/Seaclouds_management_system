@@ -16,7 +16,7 @@
 --   outsider created below            no assignment, no role anywhere
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(59);
+select plan(60);
 
 -- ============================================================
 -- Fixtures (as postgres)
@@ -90,7 +90,8 @@ select ok(public.has_project_role((select pej_id from t_fixture), array['orig', 
 select ok(not public.has_project_role((select pej_id from t_fixture), array['orig', 'rev', 'chk', 'view']::dcs.project_role[]),
   'has_project_role: array of roles NOT held → false');
 select ok(not public.has_project_role((select pej_id from t_fixture), array[]::dcs.project_role[]),
-  'has_project_role: empty array → false');
+  'RED PROOF (scratch, to be reverted): empty array → false');
+select ok(public.has_project_role((select pej_id from t_fixture), array[]::dcs.project_role[]), 'RED PROOF: deliberately wrong — empty array must be false');
 select ok(public.has_project_role((select pej_id from t_fixture), array['dc']::dcs.project_role[]) is not null,
   'has_project_role: never returns NULL (policies would treat NULL as deny, but the contract is boolean)');
 -- roles are per project: dc+app on PEJ says nothing about IT
