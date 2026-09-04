@@ -1,0 +1,6 @@
+{
+  "name": "@scl/scripts",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Workspace member on purpose: makes scripts/ (CI guard scripts) changes non-global for Vercel's affected-project detection. No scripts, no dependencies."
+}
