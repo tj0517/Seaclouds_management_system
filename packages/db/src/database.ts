@@ -9,6 +9,45 @@ export type Json =
 export type Database = {
   dcs: {
     Tables: {
+      dictionaries: {
+        Row: {
+          code: string
+          created_at: string
+          description: string | null
+          dict_type: string
+          id: string
+          is_active: boolean
+          label: string
+          meta: Json
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          description?: string | null
+          dict_type: string
+          id?: string
+          is_active?: boolean
+          label: string
+          meta?: Json
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          description?: string | null
+          dict_type?: string
+          id?: string
+          is_active?: boolean
+          label?: string
+          meta?: Json
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       mdr_settings: {
         Row: {
           budget_hours: number | null
