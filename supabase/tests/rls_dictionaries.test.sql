@@ -10,7 +10,7 @@
 --   outsider created below            no assignment, no role anywhere
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(41);
+select plan(48);
 
 -- ============================================================
 -- Schema assertions (red without the migration)
@@ -99,11 +99,31 @@ select lives_ok(
 select throws_ok(
   $$insert into dcs.dictionaries (dict_type, code, label) values ('colour', 'RED', 'Not a dictionary')$$,
   '23514', null, 'RED: dict_type outside the CHECK list is rejected (23514)');
-select lives_ok(
-  $$insert into dcs.dictionaries (dict_type, code, label) values
-    ('doc_type', 'T', 't'), ('language', 'T', 't'), ('acceptance_code', 'T', 't'),
-    ('workflow_status', 'T', 't'), ('workflow_step', 'T', 't')$$,
-  'GREEN: every listed dict_type is accepted');
+-- All seven dictionary types, one INSERT each. The list below is pinned on
+-- purpose: it is the same list as DICT_TYPES in apps/dcs/lib/dictionaries.ts
+-- (scripts/check-dict-types.sh compares TS ↔ CHECK in CI); here the CHECK
+-- itself is pinned so a migration widening or narrowing it fails this test.
+select lives_ok($$insert into dcs.dictionaries (dict_type, code, label) values ('doc_type', 'T', 't')$$,
+  'GREEN: dict_type doc_type is accepted');
+select lives_ok($$insert into dcs.dictionaries (dict_type, code, label) values ('discipline', 'T', 't')$$,
+  'GREEN: dict_type discipline is accepted');
+select lives_ok($$insert into dcs.dictionaries (dict_type, code, label) values ('area', 'T', 't')$$,
+  'GREEN: dict_type area is accepted');
+select lives_ok($$insert into dcs.dictionaries (dict_type, code, label) values ('language', 'T', 't')$$,
+  'GREEN: dict_type language is accepted');
+select lives_ok($$insert into dcs.dictionaries (dict_type, code, label) values ('acceptance_code', 'T', 't')$$,
+  'GREEN: dict_type acceptance_code is accepted');
+select lives_ok($$insert into dcs.dictionaries (dict_type, code, label) values ('workflow_status', 'T', 't')$$,
+  'GREEN: dict_type workflow_status is accepted');
+select lives_ok($$insert into dcs.dictionaries (dict_type, code, label) values ('workflow_step', 'T', 't')$$,
+  'GREEN: dict_type workflow_step is accepted');
+select bag_eq(
+  $$select m[1] from pg_constraint c
+     cross join lateral regexp_matches(pg_get_constraintdef(c.oid), '''([a-z_]+)''', 'g') as m
+    where c.conrelid = 'dcs.dictionaries'::regclass and c.contype = 'c'$$,
+  $$values ('doc_type'), ('discipline'), ('area'), ('language'),
+           ('acceptance_code'), ('workflow_status'), ('workflow_step')$$,
+  'the dict_type CHECK accepts exactly these seven values (pinned; mirror of DICT_TYPES)');
 delete from dcs.dictionaries where code = 'T' or (dict_type = 'area' and code = 'PR');
 
 -- ============================================================

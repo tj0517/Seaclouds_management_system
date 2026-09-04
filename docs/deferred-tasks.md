@@ -354,10 +354,10 @@ PR (one topic per PR). Each item names its owner task or trigger:
   the row comment already says the app never deletes.
 - **`DICT_TYPES` in `apps/dcs/lib/dictionaries.ts` duplicates the CHECK
   list** by hand — unavoidable while `dict_type` is text (the generated
-  types carry no literal union for a CHECK). When a type is added, the
-  migration and this constant change together; a cheap guard would be a
-  pgTAP assertion pinning the exact CHECK expression, added with the first
-  new type.
+  types carry no literal union for a CHECK). Guarded since PR #26: CI step
+  `scripts/check-dict-types.sh` (TS list ↔ CHECK in the local DB) and a
+  pinned `bag_eq` in `rls_dictionaries.test.sql`. Adding a type = migration
+  + constant + test list, in one PR.
 - **Audit rows of `dcs.dictionaries` are admin-only** (`project_id` NULL,
   like `profiles`/`clients`). Once DCs edit dictionaries (1a.15) they will
   not see their own changes in the log; either widen the audit_log DC
@@ -370,12 +370,11 @@ PR (one topic per PR). Each item names its owner task or trigger:
   `default_budget_hours` for `doc_type`, `colour` for `workflow_status`).
   Define the shape with the seed (1a.18) and the screen (1a.15); a CHECK
   per type can follow once the keys are settled (O-05 for colours).
-- **CLAUDE.md wording "każda tabela `dcs.*`: kolumna `project_id`"** now has
-  one deliberate exception (`dictionaries`, company-wide). The rule text
-  itself was not edited in this PR — owner's call whether to amend it to
-  "every table with project data" (as `docs/03-conventions.md` already
-  phrases it) or to keep it absolute with the exception listed in
-  `02-data-model.md`.
+- ~~**CLAUDE.md wording "każda tabela `dcs.*`: kolumna `project_id`"**~~ —
+  **resolved** in PR #26 (owner's decision 2026-09-04): rule softened to
+  "every `dcs.*` table with project data carries `project_id`; a global or
+  dictionary table needs an explicit entry in `02-data-model.md`". RLS +
+  policies + pgTAP stay mandatory for every table.
 - **Task prompt pointed at `20260827125731_remote_schema.sql` for
   `audit_trigger()`** — the function is not in that baseline; it lives in
   `20260903173128_create_audit_log.sql`. Read from there and from scl-dev.

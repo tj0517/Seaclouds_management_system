@@ -193,9 +193,10 @@ i `service_role` — **bez anon i bez PUBLIC**, spójnie z `public` po migracji
 Reguła nienegocjowalna: każda tabela `dcs.*` ma `project_id` + RLS + polityki
 + test pgTAP w tym samym PR (patrz `CLAUDE.md`). Tam, gdzie `project_id` nie
 jest kluczem naturalnym (np. `files`), jest denormalizowany właśnie pod RLS.
-Wyjątek od `project_id`: `dcs.dictionaries` (słownik firmowy — uzasadnienie
-w jej sekcji). Poza `mdr_settings`, `project_roles` i `dictionaries` całość
-poniżej to 📐 PROJEKT.
+Tabele bez danych projektowych (słownikowe/globalne) nie mają `project_id`
+i muszą być tu jawnie opisane — dziś: `dcs.dictionaries`. Poza
+`mdr_settings`, `project_roles` i `dictionaries` całość poniżej to
+📐 PROJEKT.
 
 ### ✅ `dcs.mdr_settings` (1:1 z `projects`)
 `project_id (PK/FK → projects, ON DELETE CASCADE)`, `cpy_numbering bool
@@ -279,16 +280,19 @@ Decyzje 1a.07:
   w kolejnych fazach, dopisanie typu ma być zwykłą migracją, nie `ALTER
   TYPE` za bramką STOP. Konsekwencja w TS: lista `DICT_TYPES`
   w `apps/dcs/lib/dictionaries.ts` jest ręczna i musi być utrzymywana
-  razem z CHECK-iem (`docs/deferred-tasks.md` r).
+  razem z CHECK-iem; rozjazd łapie guard CI `scripts/check-dict-types.sh`
+  i przypięta lista w teście pgTAP.
 - Języki (`language`) i statusy/kroki obiegu (`workflow_status`,
   `workflow_step`) są **słownikami**, nie enumami — koryguje wcześniejszy
-  zapis w sekcji „Słowniki” niżej. Enum `dcs.step` opisany przy
-  `plan_dates`/`revisions` pozostaje projektem do decyzji przy 1b (kolumny
-  stanu maszyny stanów mogą wymagać enuma niezależnie od słownika
-  etykiet). `projects.process_type` zostaje enumem (decyzja z taska).
-- **Bez `project_id`** — jedyny świadomy wyjątek od reguły „każda tabela
-  `dcs.*` ma `project_id`”: słownik jest firmowy, kod ma jedno znaczenie
-  we wszystkich projektach, a UNIQUE `(dict_type, code)` jest globalny.
+  zapis w sekcji „Słowniki” niżej. Czy kolumny stanu przy
+  `plan_dates`/`revisions` używają enuma `dcs.step`, czy FK do słownika
+  `workflow_step` — punkt otwarty O-15, do rozstrzygnięcia przed 1b.
+  `projects.process_type` zostaje enumem (decyzja z taska).
+- **Bez `project_id`** — tabela słownikowa w rozumieniu reguły z `CLAUDE.md`
+  („tabela z danymi projektowymi niesie `project_id`; globalna lub
+  słownikowa wymaga wpisu tutaj”): słownik jest firmowy, kod ma jedno
+  znaczenie we wszystkich projektach, a UNIQUE `(dict_type, code)` jest
+  globalny.
   `audit_trigger()` obsługuje ten kształt bez zmian (`project_id` NULL,
   jak `profiles`/`clients`).
 - Dezaktywacja zamiast kasowania: `is_active = false` ukrywa pozycję
