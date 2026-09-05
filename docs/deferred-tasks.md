@@ -512,15 +512,13 @@ PR (one topic per PR). Each item names its owner task or trigger:
 - **`apps/dcs/app/(app)/page.tsx` still carries the `dcs.mdr_settings`
   RLS-probe debug block** from 1a.05/1a.09 test scaffolding, moved as-is into
   the new route shell. It still demonstrates RLS correctly (unfiltered
-  select + CHECK-tripping write probe). **No task number is pinned to
-  removing it** — checked `02-data-model.md` and the ADRs for a named "real
-  project list screen" task and found none. The two candidates that touch
-  this page's territory are 1a.17 (Create Project MDR wizard — creates one
-  project, doesn't list them) and 1a.14 (role matrix screen — likely reached
-  by clicking into a project from a list), but neither is documented as
-  owning this specific page. Whichever task first gives DCS a real
-  project-list/dashboard screen should absorb this trim; not guessing
-  further than that here.
+  select + CHECK-tripping write probe). **Owner: 1b.05**, where the MDR
+  register replaces this placeholder project list and the block disappears
+  on its own (owner's decision, 2026-09-05 — no task number for this was
+  documented before that). Superseded candidates checked and ruled out:
+  1a.17 (Create Project MDR wizard — creates one project, doesn't list
+  them) and 1a.14 (role matrix screen — reached by clicking into a project
+  from a list, doesn't own the list itself).
 - **No mobile drawer/hamburger on `apps/dcs/components/DcsSidebar.tsx`**,
   unlike Timesheet's `AdminSidebar` (which has one). DCS has exactly one nav
   entry today ("Projects"). Trigger: **1a.14** (role matrix screen) —
