@@ -162,14 +162,13 @@ function MfaPageInner() {
         </p>
 
         {mode === 'new' && qrCode && (
-          // totp.qr_code from supabase-js is a raw <svg> XML string, not a
-          // data: URI — an <img src> never renders it. Inlining it directly
-          // is the documented approach (Supabase's own examples do the
-          // same) — the SVG comes from our own GoTrue instance, not user input.
-          <div
-            className="mb-4 flex justify-center [&_svg]:h-[200px] [&_svg]:w-[200px]"
-            dangerouslySetInnerHTML={{ __html: qrCode }}
-          />
+          // supabase-js prefixes totp.qr_code with `data:image/svg+xml;utf-8,`
+          // itself (see @supabase/auth-js GoTrueClient.enroll) — it's a ready
+          // <img src> value, not raw SVG markup to inline.
+          <div className="mb-4 flex justify-center">
+            {/* eslint-disable-next-line @next/next/no-img-element -- data: URI, next/image can't optimize it */}
+            <img src={qrCode} alt="Scan with your authenticator app" className="h-[200px] w-[200px]" />
+          </div>
         )}
 
         <form onSubmit={handleVerify} className="space-y-4">
