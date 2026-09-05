@@ -1,4 +1,3 @@
-import { redirect } from 'next/navigation'
 import { createClient } from '@scl/db/server'
 
 export default async function ProjectsPage() {
@@ -7,15 +6,8 @@ export default async function ProjectsPage() {
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  if (!user) {
-    redirect('/login')
-  }
-
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('full_name, role')
-    .eq('id', user.id)
-    .single()
+  // Layout already guarantees a session; RLS queries below still need the id.
+  if (!user) return null
 
   // Deliberately unfiltered: `projects` carries an inherited TES policy that
   // grants SELECT to every authenticated user, so everyone sees the full list.
@@ -64,26 +56,9 @@ export default async function ProjectsPage() {
         : `unexpected: ${writeProbeError ? `${writeProbeError.code} ${writeProbeError.message}` : 'insert succeeded — probe is broken'}`
 
   return (
-    <main className="mx-auto max-w-3xl px-4 py-10">
-      <header className="mb-8 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">SCL DCS</h1>
-          <p className="text-sm text-gray-500">
-            Signed in as {profile?.full_name ?? user.email} ({profile?.role ?? 'unknown role'})
-          </p>
-        </div>
-        <form action="/auth/signout" method="post">
-          <button
-            type="submit"
-            className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium hover:bg-gray-100"
-          >
-            Sign out
-          </button>
-        </form>
-      </header>
-
-      <h2 className="mb-1 text-lg font-semibold">Projects</h2>
-      <p className="mb-3 text-xs text-gray-500">
+    <div className="mx-auto max-w-3xl">
+      <h1 className="mb-1 text-2xl font-bold">Projects</h1>
+      <p className="mb-4 text-xs text-gray-500">
         Unfiltered read of public.projects — the inherited policy shows every
         project to every signed-in user.
       </p>
@@ -140,6 +115,6 @@ export default async function ProjectsPage() {
           difference.
         </p>
       </section>
-    </main>
+    </div>
   )
 }

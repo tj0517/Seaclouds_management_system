@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { getUserProfile, getMyProjects, getWeeklyEntries, isWeekSubmitted, getMyAssignedSubProjects, getWeeklyContractCodes } from '@/app/data/actions'
+import { getUserProfile, getMyProjects, getWeeklyEntries, isWeekSubmitted, getMyAssignedSubProjects, getWeeklyContractCodes, getMyModulePermissions } from '@/app/data/actions'
 import TimesheetGrid from './components/timesheetGrid'
 import { startOfWeek, endOfWeek, format, addWeeks, subWeeks, parseISO, isValid } from 'date-fns'
 import Link from 'next/link'
@@ -7,6 +7,7 @@ import Image from 'next/image'
 import { Shield, ChevronLeft, ChevronRight, Calendar, Receipt } from 'lucide-react'
 import AccountMenu from './components/AccountMenu'
 import ExportPdfButton from './components/ExportPdfButton'
+import ModuleSwitcher from './components/ModuleSwitcher'
 
 // Definiujemy typ propsów z searchParams (w Next.js 15+ to Promise)
 type Props = {
@@ -65,6 +66,7 @@ export default async function Home(props: Props) {
   const initialSubmissionStatus: Record<string, { status: string; rejectReason: string | null } | null> = Object.assign({}, ...submissionStatuses)
 
   const contractCodes = await getWeeklyContractCodes(user.id, format(weekStart, 'yyyy-MM-dd'))
+  const myModules = await getMyModulePermissions()
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -86,6 +88,7 @@ export default async function Home(props: Props) {
                   <Shield size={16} /> <span className="hidden sm:inline">{isAdmin ? 'Admin' : 'Lead'}</span>
                 </Link>
               )}
+              <ModuleSwitcher hasDcsAccess={myModules.includes('dcs')} />
               <AccountMenu email={user.email || ''} />
             </nav>
           </div>

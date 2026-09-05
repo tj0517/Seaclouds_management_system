@@ -1,10 +1,11 @@
 import { redirect } from 'next/navigation'
-import { getUserProfile, getMyProjects, getExpenseTables, getExpenseEntries } from '@/app/data/actions'
+import { getUserProfile, getMyProjects, getExpenseTables, getExpenseEntries, getMyModulePermissions } from '@/app/data/actions'
 import type { ExpenseTableWithProject, ExpenseEntry } from '@/app/data/actions/expenses'
 import ExpensesGrid from './ExpensesGrid'
 import Link from 'next/link'
 import { ChevronLeft, Shield } from 'lucide-react'
 import AccountMenu from '../components/AccountMenu'
+import ModuleSwitcher from '../components/ModuleSwitcher'
 
 export default async function ExpensesPage() {
     const result = await getUserProfile()
@@ -15,6 +16,7 @@ export default async function ExpensesPage() {
 
     const projects = await getMyProjects()
     const tables = await getExpenseTables()
+    const myModules = await getMyModulePermissions()
 
     // Fetch entries for each table
     const tablesWithEntries = await Promise.all(
@@ -45,6 +47,7 @@ export default async function ExpensesPage() {
                                 <Shield size={16} /> <span className="hidden sm:inline">Admin Panel</span>
                             </Link>
                         )}
+                        <ModuleSwitcher hasDcsAccess={myModules.includes('dcs')} />
                         <AccountMenu email={user.email || ''} />
                     </div>
                 </div>
