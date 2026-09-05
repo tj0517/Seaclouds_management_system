@@ -512,19 +512,23 @@ PR (one topic per PR). Each item names its owner task or trigger:
 - **`apps/dcs/app/(app)/page.tsx` still carries the `dcs.mdr_settings`
   RLS-probe debug block** from 1a.05/1a.09 test scaffolding, moved as-is into
   the new route shell. It still demonstrates RLS correctly (unfiltered
-  select + CHECK-tripping write probe); trimming it down to a bare project
-  list — matching the letter of 1a.13's "for now: a project list" — belongs
-  to whichever task first replaces this page with the real project list
-  screen (1a.14/1a.15 territory), not decided here.
+  select + CHECK-tripping write probe). **No task number is pinned to
+  removing it** — checked `02-data-model.md` and the ADRs for a named "real
+  project list screen" task and found none. The two candidates that touch
+  this page's territory are 1a.17 (Create Project MDR wizard — creates one
+  project, doesn't list them) and 1a.14 (role matrix screen — likely reached
+  by clicking into a project from a list), but neither is documented as
+  owning this specific page. Whichever task first gives DCS a real
+  project-list/dashboard screen should absorb this trim; not guessing
+  further than that here.
 - **No mobile drawer/hamburger on `apps/dcs/components/DcsSidebar.tsx`**,
   unlike Timesheet's `AdminSidebar` (which has one). DCS has exactly one nav
-  entry today ("Projects"), so a collapsible drawer had no real content to
-  justify the complexity. Add one when DCS's nav grows past a single link.
+  entry today ("Projects"). Trigger: **1a.14** (role matrix screen) —
+  confirmed DCS-side (`docs/02-data-model.md`: its guard lives in
+  `apps/dcs/app/data/actions/project-roles.ts`) and the next planned DCS UI
+  task, so it is the first one that actually adds a second nav entry.
 - **`DcsSidebar` nav uses plain text, no icon library** —
   `apps/dcs/package.json` still has no icon dependency (unlike Timesheet's
-  `lucide-react`). Deliberate: adding a library for one nav link is
-  disproportionate. Revisit together with the point above when the nav
-  grows (1a.14+ likely).
-
-Trigger for all three: whichever task next expands `apps/dcs`'s route list
-past the single project-list page.
+  `lucide-react`). Same trigger as above: **1a.14** — add an icon library
+  together with the drawer once there is more than one nav entry to
+  distinguish.
