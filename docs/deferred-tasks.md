@@ -506,3 +506,27 @@ PR (one topic per PR). Each item names its owner task or trigger:
   order. Not fixed here: no acceptance criterion needs the local seed's
   admin fixture to have DCS access, and teaching the seed script about this
   ordering is separate from the table itself.
+
+## x) Follow-ups noted during DCS 1a.13 (module switcher)
+
+- **`apps/dcs/app/(app)/page.tsx` still carries the `dcs.mdr_settings`
+  RLS-probe debug block** from 1a.05/1a.09 test scaffolding, moved as-is into
+  the new route shell. It still demonstrates RLS correctly (unfiltered
+  select + CHECK-tripping write probe). **Owner: 1b.05**, where the MDR
+  register replaces this placeholder project list and the block disappears
+  on its own (owner's decision, 2026-09-05 — no task number for this was
+  documented before that). Superseded candidates checked and ruled out:
+  1a.17 (Create Project MDR wizard — creates one project, doesn't list
+  them) and 1a.14 (role matrix screen — reached by clicking into a project
+  from a list, doesn't own the list itself).
+- **No mobile drawer/hamburger on `apps/dcs/components/DcsSidebar.tsx`**,
+  unlike Timesheet's `AdminSidebar` (which has one). DCS has exactly one nav
+  entry today ("Projects"). Trigger: **1a.14** (role matrix screen) —
+  confirmed DCS-side (`docs/02-data-model.md`: its guard lives in
+  `apps/dcs/app/data/actions/project-roles.ts`) and the next planned DCS UI
+  task, so it is the first one that actually adds a second nav entry.
+- **`DcsSidebar` nav uses plain text, no icon library** —
+  `apps/dcs/package.json` still has no icon dependency (unlike Timesheet's
+  `lucide-react`). Same trigger as above: **1a.14** — add an icon library
+  together with the drawer once there is more than one nav entry to
+  distinguish.

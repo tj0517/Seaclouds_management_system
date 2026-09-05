@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { LayoutDashboard, FolderKanban, Users, LogOut, FileText, Clock, Menu, X, Download, Receipt, TrendingUp } from 'lucide-react'
+import ModuleSwitcher from '../components/ModuleSwitcher'
 
 const allNavLinks = [
     { href: '/admin', icon: LayoutDashboard, label: 'Dashboard' },
@@ -16,7 +17,15 @@ const allNavLinks = [
     { href: '/', icon: Clock, label: 'Log Hours' },
 ]
 
-export default function AdminSidebar({ email, role }: { email: string; role: string }) {
+export default function AdminSidebar({
+    email,
+    role,
+    hasDcsAccess,
+}: {
+    email: string
+    role: string
+    hasDcsAccess: boolean
+}) {
     const [open, setOpen] = useState(false)
 
     const isLead = role === 'project_lead'
@@ -24,9 +33,10 @@ export default function AdminSidebar({ email, role }: { email: string; role: str
 
     const sidebarContent = (
         <>
-            <div className="p-6 border-b flex flex-col items-center">
+            <div className="p-6 border-b flex flex-col items-center gap-2">
                 <Image src="/logo.png" alt="Sea Clouds" width={110} height={110} />
-                <p className="text-xs text-gray-500 mt-1 text-center">{email}</p>
+                <p className="text-xs text-gray-500 text-center">{email}</p>
+                <ModuleSwitcher hasDcsAccess={hasDcsAccess} />
             </div>
             <nav className="flex-1 p-4 space-y-2">
                 {navLinks.map(({ href, icon: Icon, label }) => (

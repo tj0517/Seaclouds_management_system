@@ -1,5 +1,5 @@
 // app/admin/layout.tsx
-import { getUserProfile } from '@/app/data/actions'
+import { getUserProfile, getMyModulePermissions } from '@/app/data/actions'
 import { isAdminOrPM } from '@/app/data/actions/auth-helpers'
 import { redirect } from 'next/navigation'
 import AdminSidebar from './AdminSidebar'
@@ -21,9 +21,11 @@ export default async function AdminLayout({
     redirect('/')
   }
 
+  const myModules = await getMyModulePermissions()
+
   return (
     <div className="flex h-screen bg-gray-100">
-      <AdminSidebar email={result.user.email} role={profile.role} />
+      <AdminSidebar email={result.user.email} role={profile.role} hasDcsAccess={myModules.includes('dcs')} />
 
       {/* GŁÓWNA TREŚĆ */}
       <main className="flex-1 overflow-auto p-8">
