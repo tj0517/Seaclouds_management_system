@@ -14,8 +14,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-
-type Factor = { id: string; status: string }
+import { resolveMfaFactorState } from '@/lib/mfa-factor-state'
 
 export default function MfaPage() {
   return (
@@ -42,8 +41,13 @@ function MfaPageInner() {
   const [error, setError] = useState<string | null>(null)
   const [code, setCode] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [startingOver, setStartingOver] = useState(false)
 
-  const [enrolling, setEnrolling] = useState(false)
+  // 'new': no factor at all, we just enrolled one (has a QR to show).
+  // 'pending': an earlier enroll() already minted a factor and secret that
+  // GoTrue will never hand back — reuse it instead of enrolling again.
+  // 'verified': normal aal1 -> aal2 challenge, no enrolment involved.
+  const [mode, setMode] = useState<'new' | 'pending' | 'verified'>('new')
   const [qrCode, setQrCode] = useState<string | null>(null)
   const [factorId, setFactorId] = useState<string | null>(null)
 
@@ -61,20 +65,22 @@ function MfaPageInner() {
         setLoading(false)
         return
       }
-      const verified = (data?.totp ?? []).find((f: Factor) => f.status === 'verified')
-      if (verified) {
-        setFactorId(verified.id)
-        setEnrolling(false)
+      const state = resolveMfaFactorState(data?.all ?? [])
+
+      if (state.mode === 'verified' || state.mode === 'pending') {
+        setMode(state.mode)
+        setFactorId(state.factorId)
         setLoading(false)
         return
       }
-      setEnrolling(true)
+
+      setMode('new')
       // GoTrue enforces a unique friendly_name per user across factors, and
       // an abandoned enrolment (QR scanned, tab closed before verifying)
       // leaves an unverified factor behind under the default empty name —
       // colliding with a fresh enroll() call (422 mfa_factor_name_conflict).
       // A per-attempt friendly name sidesteps that regardless of what is
-      // left over, without needing to enumerate and delete old factors.
+      // left over.
       supabase.auth.mfa
         .enroll({ factorType: 'totp', friendlyName: `totp-${Date.now()}` })
         .then(({ data: enrollData, error: enrollError }) => {
@@ -108,6 +114,38 @@ function MfaPageInner() {
     router.refresh()
   }
 
+  // Discarding a stale, unfinished enrolment is a deliberate user choice, not
+  // a side effect of a reload — this is the only place old unverified
+  // factors get cleaned up.
+  async function handleStartOver() {
+    setStartingOver(true)
+    setError(null)
+
+    const supabase = createClient()
+    const { data } = await supabase.auth.mfa.listFactors()
+    const stale = (data?.all ?? []).filter(
+      (f) => (f.factor_type ?? 'totp') === 'totp' && f.status !== 'verified'
+    )
+    await Promise.all(stale.map((f) => supabase.auth.mfa.unenroll({ factorId: f.id })))
+
+    const { data: enrollData, error: enrollError } = await supabase.auth.mfa.enroll({
+      factorType: 'totp',
+      friendlyName: `totp-${Date.now()}`,
+    })
+
+    if (enrollError) {
+      setError(enrollError.message)
+      setStartingOver(false)
+      return
+    }
+
+    setMode('new')
+    setFactorId(enrollData.id)
+    setQrCode(enrollData.totp.qr_code)
+    setCode('')
+    setStartingOver(false)
+  }
+
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -122,13 +160,15 @@ function MfaPageInner() {
         <CardHeader className="text-center space-y-1">
           <CardTitle className="text-2xl font-bold">Two-factor authentication</CardTitle>
           <CardDescription>
-            {enrolling
-              ? 'Admin and Document Controller accounts require an authenticator app. Scan the code, then enter the 6-digit code it shows.'
-              : 'Enter the 6-digit code from your authenticator app.'}
+            {mode === 'new' &&
+              'Admin and Document Controller accounts require an authenticator app. Scan the code, then enter the 6-digit code it shows.'}
+            {mode === 'pending' &&
+              'You already started setting up an authenticator app for this account but did not finish. Enter the 6-digit code it is showing, or start over with a new code.'}
+            {mode === 'verified' && 'Enter the 6-digit code from your authenticator app.'}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {enrolling && qrCode && (
+          {mode === 'new' && qrCode && (
             // totp.qr_code from supabase-js is a raw <svg> XML string, not a
             // data: URI — an <img src> never renders it. Inlining it directly
             // is the documented approach (Supabase's own examples do the
@@ -164,6 +204,18 @@ function MfaPageInner() {
             <Button type="submit" className="w-full" disabled={submitting || !factorId}>
               {submitting ? 'Verifying…' : 'Verify'}
             </Button>
+
+            {mode === 'pending' && (
+              <Button
+                type="button"
+                variant="ghost"
+                className="w-full"
+                disabled={submitting || startingOver}
+                onClick={handleStartOver}
+              >
+                {startingOver ? 'Starting over…' : 'Start over with a new code'}
+              </Button>
+            )}
           </form>
         </CardContent>
       </Card>
