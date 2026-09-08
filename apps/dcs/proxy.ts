@@ -2,6 +2,7 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { getSupabaseCookieOptions } from '@scl/db/cookie-options'
+import { hasModuleAccess } from '@scl/db/module-access'
 import { planAuthCookieDomainMigration } from '@scl/db/cookie-migration'
 
 // Must use headers.append, not response.cookies.set: Next's ResponseCookies
@@ -93,6 +94,27 @@ export async function proxy(request: NextRequest) {
     : null
   if (migrationWrites) {
     applyCookieWrites(response, migrationWrites)
+  }
+
+  // 1a.23: this whole app is the "dcs" module — a signed-in user without a
+  // public.module_permissions row for it does not get in. Unlike Timesheet,
+  // DCS has no portal page of its own to fall back to, so a refused user
+  // goes back to the TES portal (NEXT_PUBLIC_TES_URL) where their actual
+  // tiles live; /login is the fallback only if that URL isn't configured.
+  // See @scl/db/module-access for the fail-open rationale on read errors.
+  if (
+    user &&
+    !request.nextUrl.pathname.startsWith('/login') &&
+    !request.nextUrl.pathname.startsWith('/mfa') &&
+    !request.nextUrl.pathname.startsWith('/auth')
+  ) {
+    const granted = await hasModuleAccess(supabase, user.id, 'dcs')
+    if (!granted) {
+      const fallback = process.env.NEXT_PUBLIC_TES_URL ?? new URL('/login', request.url).toString()
+      const refusedRedirect = NextResponse.redirect(fallback)
+      if (migrationWrites) applyCookieWrites(refusedRedirect, migrationWrites)
+      return refusedRedirect
+    }
   }
 
   // DCS 1a.11 / O-14: admin and DC routes require a verified second factor.

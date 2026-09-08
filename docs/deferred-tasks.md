@@ -530,3 +530,36 @@ PR (one topic per PR). Each item names its owner task or trigger:
   `lucide-react`). Same trigger as above: **1a.14** — add an icon library
   together with the drawer once there is more than one nav entry to
   distinguish.
+
+## y) Follow-ups noted during DCS 1a.23 (portal tiles + shared-domain SSO)
+
+- **Module-permission read helpers stay duplicated, not merged into
+  `@scl/db`.** `apps/timesheet/app/data/actions/module-permissions.ts`
+  (`getMyModulePermissions`) and `apps/dcs/lib/module-permissions.ts`
+  (`fetchMyModules`) are near-identical — same query shape, same
+  catch-log-degrade-to-empty behaviour — and 1a.23 adds two new shared
+  `@scl/db` leaf exports (`cookie-options`, `module-access`) that are exactly
+  this kind of cross-app logic, but left these two alone. Tempting to fold
+  in while touching the surrounding code; not done, since neither call site
+  needed to change for this task and merging them wasn't asked for. Trigger:
+  whoever next has to edit either one, or 1b if/when a third consumer of the
+  same read shows up.
+- **A TES-side module gate was built, then removed, during this task.**
+  Mirroring DCS's `hasModuleAccess` call in `apps/dcs/proxy.ts`,
+  `apps/timesheet/proxy.ts` briefly gated every non-portal route on a `tes`
+  row in `public.module_permissions`, redirecting to `/` when missing.
+  Removed before merge, for three reasons: (1) no acceptance criterion asked
+  for it — 1a.23's gating proof and examples are all about the `dcs` row,
+  never `tes`; (2) it introduced a real self-lockout — an admin/DC revoking
+  their own `tes` row would lock themselves out of the only app that could
+  restore it, since Timesheet has no equivalent of "log in elsewhere and
+  grant it back"; (3) it complicated the degrade-loud requirement — making
+  the TES portal tile conditional on the same ambiguous read DCS uses
+  risked hiding the app's own home module on a table-missing error, which
+  1a.23's own scope explicitly rules out. The portal's TES tile is
+  unconditional instead (`apps/timesheet/app/page.tsx`), mirroring how
+  `ModuleSwitcher` already always shows its own app's module unconditionally
+  regardless of what `module_permissions` says. Revisit if a real product
+  need for revoking a user's own TES access from inside TES ever shows up —
+  it would need a different mechanism (e.g. an admin-only path unaffected by
+  the revoked user's own session) to avoid the lockout.
