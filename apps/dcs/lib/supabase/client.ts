@@ -1,5 +1,6 @@
 import { createBrowserClient } from '@supabase/ssr'
 import type { Database } from '@scl/db'
+import { getSupabaseCookieOptions } from '@scl/db/cookie-options'
 
 // Local typed factory: the shared `@scl/db/client` is still untyped
 // (docs/deferred-tasks.md d) and DCS must not inherit that path. Once the
@@ -12,5 +13,5 @@ export function createClient() {
   if (!url || !anonKey) {
     throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY')
   }
-  return createBrowserClient<Database>(url, anonKey)
+  return createBrowserClient<Database>(url, anonKey, { cookieOptions: getSupabaseCookieOptions() })
 }

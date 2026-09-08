@@ -9,7 +9,8 @@
         "RESEND_API_KEY",
         "ADMIN_NOTIFICATION_EMAIL",
         "NEXT_PUBLIC_TES_URL",
-        "NEXT_PUBLIC_DCS_URL"
+        "NEXT_PUBLIC_DCS_URL",
+        "NEXT_PUBLIC_AUTH_COOKIE_DOMAIN"
       ]
     },
     "lint": {},

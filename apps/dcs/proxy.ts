@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import { getSupabaseCookieOptions } from '@scl/db/cookie-options'
 
 // Corrupted-JWT detection (e.g. Safari cookie truncation) — same failure mode
 // the Timesheet proxy handles; the error shape comes from supabase-js internals.
@@ -28,6 +29,7 @@ export async function proxy(request: NextRequest) {
   }
 
   const supabase = createServerClient(url, anonKey, {
+    cookieOptions: getSupabaseCookieOptions(),
     cookies: {
       getAll() {
         return request.cookies.getAll()
