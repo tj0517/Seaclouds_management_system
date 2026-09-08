@@ -34,6 +34,30 @@ export async function getMyModulePermissions(): Promise<PortalModule[]> {
   return (data ?? []).map((row) => row.module)
 }
 
+// 1a.23 follow-up: same read as getMyModulePermissions(), but the portal
+// (app/page.tsx) needs to tell "this account only has one module" from
+// "the read failed" — getMyModulePermissions() can't, by design, since both
+// return []. Skipping the portal and redirecting straight into the one
+// module you have is only safe when we're SURE it's one; on a degraded
+// read, the portal must render (never auto-redirect), so an admin with two
+// modules never gets silently funneled into just one because the table was
+// briefly unreachable. See the redirect logic in app/page.tsx for how
+// `degraded` is used.
+export async function getMyModuleAccess(): Promise<{ modules: PortalModule[]; degraded: boolean }> {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { modules: [], degraded: false }
+
+  const { data, error } = await supabase.from('module_permissions').select('module').eq('user_id', user.id)
+  if (error) {
+    console.error('getMyModuleAccess: module_permissions read failed, degrading to no extra modules', error)
+    return { modules: [], degraded: true }
+  }
+  return { modules: (data ?? []).map((row) => row.module), degraded: false }
+}
+
 // DCS 1a.22: per-user module access (TES/DCS/BMS). Read-your-own is open to
 // everyone via RLS; this helper is for the admin screen, which needs one
 // user's full grant set regardless of who is asking (guarded below, not by

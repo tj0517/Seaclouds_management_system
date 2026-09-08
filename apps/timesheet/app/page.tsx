@@ -5,16 +5,29 @@
 // TES tile is unconditional, same as ModuleSwitcher's own hardcoded current-
 // module entry (app/components/ModuleSwitcher.tsx) — this app only ever
 // serves TES, so it's never something module_permissions could usefully gate
-// out from inside itself, and it sidesteps the degrade-loud table-missing
-// case entirely: getMyModulePermissions() can't tell a genuinely empty grant
-// set from a failed read (both return []), so making the current module
-// depend on that read would risk hiding it on infra failure, exactly what
-// item 4's "render only the current module" is guarding against. DCS is the
-// one real cross-module gate here, reusing that same helper — a missing or
-// errored table fails closed for it, same as the switcher.
+// out from inside itself. DCS is the one real cross-module gate here,
+// reusing the same read as the switcher — a missing or errored table fails
+// closed for it (DCS tile hidden), same as the switcher.
+//
+// 1a.23 follow-up: a one-module account skips this page entirely and lands
+// straight on that module — TES always counts (unconditional, per above),
+// so the only way to have exactly one is hasDcs === false, and the only
+// redirect target is ever /tes (there is no "dcs-only" case to redirect to
+// DCS for: nothing in this app can produce a user who has dcs but not tes,
+// and even if the admin screen ever allowed revoking tes while keeping dcs,
+// TES's unconditional counting would still show both tiles rather than
+// mis-redirect). No loop: /tes has exactly one redirect, to /login when
+// unauthenticated — never back to /, so a redirect from here into /tes is
+// terminal. On a DEGRADED read (table unreachable), never auto-redirect:
+// collapsing to "one module" here would risk silently dropping the portal
+// (and the DCS tile with it) for an admin who actually has two, which is
+// wrong in a way a hidden tile elsewhere in this app isn't — DCS itself
+// stays reachable regardless (its own proxy gate also fails open, see
+// @scl/db/module-access), so showing the portal on a degraded read costs
+// nothing and loses nothing.
 import { redirect } from 'next/navigation'
 import Image from 'next/image'
-import { getUserProfile, getMyModulePermissions } from '@/app/data/actions'
+import { getUserProfile, getMyModuleAccess } from '@/app/data/actions'
 import AccountMenu from './components/AccountMenu'
 import { PORTAL_NAME_PLACEHOLDER, MODULE_URLS } from '@/lib/portal-config'
 
@@ -23,8 +36,12 @@ export default async function PortalHome() {
   if (!result || !result.user) redirect('/login')
 
   const { user } = result
-  const myModules = await getMyModulePermissions()
+  const { modules: myModules, degraded } = await getMyModuleAccess()
   const hasDcs = myModules.includes('dcs')
+
+  if (!degraded && !hasDcs) {
+    redirect('/tes')
+  }
 
   const tiles = [
     {
