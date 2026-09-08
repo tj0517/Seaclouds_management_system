@@ -309,17 +309,24 @@ PR (one topic per PR). Each item names its owner task or trigger:
 
 ## q) Follow-ups noted during DCS 1a.09 (PR #25, RLS helper functions)
 
-- **`grantProjectRole` / `revokeProjectRole` still guard on admin only**
+- ~~**`grantProjectRole` / `revokeProjectRole` still guard on admin only**
   (`requireAdmin` in `apps/dcs/lib/project-roles.ts`). Since 1a.09 the
   database lets a project's DC manage that project's roles, so the server
   action is now narrower than the policy. Widen the guard to "admin or DC
   of the target project" (server-side, `is_doc_controller` via RPC or a
   `project_roles` read) together with the role-matrix screen, task 1a.14 —
-  not before, because nothing calls the action yet.
+  not before, because nothing calls the action yet.~~ **Done** in DCS 1a.14
+  (`requireAdminOrDc` in `apps/dcs/lib/project-roles.ts`, used by
+  `grantProjectRole`, `revokeProjectRole` and the new `setProjectRoles`) —
+  [ADR-0012](adr/0012-dc-zarzadza-rolami-swojego-projektu-w-aplikacji.md).
 - **A DC can revoke their own `dc` row** and lose access to the project.
   The database does not prevent it (policies are per row, no "last DC"
-  rule). Decide at 1a.14 whether the screen refuses it, or whether a
-  trigger should keep at least one DC per project with an MDR.
+  rule). **Still open after 1a.14**: the role-matrix screen does not refuse
+  it — neither `setProjectRoles` nor the UI special-cases "the last DC row."
+  1a.14's scope excluded any schema/policy change, so a trigger-based fix
+  was out of reach even if wanted; whether the screen should instead refuse
+  the save client/server-side, or whether a "last DC" trigger is the right
+  fix, remains a product decision for whoever picks this up next.
 - **`is_pm_for_project()` (TES `project_lead`) is not mapped to any DCS
   role** (ADR-0006/O-12). A TES project lead who is not in
   `dcs.project_roles` is a plain member for DCS (reads roles/clients of
@@ -594,3 +601,109 @@ reported the results. **Owner: whoever writes the next task with a
 human to perform and report back (as here), not as agent-verifiable, or
 budget time for the human step explicitly rather than have the agent
 report a blocked criterion after building everything else.
+
+## aa) Follow-ups noted during DCS 1a.14 (user × project × role matrix screen)
+
+- **Acceptance criterion 4a is unsatisfiable as written, and was flagged to
+  the owner before building anything (answer: report as blocked, do not
+  touch the policy).** `/dcs`'s project list
+  (`apps/dcs/app/(app)/page.tsx`) queries `public.projects` with no filter
+  in code, and that table's only SELECT policy is `"Widoczność projektów"`
+  (`auth.role() = 'authenticated'`) — inherited from Timesheet, predates
+  DCS, and is explicitly out of scope for 1a.14 (no policy edits). Every
+  signed-in user sees every project regardless of `dcs.project_roles`, so
+  running "the exact query `/dcs` uses" before and after a grant/revoke
+  shows the identical full list both times — the query is real, but nothing
+  about it changes with the grant.
+  **Correction (review, 2026-09-08): the fix is NOT a new/narrower policy on
+  `public.projects`.** `"Widoczność projektów"` (`auth.role() =
+  'authenticated'`) is shared, load-bearing infrastructure for Timesheet —
+  every TES screen that lists or picks a project (admin project list,
+  project-assignment checkboxes, sub-project pickers, reports) relies on
+  every authenticated employee seeing every project, independent of
+  `project_assignments`. Narrowing that one shared policy to
+  `is_admin() OR is_project_member(id)` would filter Timesheet's project
+  lists too, for every employee who is a TES-only user with no
+  `dcs.project_roles` row (i.e. almost everyone on TES today) — a
+  cross-module regression, not a DCS-only visibility fix, and squarely
+  the kind of shared-schema change `CLAUDE.md`/ADR-0001 warns needs its own
+  scrutiny. **The actual fix belongs entirely on the DCS side**: filter in
+  `apps/dcs`'s own project-list query (`apps/dcs/app/(app)/page.tsx`) —
+  either an inner join against `dcs.project_roles`/`public.project_assignments`
+  for the signed-in user, or a `WHERE id IN (...)` built from
+  `is_project_member`'s same two sources — so DCS's own screen narrows
+  itself without touching the shared policy or Timesheet's behavior at all.
+  Scheduled as its own task (application code only, no migration).
+- **`public.profiles` SELECT (`auth.uid() = id OR is_admin()`, unchanged)
+  means a non-admin DC cannot read their own teammates' names.** The
+  project-team page (`/admin/projects/[projectId]`) degrades gracefully —
+  falls back to a shortened `id` when `full_name` isn't readable — but for
+  a DC session (as opposed to an admin session) this is the common case,
+  not an edge case: every teammate but themselves shows as an id. Same root
+  cause limits the "add member" picker on that page to whatever profiles
+  the viewer's own session can read, which in practice means admin can add
+  anyone and a DC can usually add no one new (their own row is already on
+  the team). Fixing this needs a policy letting a project member read the
+  `profiles` rows of their fellow project members — schema/policy change,
+  out of scope here.
+- **No discovery path to either new screen beyond a direct URL.** The user
+  page (`/admin/users/[userId]`) has no users-list screen to link from
+  anywhere in `apps/dcs` (Timesheet's `admin/users/[id]` is reached from
+  `admin/users`, which has no DCS equivalent); the project page
+  (`/admin/projects/[projectId]`) is reachable by clicking a project name on
+  the existing placeholder list (`apps/dcs/app/(app)/page.tsx`, one link
+  added). `DcsSidebar` still has its single "Projects" entry — no nav item
+  points at either new admin screen. A users-list page was explicitly out
+  of scope (extending `app/admin/users` per the task title meant the
+  per-user detail page, matching what was in scope for 1a.06's admin
+  actions, not a new list screen).
+- **`docs/03-conventions.md`'s advisor baseline note ("19 × 0027 + 10 ×
+  0029") is stale, unrelated to this task.** Read on scl-dev 2026-09-08
+  (before any 1a.14 change): 19 × 0027 but **11** × 0029 — the eleventh is
+  `public.is_any_doc_controller()`, added by `dictionaries_dc_write_policy`
+  (migration `20260904125543`, DCS 1a.15-adjacent work) without updating
+  that note. 1a.14 adds no migration and reads the same 19+11 after the
+  work — confirming no new advisory class, per this task's own Verification
+  step — but the note itself needs a docs-only fix by whoever touches it
+  next.
+- **`requireAdminOrDc` (`apps/dcs/lib/project-roles.ts`) does not delegate to
+  `requireProjectRole` (`apps/dcs/app/data/actions/auth-helpers.ts`, 1a.12) —
+  deliberately, not an oversight.** `requireProjectRole` is a `'use server'`
+  function: it always builds its own client via `createClient()` from
+  `@scl/db/server` (ignoring any client passed to it) and calls
+  `next/headers`-backed cookies through that, so it only runs inside a
+  Next.js request — it cannot be called from a Vitest test or a script the
+  way `lib/project-roles.ts` is designed to be (see that file's own header
+  comment: "runs from a server action... and from a verification script").
+  It also throws `ProjectRoleAuthorizationError` rather than returning the
+  `ActionResult` every function in `lib/project-roles.ts` returns, and it
+  has no admin bypass (a global admin holds no `dcs.project_roles` row, so
+  `requireProjectRole(projectId, ['dc'])` alone would wrongly reject an
+  admin). Delegating to it would need re-wrapping its throw into
+  `ActionResult` AND adding the admin branch outside it anyway, at the cost
+  of breaking framework-agnostic testability — so `requireAdminOrDc`
+  instead composes that same file's two exported *primitives*
+  (`fetchUserProjectRoles`, `hasAnyRole`), which have no Next.js dependency.
+  This is composition of shared primitives, not duplicated authorization
+  logic — the single source of truth for "does this session hold role X on
+  project Y" stays `dcs.project_roles` read through those two functions
+  either way.
+- **A DC can grant themselves any role on their own project — observed live
+  on scl-dev 2026-09-08**: `dcs1a14-dc` self-granted `rev` on SC2602 (PEJ)
+  through the real UI, and both `"Doc controllers manage project roles"`
+  (RLS) and `requireAdminOrDc` (app) allow it — neither checks whether
+  `user_id` in the write equals the session's own id. Allowed by the current
+  policy/guard, not a bug in either; separation-of-duties (a DC not being
+  able to grant/hold certain roles on their own work, e.g. can't be both DC
+  and Approver on the same document) is task **2.08**'s concern, not
+  1a.14's — no change made here.
+- **Test accounts for this task's scl-dev verification** —
+  `dcs1a14-admin@example.com`, `dcs1a14-dc@example.com` (DC of PEJ/SC2602
+  only), `dcs1a14-member@example.com` (plain PEJ member) — exist on scl-dev
+  (`mzotiurydmhibqhxxzoh`), with the first two enrolled in TOTP (needed to
+  clear the aal2 gate as admin/DC). Credentials and TOTP secrets are **not**
+  in this repo — kept at
+  `~/Desktop/seaclouds/backups/dcs1a14-test-accounts-scl-dev-2026-09-08.txt`
+  (chmod 600, same convention as the other files in that directory, e.g.
+  `scl-dev-credentials.txt`). Reuse for the **1a.21** demo (owner
+  instruction, 2026-09-08) instead of creating new ones.
