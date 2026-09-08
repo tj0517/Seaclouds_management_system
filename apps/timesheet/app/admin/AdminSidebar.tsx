@@ -36,7 +36,7 @@ export default function AdminSidebar({
             <div className="p-6 border-b flex flex-col items-center gap-2">
                 <Image src="/logo.png" alt="Sea Clouds" width={110} height={110} />
                 <p className="text-xs text-gray-500 text-center">{email}</p>
-                <ModuleSwitcher hasDcsAccess={hasDcsAccess} />
+                {hasDcsAccess && <ModuleSwitcher hasDcsAccess={hasDcsAccess} />}
             </div>
             <nav className="flex-1 p-4 space-y-2">
                 {navLinks.map(({ href, icon: Icon, label }) => (
