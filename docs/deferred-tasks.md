@@ -563,3 +563,26 @@ PR (one topic per PR). Each item names its owner task or trigger:
   need for revoking a user's own TES access from inside TES ever shows up —
   it would need a different mechanism (e.g. an admin-only path unaffected by
   the revoked user's own session) to avoid the lockout.
+
+## z) "Log in and check" acceptance criteria need a human, not the agent
+
+1a.23's acceptance criteria included: show the `Set-Cookie` `Domain`
+attribute from a login on `app.seaclouds.eu`, and the server-side decoded
+`aal` claim on `dcs.seaclouds.eu` after clicking the DCS tile. Neither is
+something the agent can ever produce — it has no Timesheet user login for
+any real account, on any environment where that matters, and correctly
+won't guess, brute-force, or ask a human for one. The read-only Supabase
+MCP tools (`execute_sql`, `get_advisors`, etc.) don't reach this either:
+`Set-Cookie` is an HTTP response header, and the `aal` claim needs the
+JWT actually being issued to a real client through the actual redirect —
+neither exists anywhere in Postgres to `SELECT`. `auth.sessions.aal` and
+`auth.mfa_amr_claims` are the closest DB-level substitute (used for 1a.23's
+verification, with the user's agreement) but only prove aal2 sessions
+have existed at some point, not that a specific click today produced one.
+
+For 1a.23 the human (repo owner) performed both steps directly and
+reported the results. **Owner: whoever writes the next task with a
+"log in as X and observe Y" criterion** — phrase it as a step for the
+human to perform and report back (as here), not as agent-verifiable, or
+budget time for the human step explicitly rather than have the agent
+report a blocked criterion after building everything else.
