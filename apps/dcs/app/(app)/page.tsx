@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { createClient } from '@scl/db/server'
 
 export default async function ProjectsPage() {
@@ -78,7 +79,9 @@ export default async function ProjectsPage() {
               <tr key={project.id} className="border-b border-gray-100 last:border-0">
                 <td className="px-4 py-2 font-mono">{project.project_code ?? '—'}</td>
                 <td className="px-4 py-2">
-                  {project.name}
+                  <Link href={`/admin/projects/${project.id}`} className="text-blue-700 hover:underline">
+                    {project.name}
+                  </Link>
                   {project.description ? (
                     <span className="block text-xs text-gray-500">{project.description}</span>
                   ) : null}
