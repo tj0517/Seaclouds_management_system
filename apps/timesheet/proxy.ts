@@ -2,6 +2,19 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { getSupabaseCookieOptions } from '@scl/db/cookie-options'
+import { planAuthCookieDomainMigration } from '@scl/db/cookie-migration'
+
+// Must use headers.append, not response.cookies.set: Next's ResponseCookies
+// keys its store by name alone, so two same-named writes (the domain-scoped
+// copy and the host-only clear) would collapse into one and silently drop
+// the other. Set-Cookie is spec-exempt from header-value folding precisely
+// so multiple can coexist — see @scl/db/cookie-migration for the full story
+// (verified locally: .cookies.set() for both left the browser with neither).
+function applyCookieWrites(target: NextResponse, writes: string[]) {
+  for (const value of writes) {
+    target.headers.append('set-cookie', value)
+  }
+}
 
 export async function proxy(request: NextRequest) {
   // 1. Tworzymy odpowiedź domyślną
@@ -58,6 +71,23 @@ export async function proxy(request: NextRequest) {
      return NextResponse.redirect(new URL('/login', request.url))
   }
 
+  // 1a.23 follow-up: migrate a pre-existing host-only auth cookie to the
+  // shared domain, once per browser. See @scl/db/cookie-migration for why
+  // this can't just fall out of setting cookieOptions.domain: it only
+  // controls where a NEW write lands, so a still-valid old session would
+  // otherwise sit host-only until its next natural token refresh — and even
+  // then, both cookies (same name, different Domain) would briefly coexist.
+  // Applied to `response` here so the normal-return path carries it, and
+  // separately at the /mfa redirect below, since that returns a different
+  // NextResponse — cookies set on `response` don't travel onto it.
+  const cookieDomain = getSupabaseCookieOptions()?.domain
+  const migrationWrites = user && cookieDomain
+    ? planAuthCookieDomainMigration(request.cookies.getAll(), cookieDomain)
+    : null
+  if (migrationWrites) {
+    applyCookieWrites(response, migrationWrites)
+  }
+
   // DCS 1a.11 / O-14: admin and DC routes require a verified second factor.
   // This is UX only — the guarantee that survives a direct API call lives in
   // the aal2 conjunct on the dcs.dictionaries RLS policies (see
@@ -80,7 +110,9 @@ export async function proxy(request: NextRequest) {
       if (aal?.currentLevel !== 'aal2') {
         const mfaUrl = new URL('/mfa', request.url)
         mfaUrl.searchParams.set('next', request.nextUrl.pathname)
-        return NextResponse.redirect(mfaUrl)
+        const mfaRedirect = NextResponse.redirect(mfaUrl)
+        if (migrationWrites) applyCookieWrites(mfaRedirect, migrationWrites)
+        return mfaRedirect
       }
     }
   }
