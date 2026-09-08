@@ -53,6 +53,14 @@ enumem czy tekstem + CHECK (jak `dcs.dictionaries.dict_type`).
   Rozbieżność DC-bez-admina na Timesheet znaleziona w 1a.11 zostaje otwarta;
   ta tabela jest jej docelowym domem, ale podłączenie gate'ów to osobne
   zadanie.
+  **Aktualizacja 2026-09-08 (DCS 1a.23):** ta osobna praca się wydarzyła —
+  `apps/dcs/proxy.ts` czyta teraz tę tabelę (`@scl/db/module-access`,
+  `hasModuleAccess()`) i odmawia wejścia do DCS użytkownikowi bez wiersza
+  `dcs`. Timesheet celowo zostaje bez odpowiednika (uzasadnienie:
+  `docs/deferred-tasks.md`, sekcja y). Decyzja o fail-open na błędzie
+  odczytu i jej warunek wygaśnięcia — [ADR-0011](0011-module-access-fail-open-log-w-miejscu-odczytu.md).
+  Rozbieżność DC-bez-admina na Timesheet (1a.11) pozostaje otwarta —
+  `apps/timesheet/app/admin/layout.tsx` nadal nie czyta tej tabeli.
 - Ekran admina (`apps/timesheet/app/admin/users/[id]`) zyskuje kartę "Module
   Access" obok istniejącej karty dostępu do projektów — wzorzec
   checkbox + server action jest identyczny z `AssignmentCheckbox` /

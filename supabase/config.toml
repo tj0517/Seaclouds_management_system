@@ -428,12 +428,20 @@ additional_redirect_urls = [
   "http://127.0.0.1:3000/**",
 ]
 
-# Production (timesheet). Real domain + prod-only email hardening.
+# Production (timesheet + DCS, 1a.23: shared project so the auth cookie can
+# be shared across the two hosts). site_url stays the TES host (GoTrue only
+# takes one); dcs.seaclouds.eu was added by hand in the dashboard prior to
+# this PR — this brings config.toml (the source of truth) back in sync. Not
+# pushed by this PR; requires `supabase config push` under the production-db
+# gate, same as any other prod config change.
 [remotes.production]
 project_id = "tfbzivfsqsgebegcvfah"
 [remotes.production.auth]
 site_url = "https://app.seaclouds.eu"
-additional_redirect_urls = ["https://app.seaclouds.eu/**"]
+additional_redirect_urls = [
+  "https://app.seaclouds.eu/**",
+  "https://dcs.seaclouds.eu/**",
+]
 [remotes.production.auth.email]
 enable_confirmations = true
 otp_length = 8

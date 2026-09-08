@@ -6,7 +6,10 @@
   "exports": {
     ".": "./src/index.ts",
     "./client": "./src/client.ts",
-    "./server": "./src/server.ts"
+    "./server": "./src/server.ts",
+    "./cookie-options": "./src/cookie-options.ts",
+    "./cookie-migration": "./src/cookie-migration.ts",
+    "./module-access": "./src/module-access.ts"
   },
   "scripts": {
     "lint": "eslint src",

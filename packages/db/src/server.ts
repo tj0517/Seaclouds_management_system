@@ -3,6 +3,7 @@ import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 
 import { Database } from './database'
+import { getSupabaseCookieOptions } from './cookie-options'
 
 export async function createClient() {
   const cookieStore = await cookies()
@@ -17,6 +18,7 @@ export async function createClient() {
     url,
     anonKey,
     {
+      cookieOptions: getSupabaseCookieOptions(),
       cookies: {
         getAll() {
           return cookieStore.getAll()
