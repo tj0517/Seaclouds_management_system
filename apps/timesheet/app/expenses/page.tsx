@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { getUserProfile, getMyProjects, getExpenseTables, getExpenseEntries, getMyModulePermissions } from '@/app/data/actions'
+import { getUserProfile, getMyProjects, getExpenseTables, getExpenseEntries, getMyModuleAccess } from '@/app/data/actions'
 import type { ExpenseTableWithProject, ExpenseEntry } from '@/app/data/actions/expenses'
 import ExpensesGrid from './ExpensesGrid'
 import Link from 'next/link'
@@ -16,7 +16,10 @@ export default async function ExpensesPage() {
 
     const projects = await getMyProjects()
     const tables = await getExpenseTables()
-    const myModules = await getMyModulePermissions()
+    // Switcher renders only for a 2+ module account; on a degraded read, fail
+    // open rather than guess "one module" (see getMyModuleAccess()).
+    const { modules: myModules, degraded } = await getMyModuleAccess()
+    const hasDcsAccess = degraded || myModules.includes('dcs')
 
     // Fetch entries for each table
     const tablesWithEntries = await Promise.all(
@@ -47,7 +50,7 @@ export default async function ExpensesPage() {
                                 <Shield size={16} /> <span className="hidden sm:inline">Admin Panel</span>
                             </Link>
                         )}
-                        <ModuleSwitcher hasDcsAccess={myModules.includes('dcs')} />
+                        {hasDcsAccess && <ModuleSwitcher hasDcsAccess={hasDcsAccess} />}
                         <AccountMenu email={user.email || ''} />
                     </div>
                 </div>

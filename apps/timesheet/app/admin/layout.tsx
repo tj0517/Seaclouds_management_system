@@ -1,5 +1,5 @@
 // app/admin/layout.tsx
-import { getUserProfile, getMyModulePermissions } from '@/app/data/actions'
+import { getUserProfile, getMyModuleAccess } from '@/app/data/actions'
 import { isAdminOrPM } from '@/app/data/actions/auth-helpers'
 import { redirect } from 'next/navigation'
 import AdminSidebar from './AdminSidebar'
@@ -21,11 +21,14 @@ export default async function AdminLayout({
     redirect('/')
   }
 
-  const myModules = await getMyModulePermissions()
+  // Switcher renders only for a 2+ module account; on a degraded read, fail
+  // open rather than guess "one module" (see getMyModuleAccess()).
+  const { modules: myModules, degraded } = await getMyModuleAccess()
+  const hasDcsAccess = degraded || myModules.includes('dcs')
 
   return (
     <div className="flex h-screen bg-gray-100">
-      <AdminSidebar email={result.user.email} role={profile.role} hasDcsAccess={myModules.includes('dcs')} />
+      <AdminSidebar email={result.user.email} role={profile.role} hasDcsAccess={hasDcsAccess} />
 
       {/* GŁÓWNA TREŚĆ */}
       <main className="flex-1 overflow-auto p-8">

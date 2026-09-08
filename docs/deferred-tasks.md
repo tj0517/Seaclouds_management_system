@@ -535,15 +535,23 @@ PR (one topic per PR). Each item names its owner task or trigger:
 
 - **Module-permission read helpers stay duplicated, not merged into
   `@scl/db`.** `apps/timesheet/app/data/actions/module-permissions.ts`
-  (`getMyModulePermissions`) and `apps/dcs/lib/module-permissions.ts`
-  (`fetchMyModules`) are near-identical — same query shape, same
-  catch-log-degrade-to-empty behaviour — and 1a.23 adds two new shared
-  `@scl/db` leaf exports (`cookie-options`, `module-access`) that are exactly
-  this kind of cross-app logic, but left these two alone. Tempting to fold
-  in while touching the surrounding code; not done, since neither call site
-  needed to change for this task and merging them wasn't asked for. Trigger:
-  whoever next has to edit either one, or 1b if/when a third consumer of the
-  same read shows up.
+  (`getMyModuleAccess`) and `apps/dcs/lib/module-permissions.ts`
+  (`fetchMyModuleAccess`) are near-identical — same query shape, same
+  catch-log-degrade behaviour, same `{ modules, degraded }` return shape —
+  and 1a.23 adds two new shared `@scl/db` leaf exports (`cookie-options`,
+  `module-access`) that are exactly this kind of cross-app logic, but left
+  these two alone. Tempting to fold in while touching the surrounding code;
+  still not done — merging them wasn't asked for either time they were
+  touched. Update (module-switcher-visibility follow-up): the "third
+  consumer" trigger below has now fired twice over — both functions gained
+  more same-app callers (TES: portal redirect + 3 switcher mounts; DCS:
+  route gate + sidebar) — but that's more callers *within* each app, not a
+  cross-app one, so the merge trigger still hasn't actually fired. The
+  earlier plain fail-closed `getMyModulePermissions()` (TES) is gone,
+  replaced everywhere by `getMyModuleAccess()`, so there's one function per
+  app now, not two — makes the eventual `@scl/db` merge more mechanical
+  whenever it happens. Trigger: whoever next has to edit either one, or 1b
+  if/when a third consumer of the same read shows up.
 - **A TES-side module gate was built, then removed, during this task.**
   Mirroring DCS's `hasModuleAccess` call in `apps/dcs/proxy.ts`,
   `apps/timesheet/proxy.ts` briefly gated every non-portal route on a `tes`

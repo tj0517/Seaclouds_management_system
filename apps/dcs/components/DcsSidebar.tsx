@@ -17,7 +17,7 @@ export default function DcsSidebar({ email, fullName, hasTesAccess }: Props) {
       <div className="flex flex-col items-center gap-2 border-b p-6">
         <p className="text-lg font-bold">SCL DCS</p>
         <p className="text-center text-xs text-gray-500">{fullName ?? email}</p>
-        <ModuleSwitcher hasTesAccess={hasTesAccess} />
+        {hasTesAccess && <ModuleSwitcher hasTesAccess={hasTesAccess} />}
       </div>
 
       <nav className="flex-1 space-y-2 p-4">

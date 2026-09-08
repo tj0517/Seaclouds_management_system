@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { getUserProfile, getMyProjects, getWeeklyEntries, isWeekSubmitted, getMyAssignedSubProjects, getWeeklyContractCodes, getMyModulePermissions } from '@/app/data/actions'
+import { getUserProfile, getMyProjects, getWeeklyEntries, isWeekSubmitted, getMyAssignedSubProjects, getWeeklyContractCodes, getMyModuleAccess } from '@/app/data/actions'
 import TimesheetGrid from '../components/timesheetGrid'
 import { startOfWeek, endOfWeek, format, addWeeks, subWeeks, parseISO, isValid } from 'date-fns'
 import Link from 'next/link'
@@ -66,7 +66,10 @@ export default async function Home(props: Props) {
   const initialSubmissionStatus: Record<string, { status: string; rejectReason: string | null } | null> = Object.assign({}, ...submissionStatuses)
 
   const contractCodes = await getWeeklyContractCodes(user.id, format(weekStart, 'yyyy-MM-dd'))
-  const myModules = await getMyModulePermissions()
+  // Switcher renders only for a 2+ module account; on a degraded read, fail
+  // open rather than guess "one module" (see getMyModuleAccess()).
+  const { modules: myModules, degraded } = await getMyModuleAccess()
+  const hasDcsAccess = degraded || myModules.includes('dcs')
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -88,7 +91,7 @@ export default async function Home(props: Props) {
                   <Shield size={16} /> <span className="hidden sm:inline">{isAdmin ? 'Admin' : 'Lead'}</span>
                 </Link>
               )}
-              <ModuleSwitcher hasDcsAccess={myModules.includes('dcs')} />
+              {hasDcsAccess && <ModuleSwitcher hasDcsAccess={hasDcsAccess} />}
               <AccountMenu email={user.email || ''} />
             </nav>
           </div>
