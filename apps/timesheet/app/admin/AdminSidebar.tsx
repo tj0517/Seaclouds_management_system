@@ -14,7 +14,7 @@ const allNavLinks = [
     { href: '/admin/expenses', icon: Receipt, label: 'Expenses' },
     { href: '/admin/earnings', icon: TrendingUp, label: 'Earnings', adminOnly: true },
     { href: '/admin/exports', icon: Download, label: 'PDF Exports' },
-    { href: '/', icon: Clock, label: 'Log Hours' },
+    { href: '/tes', icon: Clock, label: 'Log Hours' },
 ]
 
 export default function AdminSidebar({

@@ -32,7 +32,7 @@ export default async function ExpensesPage() {
                 <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row justify-between items-center gap-4">
                     <div className="flex items-center gap-4">
                         <Link
-                            href="/"
+                            href="/tes"
                             className="p-2 hover:bg-gray-100 rounded-md transition text-gray-600"
                             title="Back to timesheet"
                         >

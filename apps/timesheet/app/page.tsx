@@ -1,139 +1,92 @@
+// 1a.23: portal landing page. Was the TES home (timesheet grid) itself,
+// now moved to /tes — see app/tes/page.tsx. Every existing link whose
+// intent was "back to my timesheet" was repointed at /tes.
+//
+// TES tile is unconditional, same as ModuleSwitcher's own hardcoded current-
+// module entry (app/components/ModuleSwitcher.tsx) — this app only ever
+// serves TES, so it's never something module_permissions could usefully gate
+// out from inside itself, and it sidesteps the degrade-loud table-missing
+// case entirely: getMyModulePermissions() can't tell a genuinely empty grant
+// set from a failed read (both return []), so making the current module
+// depend on that read would risk hiding it on infra failure, exactly what
+// item 4's "render only the current module" is guarding against. DCS is the
+// one real cross-module gate here, reusing that same helper — a missing or
+// errored table fails closed for it, same as the switcher.
 import { redirect } from 'next/navigation'
-import { getUserProfile, getMyProjects, getWeeklyEntries, isWeekSubmitted, getMyAssignedSubProjects, getWeeklyContractCodes, getMyModulePermissions } from '@/app/data/actions'
-import TimesheetGrid from './components/timesheetGrid'
-import { startOfWeek, endOfWeek, format, addWeeks, subWeeks, parseISO, isValid } from 'date-fns'
-import Link from 'next/link'
 import Image from 'next/image'
-import { Shield, ChevronLeft, ChevronRight, Calendar, Receipt } from 'lucide-react'
+import { getUserProfile, getMyModulePermissions } from '@/app/data/actions'
 import AccountMenu from './components/AccountMenu'
-import ExportPdfButton from './components/ExportPdfButton'
-import ModuleSwitcher from './components/ModuleSwitcher'
+import { PORTAL_NAME_PLACEHOLDER, MODULE_URLS } from '@/lib/portal-config'
 
-// Definiujemy typ propsów z searchParams (w Next.js 15+ to Promise)
-type Props = {
-  searchParams: Promise<{ date?: string }>
-}
-
-export default async function Home(props: Props) {
-  const searchParams = await props.searchParams
-  // 1. Sprawdź sesję
+export default async function PortalHome() {
   const result = await getUserProfile()
   if (!result || !result.user) redirect('/login')
 
-  const { user, profile } = result
-
-  const isAdmin = profile?.role === 'admin'
-  const isAdminOrPM = isAdmin || (profile?.role as string) === 'project_lead'
-
-  // 3. LOGIKA DATY (SERCE NAWIGACJI)
-  // Jeśli w URL jest data (?date=...), użyj jej. Jeśli nie, użyj dzisiaj.
-  let referenceDate = new Date()
-  if (searchParams.date) {
-    const parsed = parseISO(searchParams.date)
-    if (isValid(parsed)) {
-      referenceDate = parsed
-    }
-  }
-
-  // Wyliczamy zakres tygodnia dla wybranej daty
-  const weekStart = startOfWeek(referenceDate, { weekStartsOn: 1 })
-  const weekEnd = endOfWeek(referenceDate, { weekStartsOn: 1 })
-
-  // Wyliczamy daty dla przycisków nawigacji
-  const prevWeekDate = format(subWeeks(referenceDate, 1), 'yyyy-MM-dd')
-  const nextWeekDate = format(addWeeks(referenceDate, 1), 'yyyy-MM-dd')
-
-  // 4. Pobierz dane dla TEGO KONKRETNEGO tygodnia
-  const projects = await getMyProjects()
-  const projectIds = projects.map(p => p.id)
-  const subProjects = await getMyAssignedSubProjects(projectIds)
-
-  const entries = await getWeeklyEntries(
-    user.id,
-    format(weekStart, 'yyyy-MM-dd'),
-    format(weekEnd, 'yyyy-MM-dd')
-  )
-
-  const submissionStatuses = await Promise.all(
-    subProjects.map(async (sp) => {
-      const status = await isWeekSubmitted(
-        format(weekStart, 'yyyy-MM-dd'),
-        sp.id
-      )
-      return { [sp.id]: status }
-    })
-  )
-  const initialSubmissionStatus: Record<string, { status: string; rejectReason: string | null } | null> = Object.assign({}, ...submissionStatuses)
-
-  const contractCodes = await getWeeklyContractCodes(user.id, format(weekStart, 'yyyy-MM-dd'))
+  const { user } = result
   const myModules = await getMyModulePermissions()
+  const hasDcs = myModules.includes('dcs')
+
+  const tiles = [
+    {
+      key: 'tes',
+      label: 'TES',
+      description: 'Timesheet — log hours, submit weeks, expenses.',
+      href: '/tes',
+    },
+    hasDcs &&
+      MODULE_URLS.dcs && {
+        key: 'dcs',
+        label: 'DCS',
+        description: 'Document Control System.',
+        href: MODULE_URLS.dcs,
+      },
+  ].filter((tile): tile is { key: string; label: string; description: string; href: string } => Boolean(tile))
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* NAGŁÓWEK */}
-      <header className="bg-white shadow-sm sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 py-3 sm:px-6 lg:px-8">
-          {/* Top row: title + nav links + account */}
-          <div className="flex items-center justify-between gap-3">
-            <div className="shrink-0">
-              <Image src="/logo.png" alt="Sea Clouds" width={96} height={96} />
-            </div>
-
-            <nav className="flex items-center gap-1 sm:gap-2">
-              <Link href="/expenses" className="text-sm font-medium text-gray-600 hover:text-gray-800 flex items-center gap-1.5 px-2.5 py-1.5 rounded-md hover:bg-gray-100 transition">
-                <Receipt size={16} /> <span className="hidden sm:inline">Expenses</span>
-              </Link>
-              {isAdminOrPM && (
-                <Link href="/admin" className="text-sm font-medium text-blue-600 hover:text-blue-800 flex items-center gap-1.5 px-2.5 py-1.5 rounded-md hover:bg-blue-50 transition">
-                  <Shield size={16} /> <span className="hidden sm:inline">{isAdmin ? 'Admin' : 'Lead'}</span>
-                </Link>
-              )}
-              <ModuleSwitcher hasDcsAccess={myModules.includes('dcs')} />
-              <AccountMenu email={user.email || ''} />
-            </nav>
+      <header className="bg-white shadow-sm">
+        <div className="max-w-5xl mx-auto px-4 py-3 sm:px-6 lg:px-8 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <Image src="/logo.png" alt="Sea Clouds" width={64} height={64} />
+            <span
+              className="text-sm font-medium text-gray-400 italic"
+              title="Portal name placeholder — O-01 unresolved (docs/04-open-questions.md)"
+            >
+              {PORTAL_NAME_PLACEHOLDER}
+            </span>
           </div>
-
-          {/* Bottom row: week navigation + export */}
-          <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-100">
-            <div className="flex items-center bg-gray-100 rounded-lg p-1">
-              <Link
-                href={`/?date=${prevWeekDate}`}
-                className="p-1.5 hover:bg-white hover:shadow-sm rounded-md transition text-gray-600"
-                title="Previous week"
-              >
-                <ChevronLeft size={18} />
-              </Link>
-
-              <div className="flex items-center gap-1.5 px-3 font-medium text-gray-700 text-sm min-w-[130px] justify-center">
-                <Calendar size={14} className="text-gray-400" />
-                <span>{format(weekStart, 'dd.MM')} - {format(weekEnd, 'dd.MM')}</span>
-              </div>
-
-              <Link
-                href={`/?date=${nextWeekDate}`}
-                className="p-1.5 hover:bg-white hover:shadow-sm rounded-md transition text-gray-600"
-                title="Next week"
-              >
-                <ChevronRight size={18} />
-              </Link>
-            </div>
-
-            <ExportPdfButton />
-          </div>
+          <AccountMenu email={user.email || ''} />
         </div>
       </header>
 
-      {/* TREŚĆ */}
-      <main className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
-        <TimesheetGrid
-          key={weekStart.toString()}
-          projects={projects}
-          subProjects={subProjects}
-          existingEntries={entries || []}
-          weekStart={weekStart}
-          initialSubmissionStatus={initialSubmissionStatus}
-          initialContractCodes={contractCodes}
-        />
+      <main className="max-w-5xl mx-auto px-4 py-12 sm:px-6 lg:px-8">
+        <h1 className="text-2xl font-bold text-gray-900 mb-1">Choose a module</h1>
+        <p className="text-sm text-gray-500 mb-8">
+          Modules you don&apos;t have access to are hidden or disabled.
+        </p>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {tiles.map((tile) => (
+            <a
+              key={tile.key}
+              href={tile.href}
+              className="block rounded-lg border border-gray-200 bg-white p-6 shadow-sm hover:shadow-md hover:border-blue-300 transition"
+            >
+              <h2 className="text-lg font-semibold text-gray-900">{tile.label}</h2>
+              <p className="mt-1 text-sm text-gray-500">{tile.description}</p>
+            </a>
+          ))}
+
+          {/* BMS: no app exists yet, always disabled — not gated by
+              module_permissions like DCS above. */}
+          <div
+            className="block rounded-lg border border-dashed border-gray-200 bg-gray-50 p-6 cursor-not-allowed"
+            title="BMS — not built yet"
+          >
+            <h2 className="text-lg font-semibold text-gray-300">BMS</h2>
+            <p className="mt-1 text-sm text-gray-300">Not built yet.</p>
+          </div>
+        </div>
       </main>
     </div>
   )
