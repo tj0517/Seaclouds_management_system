@@ -64,9 +64,14 @@ to inne pojęcie (dokumentacja otwarta/zamknięta) — leży w `mdr_settings`.
 RLS: odczyt dla zalogowanych, zapis dla admina. Uwaga: odczyt NIE jest
 ograniczony per użytkownik — jedyna polityka SELECT (`Widoczność projektów`)
 przepuszcza każdego zalogowanego, więc wszyscy widzą wszystkie projekty
-(zweryfikowane odczytem prod 2026-08-31). Jeśli członek projektu DCS ma
-widzieć wyłącznie swoje projekty, wymaga to NOWEJ polityki (1a.09, na bazie
-`dcs.project_roles` i `has_project_role()`) — odziedziczona tego nie daje.
+(zweryfikowane odczytem prod 2026-08-31). **Rozstrzygnięte (1a.14 review,
+2026-09-08; wykonane 1a.14b):** to NIE jest polityka do zawężenia — jest
+odziedziczoną, produkcyjną infrastrukturą Timesheetu (każdy ekran TES, który
+listuje lub wybiera projekt, zakłada, że każdy pracownik widzi każdy
+projekt, niezależnie od `project_assignments`); zawężenie zepsułoby TES.
+Widoczność per-DCS-rolę na `/dcs` filtruje wyłącznie `apps/dcs` po swojej
+stronie (`apps/dcs/lib/project-list.ts`, na bazie własnych wierszy w
+`dcs.project_roles`) — [ADR-0013](adr/0013-katalog-profili-jako-funkcja-nie-polityka.md).
 
 ### ✅ `public.sub_projects` = kody CTR
 `id`, `project_id (FK)`, `code`, `description`, `is_active`, `is_deleted`,
@@ -214,6 +219,33 @@ i **pozostawiona**: kolumny, o które pytała checklista (cykle, budżet),
 mieszkają w `dcs.mdr_settings`, nie tu — `projects` niesie wyłącznie
 tożsamość projektu, a jej edycja jest w TES admin-only z założenia.
 Test: `supabase/tests/rls_project_role_functions.test.sql`.
+
+### ✅ `dcs_profile_directory()` (`public`, DCS 1a.14b)
+Migracja `20260909130753_dcs_profile_directory`. `security definer`,
+`search_path = ''`, `language sql stable`, `EXECUTE` dla `authenticated`,
+bez `anon`/`PUBLIC` — sam wzorzec co funkcje 1a.09 wyżej, ale wywoływana
+wprost (RPC) z `apps/dcs`, nie tylko z wnętrza wyrażeń polityk.
+`RETURNS TABLE (id uuid, full_name text)` — **wyłącznie te dwie kolumny**,
+nigdy `rate_hourly`/`rate_daily`/`employee_id`/`position`: to jest cały
+powód, dla którego to funkcja, a nie nowa polityka SELECT na
+`public.profiles` (RLS jest na poziomie wiersza, nie kolumny — polityka
+wpuszczająca współczłonka wpuściłaby go też do stawek). Pełne uzasadnienie:
+[ADR-0013](adr/0013-katalog-profili-jako-funkcja-nie-polityka.md).
+Widoczność: admin lub dowolny DC (`is_admin()`/`is_any_doc_controller()`,
+obie bezprojektowe) → cały katalog; zwykły członek → współczłonkowie
+dowolnego projektu, na którym ma wiersz w `dcs.project_roles` (węziej niż
+`is_project_member()` — samo `project_assignments` z TES się nie liczy),
+plus zawsze własny wiersz. Nie zmienia, kto może **pisać** do
+`dcs.project_roles` — to wciąż `is_doc_controller(project_id)`, niezmienione.
+Odczyt w aplikacji: `getProfileDirectory(supabase)` w
+`apps/dcs/lib/profile-directory.ts` (zwraca `{entries, degraded}`, nigdy nie
+rzuca — czytelnik/`picker` degraduje się do skróconego id / pustej listy na
+błąd, jak `lib/module-permissions.ts`). Konsumenci: tabela zespołu i selektor
+"add member" na `/admin/projects/[projectId]`.
+Test: `supabase/tests/dcs_profile_directory.test.sql` — w tym asercje, że
+`public.projects`/`public.profiles` mają politykom `qual` bit-w-bit
+identyczny jak przed tym zadaniem (te dwie polityki są poza zakresem tego
+zadania, patrz ADR-0013).
 
 Tabele TES (`timesheet_*`, `expense_*`, `earnings_*`, `pdf_exports`,
 `weekly_contract_codes`, `*_assignments`) nie są dziedziczone przez DCS —

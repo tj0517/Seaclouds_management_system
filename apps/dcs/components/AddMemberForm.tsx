@@ -1,13 +1,10 @@
 'use client'
 
-// DCS 1a.14: adds a first role for someone not yet on the project's team, from
-// the "per project" view. Candidates are whichever profiles the viewer's own
-// session can read (public.profiles RLS: own row, or every row for an
-// admin) minus the current team — for a non-admin DC this list is usually
-// just themselves, since profiles has no "read my project teammates" policy
-// (see docs/deferred-tasks.md, DCS 1a.14 follow-ups). Not a schema problem
-// this component can work around; it renders whatever candidate list it's
-// given.
+// DCS 1a.14: adds a first role for someone not yet on the project's team,
+// from the "per project" view. Candidates come from
+// public.dcs_profile_directory() (1a.14b) minus the current team — for an
+// admin or any DC that's the whole directory; renders whatever candidate
+// list it's given either way.
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { setProjectRoles } from '@/app/data/actions/project-roles'

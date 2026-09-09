@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { createClient } from '@scl/db/server'
+import { resolveProjectListFilter } from '@/lib/project-list'
 
 export default async function ProjectsPage() {
   const supabase = await createClient()
@@ -10,27 +11,46 @@ export default async function ProjectsPage() {
   // Layout already guarantees a session; RLS queries below still need the id.
   if (!user) return null
 
-  // Deliberately unfiltered: `projects` carries an inherited TES policy that
-  // grants SELECT to every authenticated user, so everyone sees the full list.
-  // Per-member visibility for DCS needs a NEW policy (1a.09, on top of
-  // dcs.project_roles + has_project_role()) — see docs/02-data-model.md.
-  const { data: projects, error } = await supabase
-    .from('projects')
-    .select('id, name, description, project_code, is_active')
-    .order('name')
+  const { data: sessionProfile } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle()
+  const isAdmin = sessionProfile?.role === 'admin'
 
-  if (error) {
-    throw new Error(`Failed to load projects: ${error.message}`)
+  // DCS 1a.14b: public.projects' own SELECT policy ("Widoczność projektów")
+  // still admits every signed-in user — that policy is shared, load-bearing
+  // Timesheet infrastructure and stays untouched (see the migration comment
+  // on public.dcs_profile_directory()). The filter is entirely app-side:
+  // admin gets no filter (the policy already shows everyone everything);
+  // everyone else is narrowed to projects they hold a dcs.project_roles row
+  // on. A member with zero roles gets a clear empty-state message, not an
+  // error; a read failure degrades to the same empty list plus its own
+  // distinct message (fails closed on purpose — see lib/project-list.ts).
+  const filter = await resolveProjectListFilter(supabase, user.id, isAdmin)
+
+  let projects: {
+    id: string
+    name: string
+    description: string | null
+    project_code: string | null
+    is_active: boolean | null
+  }[] = []
+  if (filter.kind === 'all' || (filter.kind === 'ids' && filter.ids.length > 0)) {
+    let query = supabase.from('projects').select('id, name, description, project_code, is_active').order('name')
+    if (filter.kind === 'ids') query = query.in('id', filter.ids)
+    const { data, error } = await query
+    if (error) throw new Error(`Failed to load projects: ${error.message}`)
+    projects = data ?? []
   }
 
   // RLS probe on dcs.mdr_settings — the first dcs.* table with its own
   // policies (deferred-tasks g, closed: this replaced the temporary
-  // timesheet_entries probe, so DCS no longer reads TES tables).
+  // timesheet_entries probe, so DCS no longer reads TES tables). Untouched
+  // by 1a.14b — owner is 1b.05, where the MDR register replaces this
+  // placeholder project list and the probe disappears on its own
+  // (deferred-tasks x).
   //
   // Read half: a clean select with NO filter in code. The current SELECT
   // policy admits every authenticated user, so identical results for admin
-  // and employee are the EXPECTED outcome here — per-member visibility
-  // arrives with dcs.project_members (1a.06).
+  // and employee are the EXPECTED outcome here — this probe is about
+  // dcs.mdr_settings, not the project list above it.
   const { data: mdrSettings, error: mdrError } = await supabase
     .schema('dcs')
     .from('mdr_settings')
@@ -60,12 +80,24 @@ export default async function ProjectsPage() {
     <div className="mx-auto max-w-3xl">
       <h1 className="mb-1 text-2xl font-bold">Projects</h1>
       <p className="mb-4 text-xs text-gray-500">
-        Unfiltered read of public.projects — the inherited policy shows every
-        project to every signed-in user.
+        {filter.kind === 'all'
+          ? 'Every project — you are an admin.'
+          : 'Projects where you hold a DCS role.'}
       </p>
-      {projects.length === 0 ? (
-        <p className="text-sm text-gray-500">No projects visible.</p>
-      ) : (
+
+      {filter.kind === 'degraded' && (
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+          Couldn&apos;t load your project roles right now — showing no projects. Try refreshing; if this
+          persists, contact an admin.
+        </div>
+      )}
+      {filter.kind === 'ids' && filter.ids.length === 0 && (
+        <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-600">
+          You have no DCS project roles yet — ask a Document Controller or admin to add you to a project.
+        </div>
+      )}
+
+      {projects.length === 0 ? null : (
         <table className="w-full border-collapse overflow-hidden rounded-lg border border-gray-200 bg-white text-sm">
           <thead>
             <tr className="border-b border-gray-200 bg-gray-100 text-left">

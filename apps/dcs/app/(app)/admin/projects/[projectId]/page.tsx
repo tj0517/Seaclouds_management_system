@@ -4,10 +4,17 @@
 // this exactly — RLS is still the last line of defence, see setProjectRoles);
 // read-only for every other project member. A non-member sees an empty team
 // (dcs.project_roles RLS: "Project members read project roles").
+//
+// DCS 1a.14b: names (team table) and candidates (picker) now come from
+// public.dcs_profile_directory() (lib/profile-directory.ts) instead of
+// reading public.profiles directly — that policy is own-row-or-admin, which
+// starved both for a non-admin DC. See the migration comment for why this
+// is a function and not a wider profiles policy (column exposure).
 import { notFound, redirect } from 'next/navigation'
 import { createClient } from '@scl/db/server'
 import AddMemberForm from '@/components/AddMemberForm'
 import RoleCheckboxGroup from '@/components/RoleCheckboxGroup'
+import { excludeIds, getProfileDirectory } from '@/lib/profile-directory'
 import type { ProjectRole } from '@/lib/project-roles'
 
 export default async function ProjectTeamPage({ params }: { params: Promise<{ projectId: string }> }) {
@@ -19,9 +26,10 @@ export default async function ProjectTeamPage({ params }: { params: Promise<{ pr
   } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const [{ data: project, error: projectError }, { data: sessionProfile }] = await Promise.all([
+  const [{ data: project, error: projectError }, { data: sessionProfile }, directory] = await Promise.all([
     supabase.from('projects').select('id, name, project_code, is_active').eq('id', projectId).maybeSingle(),
     supabase.from('profiles').select('role').eq('id', user.id).maybeSingle(),
+    getProfileDirectory(supabase),
   ])
   if (projectError) throw new Error(`Failed to load project: ${projectError.message}`)
   if (!project) notFound()
@@ -56,23 +64,14 @@ export default async function ProjectTeamPage({ params }: { params: Promise<{ pr
   const memberIds = [...rolesByUser.keys()]
   const hasDc = (teamRows ?? []).some((row) => row.role === 'dc')
 
-  // Best effort: public.profiles RLS is "own row, or every row for a global
-  // admin" (docs/02-data-model.md) — a non-admin DC/member reading this page
-  // only gets their own name back here, not their teammates'. Falls back to
-  // a short id so the table stays usable either way.
-  const { data: memberProfiles } =
-    memberIds.length > 0
-      ? await supabase.from('profiles').select('id, full_name').in('id', memberIds)
-      : { data: [] as { id: string; full_name: string | null }[] }
-  const nameById = new Map((memberProfiles ?? []).map((p) => [p.id, p.full_name]))
+  const nameById = new Map(directory.entries.map((entry) => [entry.id, entry.full_name]))
   const displayName = (id: string) => nameById.get(id) ?? `${id.slice(0, 8)}…`
 
   let candidates: { id: string; label: string }[] = []
   if (canEdit) {
-    const { data: allProfiles } = await supabase.from('profiles').select('id, full_name').order('full_name')
-    candidates = (allProfiles ?? [])
-      .filter((p) => !rolesByUser.has(p.id))
-      .map((p) => ({ id: p.id, label: p.full_name ?? `${p.id.slice(0, 8)}…` }))
+    candidates = excludeIds(directory.entries, rolesByUser.keys())
+      .map((entry) => ({ id: entry.id, label: entry.full_name ?? `${entry.id.slice(0, 8)}…` }))
+      .sort((a, b) => a.label.localeCompare(b.label))
   }
 
   return (
@@ -93,6 +92,11 @@ export default async function ProjectTeamPage({ params }: { params: Promise<{ pr
       {!canEdit && (
         <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-600">
           Read-only — only an admin or this project&apos;s Document Controller can change roles here.
+        </div>
+      )}
+      {directory.degraded && (
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+          Couldn&apos;t load teammate names right now — showing ids instead where a name is missing.
         </div>
       )}
 
