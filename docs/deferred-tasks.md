@@ -805,3 +805,41 @@ report a blocked criterion after building everything else.
   decides workflow_step editing should wait for the engine, gating the tab
   is a small follow-up (filter one entry out of `DICT_TYPES` for display,
   independent of the DB CHECK list).
+
+## cc) Follow-ups noted during DCS 1a.14b (project list by roles + profile directory)
+
+- **Team table row order is not sorted by name** (`admin/projects/[projectId]/page.tsx`) —
+  `memberIds` iterates in whatever order `dcs.project_roles` rows come back
+  in (no `ORDER BY` on that query), unlike the "add member" picker, which
+  this task did sort by `full_name`. Pre-existing since 1a.14, not
+  introduced here; touched adjacent code so it was tempting to fix in
+  passing, left alone (one task = one PR). A follow-up would add
+  `.order('user_id')` or sort `memberIds` by `displayName()` client-side.
+- **The "add member" picker has no search/pagination** — for admin/any-DC it
+  now sources the whole directory (this task's own scope decision, ADR-0013),
+  which at today's scale (a handful of test/seed accounts) is a short
+  `<select>`. Once real headcount lands this will want a searchable combobox;
+  not attempted here, no acceptance criterion asked for it.
+- **`docs/03-conventions.md`'s advisor baseline note ("19 × 0027 + 10 ×
+  0029") is still stale** — already flagged in (aa) as actually 19+11 before
+  this task; after this task's migration it is 19+12 (one new
+  `SECURITY DEFINER` function, `dcs_profile_directory()`, executable by
+  `authenticated`). Not fixed here — same reasoning as (aa): a docs-only fix
+  for whoever next touches that file, not this task's job to chase.
+- **Blocked on merge, not left unfixed:** the scl-dev-specific acceptance
+  criteria (the three-output grant/revoke/re-grant sequence for
+  `dcs1a14-member`, the live team-table/picker/audit_log proof as
+  `dcs1a14-dc`, and the `get_advisors(security)` **after** reading) all
+  require `public.dcs_profile_directory()` to actually exist on scl-dev,
+  which only happens once this PR merges to `main` and CI runs
+  `db push` (`docs/01-architecture.md`) — not something this session can or
+  should shortcut by writing DDL to scl-dev directly (the task's own
+  non-negotiable rule: "Migrations go to scl-dev via the normal PR → CI →
+  db push path only"). Everything reachable without that dependency — full
+  local pgTAP (14 files / 378 tests, including the new
+  `dcs_profile_directory.test.sql`'s 21 assertions), Vitest, typecheck,
+  lint, and the `get_advisors(security)` **before** reading (19×0027/11×0029,
+  read 2026-09-09T13:05:48Z, before any change) — is done and reported.
+  Whoever merges this should run the scl-dev proof steps immediately after
+  and paste the results into the PR, or ask this session to do it once
+  merged.

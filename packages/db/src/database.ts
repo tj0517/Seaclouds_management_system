@@ -827,6 +827,13 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      dcs_profile_directory: {
+        Args: never
+        Returns: {
+          full_name: string
+          id: string
+        }[]
+      }
       has_project_role: {
         Args: {
           p_project_id: string
