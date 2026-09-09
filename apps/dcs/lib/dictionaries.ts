@@ -11,7 +11,8 @@ export type DictionaryRow = Tables<{ schema: 'dcs' }, 'dictionaries'>
  * Dictionary types accepted by the CHECK constraint on dcs.dictionaries.dict_type
  * (migration 20260904081501). `dict_type` is text, not an enum, so the generated
  * types cannot carry this list — keep it in sync with the CHECK when a type is
- * added; rls_dictionaries.test.sql asserts the database side.
+ * added; rls_dictionaries.test.sql asserts the database side and
+ * scripts/check-dict-types.sh asserts this list against it in CI.
  */
 export const DICT_TYPES = [
   'doc_type',
@@ -25,6 +26,17 @@ export const DICT_TYPES = [
 
 export type DictType = (typeof DICT_TYPES)[number]
 
+/** Display labels for the dictionaries screen tabs (DCS 1a.15) — glossary terms, not DB codes. */
+export const DICT_TYPE_LABELS: Record<DictType, string> = {
+  doc_type: 'Document Type',
+  discipline: 'Discipline',
+  area: 'Area',
+  language: 'Language',
+  acceptance_code: 'Acceptance Code',
+  workflow_status: 'Workflow Status',
+  workflow_step: 'Workflow Step',
+}
+
 type DbClient = SupabaseClient<Database>
 
 /**
@@ -32,8 +44,12 @@ type DbClient = SupabaseClient<Database>
  * order is stable). Inactive rows are excluded on purpose: this is the "what a
  * form may offer" view. To resolve a historical code, query by id/code without
  * the is_active filter.
+ *
+ * This is the contract 1a.17 (document creation wizard) and 1b.04 (document
+ * form) call to populate their dropdowns — do not change its return shape
+ * (active rows only, sort_order/code order) without checking those callers.
  */
-export async function getDictionary(
+export async function getActiveDictionary(
   supabase: DbClient,
   type: DictType,
 ): Promise<DictionaryRow[]> {
@@ -46,6 +62,6 @@ export async function getDictionary(
     .order('sort_order', { ascending: true })
     .order('code', { ascending: true })
 
-  if (error) throw new Error(`getDictionary(${type}): ${error.message}`)
+  if (error) throw new Error(`getActiveDictionary(${type}): ${error.message}`)
   return data
 }

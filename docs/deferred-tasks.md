@@ -352,13 +352,21 @@ PR (one topic per PR). Each item names its owner task or trigger:
 
 ## r) Follow-ups noted during DCS 1a.07 (`dcs.dictionaries`)
 
-- **DC write access on `dcs.dictionaries`** — ships with the dictionary
+- ~~**DC write access on `dcs.dictionaries`** — ships with the dictionary
   screen (1a.15), not before (same decision as `clients` in 1a.09). It needs
   a project-less `is_any_doc_controller()` helper (`exists (select 1 from
   dcs.project_roles where user_id = auth.uid() and role = 'dc')`): a new
   SECURITY DEFINER function → +1 × 0029 and a STOP gate. With it, decide
   whether DC may DELETE at all or only deactivate (`is_active = false`);
-  the row comment already says the app never deletes.
+  the row comment already says the app never deletes.~~ **Done, in two
+  steps.** The DB half (helper + INSERT/UPDATE policies + aal2 conjunct)
+  landed earlier than this note implies — migrations `20260904125543`
+  (1a.09b) and `20260904160000` (1a.11) — so by the time 1a.15 built the
+  screen there was no migration left to write, only the app guard
+  (`requireAdminOrAnyDc` in `apps/dcs/lib/dictionaries-admin.ts`, mirroring
+  `is_any_doc_controller()`) and the UI. DELETE stays admin-only, per the
+  question this note posed — the screen only ever calls
+  `setDictionaryEntryActive`, never a delete action.
 - **`DICT_TYPES` in `apps/dcs/lib/dictionaries.ts` duplicates the CHECK
   list** by hand — unavoidable while `dict_type` is text (the generated
   types carry no literal union for a CHECK). Guarded since PR #26: CI step
@@ -707,3 +715,93 @@ report a blocked criterion after building everything else.
   (chmod 600, same convention as the other files in that directory, e.g.
   `scl-dev-credentials.txt`). Reuse for the **1a.21** demo (owner
   instruction, 2026-09-08) instead of creating new ones.
+
+## bb) Follow-ups noted during DCS 1a.15 (dictionaries screen)
+
+- **`apps/dcs` had no shadcn/ui at all before this task** — no Radix
+  dependencies, no `cn()`, no CSS-variable theme, no `components.json`, no
+  icon library, despite `CLAUDE.md` naming Timesheet's shadcn setup as "the
+  pattern for DCS." The task's own scope asked for a shadcn `Dialog`, so this
+  PR brings over the minimal scaffold (matching Timesheet's
+  `components.json`/theme token-for-token) plus `Dialog`, `Button`, `Input`,
+  `Label`, `Textarea`, `Table`, `Tabs`, `Switch`, `Badge` — the last of these,
+  `Tabs`, doesn't exist in Timesheet either, so it's a fresh shadcn-pattern
+  component, not a copy. This also closes the icon-library half of
+  `deferred-tasks.md` (x) (`lucide-react` is now an `apps/dcs` dependency,
+  used by the copied `Dialog`'s close icon) — the mobile-drawer half of (x)
+  is still open, unrelated to this task.
+- **`tailwind.config` is `.mjs`, not `.js`, in `apps/dcs`** — unlike
+  Timesheet, which keeps a `require()`-style `.js` config with the lint rule
+  downgraded to a warning (`apps/timesheet/eslint.config.mjs`'s documented
+  debt list). `apps/dcs/eslint.config.mjs` explicitly opts out of any rule
+  downgrades ("Strict, blocking lint from day one … No rule downgrades
+  here"), so the `require("tailwindcss-animate")` the config needs would be a
+  lint error, not a warning. Tailwind resolves `.mjs` config files the same
+  way, and `apps/dcs/postcss.config.mjs` already uses the ESM form, so this
+  follows the app's own existing convention rather than inventing a new one.
+- **A dev-mode-only React hydration warning appears on `/admin/dictionaries`
+  under `next dev --turbopack`** (Next.js 16.1.1), specifically for a
+  non-admin/non-DC session (no `Dialog` mounted, only `Tabs` + `Switch`):
+  Radix's internal `useId()`-based `id`/`aria-controls` pair on the tab
+  triggers/panels differs between the server-rendered and hydrated markup.
+  Verified NOT to reproduce in a production build (`next build && next
+  start`, same route, same session) — checked directly against scl-dev
+  during this task's live verification, not assumed. Reads as a known class
+  of Turbopack-dev + Radix `useId` instability (the dev overlay itself flags
+  the Next.js version as stale, 16.1.1 → 16.3.4 available) rather than a
+  logic bug in `DictionariesClient`/`DictionaryTypeTable`. No action taken —
+  noting it here so a future `next`/Turbopack bump can be checked against it
+  rather than it being rediscovered as "new."
+- **`getDictionary` renamed to `getActiveDictionary`**
+  (`apps/dcs/lib/dictionaries.ts`) to match the name the task brief and
+  `docs/02-data-model.md` already used for it. Verified zero callers before
+  renaming (grep, 2026-09-09) — 1a.07 shipped the function but nothing had
+  called it yet, so this was a same-PR rename, not a breaking change needing
+  its own task.
+- **No nav link to `/admin/dictionaries` was added** to `DcsSidebar` —
+  reachable only by direct URL, same as `/admin/projects/[projectId]` and
+  `/admin/users/[userId]` before it (`docs/deferred-tasks.md` (aa): "No
+  discovery path to either new screen beyond a direct URL"). Consistent with
+  that precedent rather than a new gap; whoever eventually adds DCS nav
+  discovery should cover all three at once. **Owner: 1a.21** — `DcsSidebar`
+  link to `/admin/dictionaries` (and, while there, `/admin/projects` and
+  `/admin/users`, both still nav-less from 1a.14) tracked as one task rather
+  than three separate small PRs.
+- **`meta jsonb` still has no per-type JSON schema / CHECK** (r, above) —
+  this task adds exactly one real key (`budget_hours`, `doc_type` only),
+  validated at the app layer (`lib/dictionaries-admin.ts`) but not at the DB
+  layer. A `colour` key for `workflow_status` (O-05) is still unshaped.
+  Unchanged scope decision from 1a.07 — not re-litigated here, just still
+  true.
+- **`updateDictionaryEntry` writes the full row, not a diff** — unlike
+  `setProjectRoles` (1a.14), which computes granted/revoked sets and issues
+  only the rows that actually changed. Confirmed a real correctness gap, not
+  just an audit-log-verbosity concern: `parseUpdateDictionaryEntryInput`
+  (`lib/dictionaries-admin.ts`) turns an *omitted* `description` into `null`
+  (`description ? description.trim() : null`), and the update always sends
+  it — so a caller that doesn't pass `description` clears it. Reproduced
+  live during this task's own scl-dev verification (the "verification UPDATE
+  at 11:51Z" run, which didn't pass `description`): the row's existing
+  `"1a.15 verification entry"` description was wiped to `null`, confirmed in
+  the printed `updateDictionaryEntry` result. The shipped UI
+  (`DictionaryEntryDialog`) always sends `description` from its own form
+  state, so this isn't reachable through the screen today — only through a
+  caller of the lib function that omits the field, e.g. a future script or a
+  narrower future consumer. Fix before 1a.17 reuses this pattern for its own
+  dictionary-adjacent writes: read the current row, diff each optional field
+  against `undefined` (not against falsy), and write only what changed.
+- **Needs owner decision (also asked in this task's own Report):**
+  (1) DB-level immutability of `code` — today only the app enforces it
+  (`UpdateDictionaryEntryInput` carries no `code` field); a direct
+  `PATCH .../dictionaries?id=eq...` with `{"code":"..."}` from a DC's own
+  session would succeed against RLS, since the two 1a.09b/1a.11 policies
+  never look at which columns changed. A trigger blocking `code` changes on
+  UPDATE would close this but is a schema change, out of this PR's scope.
+  (2) Whether `workflow_step` should be a visible tab or hidden until the
+  workflow engine exists (O-15 is still open) — shipped as a visible tab
+  here because the task's acceptance criteria explicitly require a
+  screenshot proving all 7 types are present, including `workflow_step`;
+  hiding it would have contradicted that criterion. If the owner later
+  decides workflow_step editing should wait for the engine, gating the tab
+  is a small follow-up (filter one entry out of `DICT_TYPES` for display,
+  independent of the DB CHECK list).
