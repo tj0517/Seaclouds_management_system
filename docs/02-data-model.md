@@ -348,10 +348,16 @@ DC → 42501, UPDATE DC → zero wierszy.
 Audyt: trigger `audit_dictionaries` = piąta tabela pod `audit_trigger()`
 (`project_id` NULL, więc wpisy widzi tylko admin — DC nie ma projektu, po
 którym mógłby je odczytać; do rewizji przy 1a.15).
-Odczyt w aplikacji: `getDictionary(supabase, type)` w
+Odczyt w aplikacji: `getActiveDictionary(supabase, type)` (1a.07, przemianowane
+z `getDictionary` w 1a.15 — zero wywołań w tamtym momencie, zero ryzyka) w
 `apps/dcs/lib/dictionaries.ts` — aktywne wiersze jednego typu w `sort_order`
 (remis po `code`), typowane `Tables<{schema:'dcs'}, 'dictionaries'>`;
-wzorzec jak `lib/project-roles.ts` (klient przekazywany, bez Next.js).
+wzorzec jak `lib/project-roles.ts` (klient przekazywany, bez Next.js). Zapis
+(1a.15): ekran `/admin/dictionaries` w `apps/dcs`, akcje w
+`apps/dcs/lib/dictionaries-admin.ts` — guard admin-lub-dowolny-DC
+(`requireAdminOrAnyDc`, mirror aplikacyjny `is_any_doc_controller()`), `code`
+niemodyfikowalny (typ `UpdateDictionaryEntryInput` go nie niesie), dezaktywacja
+zamiast kasowania (`setDictionaryEntryActive`).
 Test: `supabase/tests/rls_dictionaries.test.sql` (kształt, CHECK, UNIQUE,
 anon/pracownik/outsider/DC/admin, wpisy w `audit_log`).
 
