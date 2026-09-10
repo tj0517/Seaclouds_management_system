@@ -9,6 +9,7 @@ import {
   parseUpdateClientInput,
   setClientActive,
   updateClient,
+  visibleClients,
   type ClientRow,
 } from './clients-admin'
 
@@ -253,5 +254,37 @@ describe('getActiveClients', () => {
     const { client } = stubClient({ sessionUserId: ADMIN, role: 'admin', currentRow })
     const result = await getActiveClients(client)
     expect(result).toEqual([currentRow])
+  })
+})
+
+// The pure decision behind ClientsTable's "Show inactive" toggle — extracted
+// so it is unit-testable under vitest.config.ts's node-only environment
+// (DCS 1a.12: no jsdom/RTL in apps/dcs; components stay untested-but-trivial
+// wrappers around exported decision functions, see components/IfRole.tsx).
+// ClientsTable itself only calls this and renders the result — nothing left
+// there worth mounting a component-testing stack for.
+describe('visibleClients', () => {
+  const active = makeRow({ id: 'active-1', is_active: true })
+  const inactive = makeRow({ id: 'inactive-1', is_active: false })
+
+  it('hides inactive clients by default (showInactive=false)', () => {
+    expect(visibleClients([active, inactive], false)).toEqual([active])
+  })
+
+  it('shows inactive clients, unmodified, when showInactive=true', () => {
+    expect(visibleClients([active, inactive], true)).toEqual([active, inactive])
+  })
+
+  it('never drops a row from the input — is_active stays false, not deleted', () => {
+    const result = visibleClients([active, inactive], true)
+    const found = result.find((c) => c.id === 'inactive-1')
+    expect(found).toBeDefined()
+    expect(found?.is_active).toBe(false)
+  })
+
+  it('an all-active list is unaffected by the toggle either way', () => {
+    const clients = [active, makeRow({ id: 'active-2', is_active: true })]
+    expect(visibleClients(clients, false)).toEqual(clients)
+    expect(visibleClients(clients, true)).toEqual(clients)
   })
 })

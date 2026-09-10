@@ -263,6 +263,20 @@ export async function setClientActive(
 }
 
 /**
+ * The "Show inactive" decision behind ClientsTable, pulled out as a pure
+ * function so it is unit-testable in vitest.config.ts's node-only
+ * environment (DCS 1a.12: no jsdom/RTL in apps/dcs — components stay
+ * untested-but-trivial wrappers around exported decision functions, see
+ * components/IfRole.tsx). Never drops a row from the input: with
+ * showInactive=true the output is the full input list (inactive rows kept,
+ * including their is_active flag, which is what drives the "greyed out" CSS
+ * class in ClientsTable) — a client is filtered from view, never deleted.
+ */
+export function visibleClients(clients: readonly ClientRow[], showInactive: boolean): ClientRow[] {
+  return clients.filter((client) => client.is_active || showInactive)
+}
+
+/**
  * Active clients, name-ordered — the contract task 1a.17 (Create Project MDR
  * wizard) is expected to call to populate its client picker. Zero callers
  * today; do not change this shape (active rows only, name order) without
