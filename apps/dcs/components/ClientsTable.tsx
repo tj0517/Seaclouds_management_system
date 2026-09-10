@@ -14,7 +14,7 @@ import { Switch } from '@/components/ui/switch'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import ClientDialog from '@/components/ClientDialog'
 import { setClientActive } from '@/app/data/actions/clients'
-import type { ClientRow } from '@/lib/clients-admin'
+import { visibleClients as computeVisibleClients, type ClientRow } from '@/lib/clients-admin'
 
 type Props = {
   clients: ClientRow[]
@@ -28,7 +28,7 @@ export default function ClientsTable({ clients, projectCounts, canEdit }: Props)
   const [pendingId, setPendingId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const visibleClients = clients.filter((client) => client.is_active || showInactive)
+  const visible = computeVisibleClients(clients, showInactive)
 
   const handleToggleActive = async (client: ClientRow) => {
     setPendingId(client.id)
@@ -54,7 +54,7 @@ export default function ClientsTable({ clients, projectCounts, canEdit }: Props)
 
       {error && <p className="mb-2 text-xs text-red-600">Error: {error}</p>}
 
-      {visibleClients.length === 0 ? (
+      {visible.length === 0 ? (
         <p className="text-sm text-gray-500">
           {clients.length === 0 ? 'No clients yet.' : 'No active clients — toggle "Show inactive" to see the rest.'}
         </p>
@@ -71,7 +71,7 @@ export default function ClientsTable({ clients, projectCounts, canEdit }: Props)
             </TableRow>
           </TableHeader>
           <TableBody>
-            {visibleClients.map((client) => (
+            {visible.map((client) => (
               <TableRow key={client.id} className={client.is_active ? undefined : 'opacity-50'}>
                 <TableCell>{client.name}</TableCell>
                 <TableCell className="font-mono">{client.code}</TableCell>
