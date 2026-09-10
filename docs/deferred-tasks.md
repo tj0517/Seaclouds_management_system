@@ -766,7 +766,9 @@ report a blocked criterion after building everything else.
   discovery should cover all three at once. **Owner: 1a.21** — `DcsSidebar`
   link to `/admin/dictionaries` (and, while there, `/admin/projects` and
   `/admin/users`, both still nav-less from 1a.14) tracked as one task rather
-  than three separate small PRs.
+  than three separate small PRs. **Update (DCS 1a.16):** add
+  `/admin/clients` to this same list — same gap, same owner, same reasoning;
+  the task's own scope explicitly excluded adding a `DcsSidebar` entry.
 - **`meta jsonb` still has no per-type JSON schema / CHECK** (r, above) —
   this task adds exactly one real key (`budget_hours`, `doc_type` only),
   validated at the app layer (`lib/dictionaries-admin.ts`) but not at the DB
