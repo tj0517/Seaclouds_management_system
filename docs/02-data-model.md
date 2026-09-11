@@ -247,6 +247,68 @@ Test: `supabase/tests/dcs_profile_directory.test.sql` — w tym asercje, że
 identyczny jak przed tym zadaniem (te dwie polityki są poza zakresem tego
 zadania, patrz ADR-0013).
 
+### ✅ `dcs_create_project_mdr(...)` (`public`, DCS 1a.17)
+Migracja `20260911103639`. Jedna transakcja zakładająca MDR projektu:
+`public.projects` + `dcs.mdr_settings` + `dcs.project_roles[]` +
+`public.sub_projects[]` (kody CTR), zwraca `id` nowego projektu. Sygnatura:
+`(p_project_code text, p_name text, p_process_type public.project_process_type,
+p_year integer, p_client_id uuid = null, p_cpy_numbering boolean = false,
+p_cycle_idc_to_ifr integer = 7, p_cycle_ifr_to_retcom integer = 10,
+p_cycle_retcom_to_ifc integer = 7, p_budget_hours numeric = null,
+p_roles jsonb = '[]', p_ctr_codes jsonb = '[]') → uuid`;
+`p_roles` to `[{"user_id": uuid, "role": dcs.project_role}, …]`,
+`p_ctr_codes` to `[{"code": text, "description": text}, …]`.
+Dom w `public` z prefiksem `dcs_` — jak `dcs_profile_directory()` (1a.14b):
+pisze w obu schematach, więc nie należy do żadnego.
+
+**`security invoker`** (zapisane jawnie), `search_path = ''`, `EXECUTE` dla
+`authenticated`, odebrane `anon`/`PUBLIC`. Każdy z czterech INSERT-ów wykonuje
+się jako wołający, więc obowiązują niezmienione polityki (`Admin zarządza
+projektami`, `Admin zarządza kodami`, `Admins manage mdr settings`, `Admins
+manage project roles`) — funkcja nie daje żadnego uprawnienia, wyłącznie
+granicę transakcji. `security definer` byłby tu **gorszy**: żadna z czterech
+tabel nie ma `FORCE ROW LEVEL SECURITY` (odczyt scl-dev 2026-09-11:
+`relforcerowsecurity = false`), więc funkcja `definer` należąca do `postgres`
+omijałaby RLS całkowicie. Advisor: lint 0029 liczy tylko funkcje
+`SECURITY DEFINER`, więc ta nie dokłada nic (baseline **19 × 0027 +
+12 × 0029**, odczyt 2026-09-11 — uwaga: `docs/03-conventions.md` wciąż pisze
+10 × 0029, przestarzałe od 1a.14b, `docs/deferred-tasks.md` (cc)).
+
+Autoryzacja: pierwsza instrukcja ciała to `if not (select public.is_admin())
+then raise … using errcode = 'insufficient_privilege'` (42501) — bezwarunkowo,
+bez gałęzi dla DC i `service_role`. Tworzenie zostaje admin-only zgodnie
+z decyzją 1a.16: `dcs.project_roles` ma gałąź DC per projekt, a nikt nie może
+być DC projektu, który jeszcze nie istnieje. DC jest **czytelnikiem** —
+widzi projekt na `/dcs` po jego utworzeniu.
+
+Jedyna reguła dopisana przez funkcję (nie egzekwowana wcześniej nigdzie):
+projekt `internal` nie ma klienta ani numeracji CPY — `p_client_id is not null`
+lub `p_cpy_numbering` przy `process_type = 'internal'` daje `22023`
+(`invalid_parameter_value`). Rzuca, nie koryguje po cichu. Reszta walidacji
+zostaje przy istniejących ograniczeniach (`projects_project_code_format`
+23514, `unique_project_code` 23505, CHECK-i cykli/budżetu 23514,
+`sub_projects_project_id_code_key` 23505 = zduplikowany kod CTR, cast enuma
+22P02, FK `profiles` 23503) — bez drugiej kopii reguły.
+
+Kolejność zapisów: `projects` → `mdr_settings` → `project_roles` →
+`sub_projects`. CTR-y **na końcu** celowo: dowód atomowości to awaria
+ostatniego kroku (zduplikowany kod CTR), czyli dokładnie ten przypadek,
+w którym sekwencja czterech wywołań PostgREST zdążyłaby już zapisać resztę.
+Zmierzone lokalnie (2026-09-11, throwaway przez PostgREST): funkcja zostawia
+delta `{projects:0, mdr_settings:0, project_roles:0, sub_projects:0}`, ta sama
+treść jako cztery osobne wywołania zostawia `{1, 1, 1, 0}` i osierocony projekt.
+`assigned_by` na wierszach ról bierze się z `auth.uid()`, nie z parametru.
+
+Aplikacja: `apps/dcs/lib/project-mdr.ts` (`createProjectMdr` /
+`updateProjectMdr`, diff-only po obu tabelach; guard `requireAdmin`
+reużyty z `lib/clients-admin.ts`), akcje w
+`apps/dcs/app/data/actions/project-mdr.ts`, kreator
+`app/(app)/admin/projects/new` + `components/CreateProjectWizard.tsx`,
+edycja `components/EditProjectDialog.tsx`. `dcs.mdr_settings` **nie jest**
+audytowana (`audit_trigger()` zakłada PK `uuid id`) — rozszerzenie triggera to
+zadanie 1a.17b, `docs/deferred-tasks.md`.
+Test: `supabase/tests/dcs_create_project_mdr.test.sql` (55 asercji).
+
 Tabele TES (`timesheet_*`, `expense_*`, `earnings_*`, `pdf_exports`,
 `weekly_contract_codes`, `*_assignments`) nie są dziedziczone przez DCS —
 DCS ich nie czyta i nie modyfikuje.
@@ -276,7 +338,8 @@ active|closed, default active)`, `created_at`, `updated_at` (trigger
 `set_updated_at`). Utworzona migracją `20260902114744` (DCS 1a.05).
 Semantyka istnienia wiersza: **brak wiersza = DCS nie prowadzi tego
 projektu** — wierszy nie tworzy się hurtem dla istniejących projektów;
-wiersz powstaje przy zakładaniu MDR w DCS (kreator, 1a.17). ON DELETE
+wiersz powstaje przy zakładaniu MDR w DCS (kreator 1a.17 — jedyną drogą jest
+`public.dcs_create_project_mdr()`, patrz niżej). ON DELETE
 CASCADE: ustawienia bez projektu to bezsensowna sierota, a kasowanie
 projektów i tak jest w TES admin-only. Częstotliwość podsumowania e-mail
 (brief §5.2) — dojdzie z modułem powiadomień, nie teraz.

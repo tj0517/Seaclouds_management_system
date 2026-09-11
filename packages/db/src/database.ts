@@ -827,6 +827,23 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      dcs_create_project_mdr: {
+        Args: {
+          p_budget_hours?: number
+          p_client_id?: string
+          p_cpy_numbering?: boolean
+          p_ctr_codes?: Json
+          p_cycle_idc_to_ifr?: number
+          p_cycle_ifr_to_retcom?: number
+          p_cycle_retcom_to_ifc?: number
+          p_name: string
+          p_process_type: Database["public"]["Enums"]["project_process_type"]
+          p_project_code: string
+          p_roles?: Json
+          p_year: number
+        }
+        Returns: string
+      }
       dcs_profile_directory: {
         Args: never
         Returns: {

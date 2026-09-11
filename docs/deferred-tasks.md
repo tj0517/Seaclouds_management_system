@@ -919,3 +919,80 @@ report a blocked criterion after building everything else.
   Whoever merges this should run the scl-dev proof steps immediately after
   and paste the results into the PR, or ask this session to do it once
   merged.
+
+
+## dd) 1a.17b — audyt `dcs.mdr_settings`
+
+Zmiany cykli review, budżetu, `cpy_numbering` i statusu MDR **nie zostawiają
+żadnego śladu** w `public.audit_log`. Jedynym świadkiem jest
+`mdr_settings.updated_at` (trigger `set_updated_at`), który mówi „coś się
+zmieniło o tej godzinie” i nic więcej — nie kto, nie które pole, nie z czego
+na co.
+
+Powód jest strukturalny, nie przeoczenie: `public.audit_trigger()` (1a.08)
+ma jedno założenie o kształcie tabeli — PK `uuid id`, z którego bierze
+`record_id`. `dcs.mdr_settings` ma PK `project_id` i żadnej kolumny `id`,
+więc jest świadomie poza listą tabel objętych triggerem (komentarz
+w `20260903173128_create_audit_log.sql`, sekcja `public.audit_log`
+w `02-data-model.md`). Dopisanie jej wymaga **gałęzi w funkcji**, nie samego
+`create trigger` — a to zmiana we wspólnej funkcji audytu dotykająca sześciu
+już audytowanych tabel, więc własne zadanie z własnymi testami, nie dokładka
+do 1a.17.
+
+Waga: brief §5.2 traktuje cykl 7/10/7 jako atrybut projektu dziedziczony
+przez dokumenty, a Faza 2 ma z niego przeliczać daty Planned — „kto skrócił
+cykl z 10 na 3 dni” jest pytaniem, które padnie. Zakres zadania:
+gałąź w `audit_trigger()` dla tabel z PK innym niż `id` (dla `mdr_settings`
+`record_id` = `project_id`, `project_id` = to samo), trigger na
+`dcs.mdr_settings`, test w `supabase/tests/audit_log.test.sql` lub własnym
+pliku, wpis w liście tabel w `02-data-model.md`. Kryterium wprost wymienione
+w 1a.17 jako **poza zakresem** (razem z całym `public.audit_trigger()`).
+
+Udokumentowane w miejscu użycia: komentarz nagłówkowy
+`apps/dcs/components/EditProjectDialog.tsx` (sekcja „AUDITING IS ASYMMETRIC,
+ON PURPOSE") i test `dcs_create_project_mdr.test.sql` („audit_log has NOTHING
+for dcs.mdr_settings").
+
+## ee) Follow-ups noted during DCS 1a.17 (Create Project MDR wizard)
+
+- **`public.projects.project_code` jest niezmienny tylko w aplikacji.**
+  `UpdateProjectMdrInput` nie ma takiego pola, a `parseUpdateProjectMdrInput`
+  wycina je z surowego payloadu — ale baza wciąż na UPDATE pozwala: polityka
+  `Admin zarządza projektami` (ALL, `is_admin()`) nie patrzy na kolumny.
+  To dokładnie ta sama luka, którą 1a.15b zamknęło dla
+  `dcs.dictionaries.code` triggerem `forbid_dictionary_code_change()`,
+  i z dokładnie tego samego powodu (kod jest pierwszym członem numeru
+  dokumentu: `SC2601-SCL-RA-0012-EN`). Kusiło, żeby dopisać bliźniaczy
+  trigger przy okazji — zostawione: to zmiana w tabeli **produkcyjnej
+  Timesheetu**, a `apps/timesheet/.../EditProjectDialog.tsx` ma pole
+  `project_code` do edycji i dziś działa. Osobne zadanie musi najpierw
+  ustalić, czy TES ma to pole stracić, czy dostać wyjątek.
+- **Rola `view` jest w kreatorze, choć zakres zadania wymieniał pięć ról**
+  (ORIG/REV/CHK/APP/DC). Krok „Team and roles" renderuje `PROJECT_ROLES`
+  z wygenerowanego enuma (konwencja z `03-conventions.md`: nigdy ręcznie
+  wpisana lista), więc pokazuje wszystkie sześć — tak samo jak macierz
+  1a.14, która istnieje od tygodnia. Pominięcie `view` tylko tutaj zrobiłoby
+  z kreatora wyjątek. Do potwierdzenia przy przeglądzie kreatora.
+- **Kreator nie pozwala ustawić `sub_projects.tracking_type`** (zostaje
+  `'hours'` z defaultu) ani `projects.description`. Żadnego z tych pól nie ma
+  w §9.1 ani w liście pól zadania; `tracking_type` to w dodatku pojęcie TES
+  (godziny vs dni w timesheetcie), nie DCS. Dodanie ich to jedna linia
+  w każdej warstwie — świadomie niezrobione, żeby nie rozszerzać payloadu
+  funkcji bez potrzeby wynikającej z briefu.
+- **`docs/03-conventions.md` nadal pisze „19 × 0027 + 10 × 0029"** —
+  faktyczny odczyt scl-dev 2026-09-11 to **19 × 0027 + 12 × 0029**.
+  Zgłoszone już w (cc); to zadanie nie zmienia baseline'u (funkcja jest
+  `SECURITY INVOKER`), więc znowu nie jest to jego poprawka do zrobienia,
+  ale liczba w konwencjach myli przy każdym porównaniu.
+- **Atomowości nie da się udowodnić samym pgTAP-em.** `throws_ok` wykonuje
+  swoją instrukcję w bloku `exception` plpgsql, czyli w podtransakcji — więc
+  granicą rollbacku jest **wywołanie**, nie ciało funkcji, i wewnątrz jednej
+  transakcji SQL Postgres daje atomowość również sekwencji czterech
+  INSERT-ów. Asercje „zero wierszy po awarii" w
+  `dcs_create_project_mdr.test.sql` są prawdziwe i łapią implementację, która
+  połyka wyjątek (dowód czerwony wykonany), ale tryb awarii, o który chodzi
+  regule z `CLAUDE.md`, to **cztery osobne wywołania PostgREST, każde we
+  własnej transakcji**. Ten dowód wykonano skryptem end-to-end i wpisano do
+  opisu PR; gdyby ktoś chciał go mieć w CI, wymagałby drugiego połączenia
+  (`dblink`) albo testu integracyjnego nad PostgREST-em — dziś nie ma ani
+  jednego, ani drugiego.

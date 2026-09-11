@@ -10,11 +10,22 @@
 // reading public.profiles directly — that policy is own-row-or-admin, which
 // starved both for a non-admin DC. See the migration comment for why this
 // is a function and not a wider profiles policy (column exposure).
+//
+// DCS 1a.17: this page also became the project's MDR summary and the home of
+// EditProjectDialog — the wizard sends you here after creating a project, and
+// this is where its settings are changed afterwards. The summary renders for
+// every reader (mdr_settings' SELECT policy admits any signed-in user); the
+// Edit button only for an admin, matching updateProjectMdr's requireAdmin and
+// the "Admins manage mdr settings" / "Admin zarządza projektami" policies.
 import { notFound, redirect } from 'next/navigation'
 import { createClient } from '@scl/db/server'
 import AddMemberForm from '@/components/AddMemberForm'
+import EditProjectDialog from '@/components/EditProjectDialog'
 import RoleCheckboxGroup from '@/components/RoleCheckboxGroup'
+import { Button } from '@/components/ui/button'
+import { getActiveClients } from '@/lib/clients-admin'
 import { excludeIds, getProfileDirectory } from '@/lib/profile-directory'
+import { MDR_STATUS_LABELS, PROCESS_TYPE_LABELS, getProjectMdr } from '@/lib/project-mdr'
 import type { ProjectRole } from '@/lib/project-roles'
 
 export default async function ProjectTeamPage({ params }: { params: Promise<{ projectId: string }> }) {
@@ -26,15 +37,20 @@ export default async function ProjectTeamPage({ params }: { params: Promise<{ pr
   } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const [{ data: project, error: projectError }, { data: sessionProfile }, directory] = await Promise.all([
-    supabase.from('projects').select('id, name, project_code, is_active').eq('id', projectId).maybeSingle(),
+  const [mdr, { data: sessionProfile }, directory] = await Promise.all([
+    getProjectMdr(supabase, projectId),
     supabase.from('profiles').select('role').eq('id', user.id).maybeSingle(),
     getProfileDirectory(supabase),
   ])
-  if (projectError) throw new Error(`Failed to load project: ${projectError.message}`)
-  if (!project) notFound()
+  if (!mdr) notFound()
+  const { project, settings } = mdr
 
   const isAdmin = sessionProfile?.role === 'admin'
+
+  // Only the Edit dialog needs the client list, and only an admin sees it —
+  // so this read is skipped entirely otherwise rather than being fetched and
+  // thrown away (clients' SELECT policy would also return a narrower set).
+  const clients = isAdmin ? await getActiveClients(supabase) : []
   let canEdit = isAdmin
   if (!canEdit) {
     const { data: ownDcRow } = await supabase
@@ -81,8 +97,57 @@ export default async function ProjectTeamPage({ params }: { params: Promise<{ pr
         {!project.is_active && (
           <span className="rounded-full bg-gray-200 px-2 py-0.5 text-xs text-gray-600">inactive</span>
         )}
+        {isAdmin && (
+          <div className="ml-auto">
+            <EditProjectDialog
+              project={project}
+              settings={settings}
+              clients={clients.map((client) => ({ id: client.id, name: client.name, code: client.code }))}
+              trigger={
+                <Button size="sm" variant="outline">
+                  Edit
+                </Button>
+              }
+            />
+          </div>
+        )}
       </div>
       <p className="mb-6 text-sm text-gray-500">{project.project_code}</p>
+
+      {settings ? (
+        <dl className="mb-6 grid grid-cols-2 gap-x-6 gap-y-1 rounded-lg border border-gray-200 bg-white p-4 text-sm sm:grid-cols-4">
+          <div>
+            <dt className="text-xs text-gray-500">Process type</dt>
+            <dd>{project.process_type ? PROCESS_TYPE_LABELS[project.process_type] : 'not classified'}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-gray-500">Year</dt>
+            <dd>{project.year ?? '—'}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-gray-500">Review cycle</dt>
+            <dd>
+              {settings.cycle_idc_to_ifr}/{settings.cycle_ifr_to_retcom}/{settings.cycle_retcom_to_ifc} days
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs text-gray-500">MDR status</dt>
+            <dd>{MDR_STATUS_LABELS[settings.status]}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-gray-500">Budget</dt>
+            <dd>{settings.budget_hours === null ? 'no budget' : `${settings.budget_hours} h`}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-gray-500">CPY numbering</dt>
+            <dd>{settings.cpy_numbering ? 'yes' : 'no'}</dd>
+          </div>
+        </dl>
+      ) : (
+        <div className="mb-6 rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-600">
+          DCS does not run this project — it has no MDR settings row (docs/02-data-model.md).
+        </div>
+      )}
 
       {!hasDc && (
         <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
