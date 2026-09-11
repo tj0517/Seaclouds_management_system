@@ -62,6 +62,11 @@ Remaining:
   builds the app from its new location. Env vars (`NEXT_PUBLIC_SUPABASE_URL`,
   `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`,
   `RESEND_API_KEY`, `ADMIN_NOTIFICATION_EMAIL`) carry over unchanged.
+- **`deploy-db.yml` depends on `SUPABASE_ACCESS_TOKEN_DEV` having enough
+  capability for `supabase link`, not just `db push`** — rotated 2026-09-11
+  after it failed exactly there, expires ~Jan 2027. Full context, the prod-side
+  check to run before the next production gate, and the `gh run rerun` recovery
+  path are in (n).
 
 ## d) `<Database>` generic in the browser client factory
 
@@ -240,6 +245,25 @@ review-and-rotation of all secrets instead of piecemeal fixes:
 - **CI tokens** — `SUPABASE_ACCESS_TOKEN_DEV` and the prod token scoped to
   the `production-db` environment (ADR-0005): reissue under the org account
   so they stop depending on a personal account.
+- **A fine-grained Supabase access token can pass everything except
+  `supabase link`** — learned the hard way on 2026-09-11 (DCS 1a.15b, PR #44):
+  the merge to `main` ran `deploy-db.yml`, which died 4 s in on
+  `supabase link --project-ref mzotiurydmhibqhxxzoh` with *"Authorization
+  failed for the access token and project ref pair: Your account does not have
+  the necessary privileges to access this endpoint"* — the old
+  `SUPABASE_ACCESS_TOKEN_DEV` lacked one capability `link` needs, so the
+  migration silently did not reach scl-dev even though the merge itself looked
+  clean. Rotated the same day to a **full-capability token scoped to scl-dev
+  only** (the scoping rule from `deploy-db.yml` still holds: repository
+  secrets are readable by any workflow on any branch, so this must never be
+  prod-capable); **expires ~Jan 2027** — see (c) for the workflow that depends
+  on it. **Before the next production gate, check the prod token the same way**
+  with a local `supabase link --project-ref tfbzivfsqsgebegcvfah`: a
+  `workflow_dispatch` that fails at `link` would burn the `production-db`
+  approval for nothing. Recovery, once a token is fixed, is
+  `gh run rerun <run-id>` on the failed push run — a `workflow_dispatch`
+  will not do it, because the dev job is gated on
+  `if: github.event_name == 'push'` and dispatch runs the prod job instead.
 
 Trigger: the org transfer. Context: the old `apps/timesheet/.env.local`
 (backed up to `~/Desktop/seaclouds/backups/timesheet-env-local-qyrf-2026-09-01.txt`,

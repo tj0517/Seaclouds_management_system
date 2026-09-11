@@ -400,6 +400,15 @@ z sesją aal2 mógł zmienić `code` przez PostgREST. Poprawka błędnego kodu =
 nowy wiersz + `is_active = false` na starym; zmiana nazwy pojęcia = `label`.
 `dict_type` **nie** jest objęty triggerem (świadomie poza zakresem 1a.15b —
 `docs/deferred-tasks.md` bb).
+`meta.budget_hours` — **klucz nieobecny i `null` znaczą to samo: „brak
+budżetu"**. Każdy czytelnik (`readBudgetHours` z ekranu 1a.15, kreator MDR
+1a.17, seed 1a.18) musi traktować oba przypadki identycznie i nigdy nie
+odróżniać „nigdy nie ustawiono" od „wyczyszczono". Zapis trzyma się tej samej
+reguły w jednym kierunku: `createDictionaryEntry` zapisuje `{}` bez klucza,
+a `updateDictionaryEntry` przy czyszczeniu **usuwa klucz**, zamiast wpisywać
+`null` (1a.15b) — dzięki temu ta sama wartość ma zawsze jeden kształt i zapis
+bez zmian nie generuje UPDATE-u. Klucz dotyczy wyłącznie `dict_type =
+'doc_type'`; `meta` nadal nie ma CHECK-a na kształt (`docs/deferred-tasks.md` r).
 Zapis z aplikacji jest **różnicowy** (1a.15b): `updateDictionaryEntry` czyta
 bieżący wiersz i wysyła wyłącznie pola faktycznie zmienione, a przy braku
 zmian nie wysyła UPDATE-u w ogóle (`set_updated_at` podbija `updated_at` przy
