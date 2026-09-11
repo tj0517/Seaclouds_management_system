@@ -776,7 +776,7 @@ report a blocked criterion after building everything else.
   Unchanged scope decision from 1a.07 — not re-litigated here, just still
   true.
 - **`updateDictionaryEntry` writes the full row, not a diff — CLOSED
-  2026-09-11 (PR #PRNUM, `fix/dcs-dictionaries-diff-only-immutable-code`,
+  2026-09-11 (PR #44, `fix/dcs-dictionaries-diff-only-immutable-code`,
   DCS 1a.15b).** `updateDictionaryEntry` now reads the current row and sends
   only fields that were both provided (`undefined` = "leave alone") and
   actually differ; nothing changed → no UPDATE at all.
@@ -805,7 +805,7 @@ report a blocked criterion after building everything else.
   dictionary-adjacent writes: read the current row, diff each optional field
   against `undefined` (not against falsy), and write only what changed.
 - **Needs owner decision (also asked in this task's own Report):**
-  (1) DB-level immutability of `code` — **CLOSED 2026-09-11 (PR #PRNUM,
+  (1) DB-level immutability of `code` — **CLOSED 2026-09-11 (PR #44,
   `fix/dcs-dictionaries-diff-only-immutable-code`, DCS 1a.15b)**: migration
   `20260911091125_dictionaries_code_immutable` adds the `BEFORE UPDATE`
   trigger `dictionaries_code_immutable` →
