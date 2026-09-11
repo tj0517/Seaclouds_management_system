@@ -12,7 +12,7 @@
 // the same style requireAdminOrDc (lib/project-roles.ts) already uses for the
 // project-scoped case.
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { Database, Json } from '@scl/db'
+import type { Database, Json, TablesUpdate } from '@scl/db'
 import { DICT_TYPES, type DictionaryRow, type DictType } from './dictionaries'
 
 export type DictionaryEntryError =
@@ -39,9 +39,21 @@ export type CreateDictionaryEntryInput = {
 
 // Deliberately has no `code` field — the update server action must not be
 // able to accept one, even from an untrusted raw payload (code is immutable:
-// it is part of the document number, docs/00-glossary.md). Enforced twice:
-// at the type level here, and at runtime in parseUpdateInput, which only
-// destructures the fields below and ignores anything else in the raw input.
+// it is part of the document number, docs/00-glossary.md). Enforced three
+// times as of 1a.15b: at the type level here, at runtime in
+// parseUpdateDictionaryEntryInput (which only destructures the fields below
+// and ignores anything else in the raw input), and — the only one that
+// survives a direct PostgREST call bypassing this module — by the database
+// trigger dictionaries_code_immutable (migration 20260911091125). The two
+// app-layer restrictions are convenience; the trigger is the control.
+//
+// Every field besides `id` and `label` is optional, and `undefined` means
+// "leave unchanged" (as opposed to `null`, which means "clear") —
+// updateDictionaryEntry below diffs against the current row and writes only
+// what actually changed, the same shape updateClient (lib/clients-admin.ts,
+// 1a.16) already has. `label` stays required, unlike updateClient's optional
+// `name`: the shipped caller (DictionaryEntryDialog) always sends it and the
+// public signature is deliberately unchanged by this task.
 export type UpdateDictionaryEntryInput = {
   id: string
   label: string
@@ -85,6 +97,55 @@ function readBudgetHours(meta: Json): number | null {
   if (typeof meta !== 'object' || meta === null || Array.isArray(meta)) return null
   const value = (meta as Record<string, Json>).budget_hours
   return typeof value === 'number' ? value : null
+}
+
+/**
+ * meta with budget_hours set, or — for `null` — with the key REMOVED rather
+ * than set to JSON null. readBudgetHours() reads an absent key and a null key
+ * identically, and createDictionaryEntry writes `{}` (no key) when no budget
+ * is given, so removing keeps "cleared" and "never set" the same single
+ * shape. It also keeps the diff honest: a doc_type row with no budget, saved
+ * unchanged from the dialog (which sends budgetHours: null), produces a meta
+ * identical to the stored one and therefore no UPDATE.
+ */
+function withBudgetHours(meta: Json, budgetHours: number | null): Json {
+  const base: { [key: string]: Json | undefined } =
+    typeof meta === 'object' && meta !== null && !Array.isArray(meta) ? { ...meta } : {}
+  if (budgetHours === null) {
+    delete base.budget_hours
+  } else {
+    base.budget_hours = budgetHours
+  }
+  return base
+}
+
+/**
+ * Structural equality for jsonb values — meta is the one column whose new
+ * value is an object, so `!==` would report a change on every save. Key order
+ * is irrelevant (Postgres jsonb does not preserve it either), which is why
+ * this compares key sets rather than JSON.stringify output.
+ */
+function jsonEquals(a: Json, b: Json): boolean {
+  if (a === b) return true
+  if (a === null || b === null) return false
+  if (Array.isArray(a) || Array.isArray(b)) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false
+    return a.every((item, i) => jsonEquals(item, b[i]))
+  }
+  if (typeof a === 'object' && typeof b === 'object') {
+    const aKeys = Object.keys(a)
+    const bKeys = Object.keys(b)
+    if (aKeys.length !== bKeys.length) return false
+    return aKeys.every(
+      (key) =>
+        Object.prototype.hasOwnProperty.call(b, key) &&
+        jsonEquals(
+          (a as { [key: string]: Json | undefined })[key] ?? null,
+          (b as { [key: string]: Json | undefined })[key] ?? null,
+        ),
+    )
+  }
+  return false
 }
 
 /**
@@ -135,9 +196,7 @@ export function parseCreateDictionaryEntryInput(raw: unknown): CreateDictionaryE
  * unused by the type: this is what makes "the update action never accepts
  * code" true at runtime, not just at compile time.
  */
-export function parseUpdateDictionaryEntryInput(raw: unknown): Omit<UpdateDictionaryEntryInput, 'budgetHours'> & {
-  budgetHours?: number | null
-} | null {
+export function parseUpdateDictionaryEntryInput(raw: unknown): UpdateDictionaryEntryInput | null {
   if (typeof raw !== 'object' || raw === null) return null
   const { id, label, description, sortOrder, budgetHours } = raw as Record<string, unknown>
 
@@ -150,7 +209,13 @@ export function parseUpdateDictionaryEntryInput(raw: unknown): Omit<UpdateDictio
   return {
     id,
     label: label.trim(),
-    description: description ? description.trim() : null,
+    // An OMITTED description stays `undefined` ("leave alone"); only an
+    // explicit null or empty string clears it. Until 1a.15b this collapsed
+    // both to null (`description ? description.trim() : null`) and
+    // updateDictionaryEntry wrote it unconditionally, so any caller that did
+    // not pass description wiped the stored one — reproduced live on scl-dev
+    // during 1a.15's own verification (docs/deferred-tasks.md bb).
+    description: description === undefined ? undefined : description ? description.trim() : null,
     sortOrder,
     budgetHours: budgetHours as number | null | undefined,
   }
@@ -242,6 +307,18 @@ export async function createDictionaryEntry(
   return { ok: true, data }
 }
 
+/**
+ * Diff-only update (1a.15b): reads the current row and writes only the fields
+ * that were both provided (not `undefined`) and actually differ from the
+ * stored value — never a full-row overwrite. Same pattern, field for field,
+ * as updateClient (lib/clients-admin.ts, 1a.16); the two screens deliberately
+ * do not share a generic helper yet (docs/deferred-tasks.md bb).
+ *
+ * `code` is not diffable here because it is not in the input at all — and
+ * from this task on, the database refuses a code change outright (trigger
+ * dictionaries_code_immutable), including for a PostgREST call that never
+ * goes through this function.
+ */
 export async function updateDictionaryEntry(
   supabase: DbClient,
   rawInput: unknown,
@@ -264,20 +341,31 @@ export async function updateDictionaryEntry(
   const budget = parseBudgetHours(current.dict_type as DictType, input.budgetHours)
   if (!budget.ok) return { ok: false, error: 'invalid_input' }
 
-  const meta: Json =
-    budget.value === undefined
-      ? current.meta
-      : { ...(typeof current.meta === 'object' && current.meta !== null && !Array.isArray(current.meta) ? current.meta : {}), budget_hours: budget.value }
+  const patch: TablesUpdate<{ schema: 'dcs' }, 'dictionaries'> = {}
+  if (input.label !== current.label) patch.label = input.label
+  if (input.description !== undefined && input.description !== current.description) {
+    patch.description = input.description
+  }
+  if (input.sortOrder !== undefined && input.sortOrder !== current.sort_order) {
+    patch.sort_order = input.sortOrder
+  }
+  if (budget.value !== undefined) {
+    const nextMeta = withBudgetHours(current.meta, budget.value)
+    if (!jsonEquals(nextMeta, current.meta)) patch.meta = nextMeta
+  }
+
+  // Nothing actually changed: send no UPDATE at all. Not merely an audit_log
+  // nicety — set_updated_at fires on every UPDATE, empty payload included, so
+  // a resent full row would bump updated_at and make "nothing happened"
+  // indistinguishable from a real edit in the row itself.
+  if (Object.keys(patch).length === 0) {
+    return { ok: true, data: current }
+  }
 
   const { data, error } = await supabase
     .schema('dcs')
     .from('dictionaries')
-    .update({
-      label: input.label,
-      description: input.description,
-      sort_order: input.sortOrder ?? current.sort_order,
-      meta,
-    })
+    .update(patch)
     .eq('id', input.id)
     .select()
     .single()

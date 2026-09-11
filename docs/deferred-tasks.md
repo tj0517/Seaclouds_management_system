@@ -775,6 +775,18 @@ report a blocked criterion after building everything else.
   layer. A `colour` key for `workflow_status` (O-05) is still unshaped.
   Unchanged scope decision from 1a.07 — not re-litigated here, just still
   true.
+- **`updateDictionaryEntry` writes the full row, not a diff — CLOSED
+  2026-09-11 (PR #PRNUM, `fix/dcs-dictionaries-diff-only-immutable-code`,
+  DCS 1a.15b).** `updateDictionaryEntry` now reads the current row and sends
+  only fields that were both provided (`undefined` = "leave alone") and
+  actually differ; nothing changed → no UPDATE at all.
+  `parseUpdateDictionaryEntryInput` no longer collapses an omitted
+  `description` to `null`. Same pattern as `updateClient`, deliberately
+  duplicated rather than extracted into a shared helper (see the new entry at
+  the end of this section). Proven locally against the real stack: a no-op
+  save leaves `updated_at` byte-identical, a label edit writes exactly one
+  `audit_log` row (`field_name = 'label'`). Original finding, kept for the
+  record:
 - **`updateDictionaryEntry` writes the full row, not a diff** — unlike
   `setProjectRoles` (1a.14), which computes granted/revoked sets and issues
   only the rows that actually changed. Confirmed a real correctness gap, not
@@ -793,7 +805,16 @@ report a blocked criterion after building everything else.
   dictionary-adjacent writes: read the current row, diff each optional field
   against `undefined` (not against falsy), and write only what changed.
 - **Needs owner decision (also asked in this task's own Report):**
-  (1) DB-level immutability of `code` — today only the app enforces it
+  (1) DB-level immutability of `code` — **CLOSED 2026-09-11 (PR #PRNUM,
+  `fix/dcs-dictionaries-diff-only-immutable-code`, DCS 1a.15b)**: migration
+  `20260911091125_dictionaries_code_immutable` adds the `BEFORE UPDATE`
+  trigger `dictionaries_code_immutable` →
+  `public.forbid_dictionary_code_change()`, raising `23001`
+  (`restrict_violation`) whenever `NEW.code IS DISTINCT FROM OLD.code`.
+  Unconditional, no admin bypass; `supabase/tests/dictionaries_code_immutable.test.sql`
+  proves the refusal for postgres, for an admin session and for a DC at aal2
+  (each of which RLS would otherwise let through). Original finding, kept for
+  the record: today only the app enforces it
   (`UpdateDictionaryEntryInput` carries no `code` field); a direct
   `PATCH .../dictionaries?id=eq...` with `{"code":"..."}` from a DC's own
   session would succeed against RLS, since the two 1a.09b/1a.11 policies
@@ -807,6 +828,35 @@ report a blocked criterion after building everything else.
   decides workflow_step editing should wait for the engine, gating the tab
   is a small follow-up (filter one entry out of `DICT_TYPES` for display,
   independent of the DB CHECK list).
+
+### Noted during DCS 1a.15b (the two closures above)
+
+- **`dict_type` is as load-bearing as `code` and still mutable.** The same
+  trigger could refuse a `dict_type` change in one more line: the CHECK list
+  constrains which values are legal, not whether an existing row may move
+  between dictionaries, and a row that silently changes dictionary would
+  reassign every document pointing at it. Deliberately left alone — 1a.15b's
+  scope named `code` only and explicitly forbade widening it. Tempting,
+  unfixed.
+- **`updateClient` and `updateDictionaryEntry` are now the same algorithm
+  twice.** Both read the row, diff the provided-and-different fields and skip
+  the UPDATE when the patch is empty; only the table, the column names and
+  the `meta`/`budget_hours` branch differ. A generic
+  `diffPatch(current, input, mapping)` would remove the duplication — left
+  out on purpose (one task, one PR), and arguably worth waiting for the third
+  caller (1a.17) before generalising.
+- **The no-op proof cannot be `audit_log`.** `audit_trigger()` logs only
+  columns whose value actually changed, so a full-row resend of unchanged
+  values produces zero rows — indistinguishable from "no UPDATE was sent".
+  `set_updated_at` does fire on every UPDATE, empty payload included, so
+  `updated_at` is the only witness. Recorded here because the original
+  acceptance criterion assumed the opposite, and the next task to write such
+  a proof will hit the same trap.
+- **Production is two migrations behind `main` after this PR**
+  (`20260909130753_dcs_profile_directory`, `20260911091125_dictionaries_code_immutable`;
+  prod read read-only 2026-09-11, latest applied there is `20260904170000`).
+  Neither is needed by Timesheet, so this is not an outage — but see (f),
+  "Warn when prod migrations lag behind main". No action taken.
 
 ## cc) Follow-ups noted during DCS 1a.14b (project list by roles + profile directory)
 

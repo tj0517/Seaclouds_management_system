@@ -181,6 +181,19 @@ describe('parseUpdateDictionaryEntryInput', () => {
   it('rejects a non-UUID id', () => {
     expect(parseUpdateDictionaryEntryInput({ id: 'not-a-uuid', label: 'X' })).toBeNull()
   })
+
+  it('leaves an omitted description undefined instead of collapsing it to null', () => {
+    const parsed = parseUpdateDictionaryEntryInput({ id: ROW_ID, label: 'X' })
+    expect(parsed?.description).toBeUndefined()
+  })
+
+  it('treats an explicit null description as "clear"', () => {
+    expect(parseUpdateDictionaryEntryInput({ id: ROW_ID, label: 'X', description: null })?.description).toBeNull()
+  })
+
+  it('treats an empty-string description as "clear"', () => {
+    expect(parseUpdateDictionaryEntryInput({ id: ROW_ID, label: 'X', description: '' })?.description).toBeNull()
+  })
 })
 
 describe('mutation guard (admin-or-any-DC)', () => {
@@ -236,6 +249,135 @@ describe('updateDictionaryEntry: code is immutable', () => {
     const [payload] = updateMock.mock.calls[0] as [Record<string, unknown>]
     expect(payload).not.toHaveProperty('code')
     expect(result.ok && (result.data as DictionaryRow).code).toBe('ORIGINAL')
+  })
+})
+
+// DCS 1a.15b: the three proofs docs/deferred-tasks.md (bb) asked for, mirroring
+// clients-admin.test.ts's 'updateClient: diff-only' block field for field.
+// Before this task updateDictionaryEntry sent label/description/sort_order/meta
+// on every call, so (a) carried three extra columns, (b) nulled description and
+// (c) issued a pointless UPDATE that still bumped updated_at.
+describe('updateDictionaryEntry: diff-only', () => {
+  it('writes only the field that actually changed', async () => {
+    const currentRow = makeRow({ label: 'Electrical', description: 'Power and lighting', sort_order: 3 })
+    const { client, updateMock } = stubClient({ sessionUserId: ADMIN, role: 'admin', currentRow })
+
+    await updateDictionaryEntry(client, {
+      id: ROW_ID,
+      label: 'Electrical & Instrumentation',
+      description: 'Power and lighting',
+      sortOrder: 3,
+    })
+
+    expect(updateMock).toHaveBeenCalledTimes(1)
+    const [payload] = updateMock.mock.calls[0] as [Record<string, unknown>]
+    expect(payload).toEqual({ label: 'Electrical & Instrumentation' })
+  })
+
+  it('omitting description leaves it unchanged instead of nulling it', async () => {
+    const currentRow = makeRow({ label: 'Electrical', description: 'keep me' })
+    const { client, updateMock } = stubClient({ sessionUserId: ADMIN, role: 'admin', currentRow })
+
+    const result = await updateDictionaryEntry(client, { id: ROW_ID, label: 'Renamed' })
+
+    expect(updateMock).toHaveBeenCalledTimes(1)
+    const [payload] = updateMock.mock.calls[0] as [Record<string, unknown>]
+    expect(payload).not.toHaveProperty('description')
+    expect(result.ok && (result.data as DictionaryRow).description).toBe('keep me')
+  })
+
+  it('omitting sort_order leaves it unchanged instead of resending it', async () => {
+    const currentRow = makeRow({ label: 'Electrical', sort_order: 7 })
+    const { client, updateMock } = stubClient({ sessionUserId: ADMIN, role: 'admin', currentRow })
+
+    await updateDictionaryEntry(client, { id: ROW_ID, label: 'Renamed' })
+
+    const [payload] = updateMock.mock.calls[0] as [Record<string, unknown>]
+    expect(payload).not.toHaveProperty('sort_order')
+  })
+
+  it('a no-op save (identical values) writes nothing', async () => {
+    const currentRow = makeRow({ label: 'Electrical', description: 'Power and lighting', sort_order: 3 })
+    const { client, updateMock } = stubClient({ sessionUserId: ADMIN, role: 'admin', currentRow })
+
+    const result = await updateDictionaryEntry(client, {
+      id: ROW_ID,
+      label: currentRow.label,
+      description: currentRow.description,
+      sortOrder: currentRow.sort_order,
+    })
+
+    expect(updateMock).not.toHaveBeenCalled()
+    expect(result).toEqual({ ok: true, data: currentRow })
+  })
+
+  it('a no-op save on a doc_type row with no budget hours writes nothing', async () => {
+    // DictionaryEntryDialog sends budgetHours: null for a doc_type row whose
+    // budget field is empty — that must diff as "unchanged" against meta {},
+    // not as a write of { budget_hours: null }.
+    const currentRow = makeRow({ dict_type: 'doc_type', code: 'RA', label: 'Risk Assessment', meta: {} })
+    const { client, updateMock } = stubClient({ sessionUserId: ADMIN, role: 'admin', currentRow })
+
+    const result = await updateDictionaryEntry(client, {
+      id: ROW_ID,
+      label: currentRow.label,
+      description: currentRow.description,
+      sortOrder: currentRow.sort_order,
+      budgetHours: null,
+    })
+
+    expect(updateMock).not.toHaveBeenCalled()
+    expect(result).toEqual({ ok: true, data: currentRow })
+  })
+
+  it('a no-op save on a doc_type row with unchanged budget hours writes nothing', async () => {
+    const currentRow = makeRow({
+      dict_type: 'doc_type',
+      code: 'RA',
+      label: 'Risk Assessment',
+      meta: { budget_hours: 12 },
+    })
+    const { client, updateMock } = stubClient({ sessionUserId: ADMIN, role: 'admin', currentRow })
+
+    await updateDictionaryEntry(client, {
+      id: ROW_ID,
+      label: currentRow.label,
+      description: currentRow.description,
+      sortOrder: currentRow.sort_order,
+      budgetHours: 12,
+    })
+
+    expect(updateMock).not.toHaveBeenCalled()
+  })
+
+  it('changing budget hours writes meta and nothing else', async () => {
+    const currentRow = makeRow({
+      dict_type: 'doc_type',
+      code: 'RA',
+      label: 'Risk Assessment',
+      meta: { budget_hours: 12 },
+    })
+    const { client, updateMock } = stubClient({ sessionUserId: ADMIN, role: 'admin', currentRow })
+
+    await updateDictionaryEntry(client, { id: ROW_ID, label: currentRow.label, budgetHours: 16 })
+
+    const [payload] = updateMock.mock.calls[0] as [Record<string, unknown>]
+    expect(payload).toEqual({ meta: { budget_hours: 16 } })
+  })
+
+  it('clearing budget hours removes the key rather than writing null', async () => {
+    const currentRow = makeRow({
+      dict_type: 'doc_type',
+      code: 'RA',
+      label: 'Risk Assessment',
+      meta: { budget_hours: 12, colour: 'red' },
+    })
+    const { client, updateMock } = stubClient({ sessionUserId: ADMIN, role: 'admin', currentRow })
+
+    await updateDictionaryEntry(client, { id: ROW_ID, label: currentRow.label, budgetHours: null })
+
+    const [payload] = updateMock.mock.calls[0] as [Record<string, unknown>]
+    expect(payload).toEqual({ meta: { colour: 'red' } })
   })
 })
 
