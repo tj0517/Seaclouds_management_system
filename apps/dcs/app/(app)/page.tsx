@@ -40,6 +40,19 @@ export default async function ProjectsPage() {
     projects = data ?? []
   }
 
+  // DCS 1a.17, acceptance criterion 2: the DC of a project must see it here
+  // "with team and cycle". Both extra reads below are UNFILTERED in code —
+  // which rows come back is the database's decision (dcs.project_roles'
+  // "Project members read project roles"; mdr_settings' SELECT policy admits
+  // any signed-in user), so this stays a valid RLS proof by
+  // docs/03-conventions.md's rule.
+  const { data: teamRows, error: teamError } = await supabase.schema('dcs').from('project_roles').select('project_id')
+  if (teamError) throw new Error(`Failed to load project teams: ${teamError.message}`)
+  const teamSizeByProject = new Map<string, number>()
+  for (const row of teamRows ?? []) {
+    teamSizeByProject.set(row.project_id, (teamSizeByProject.get(row.project_id) ?? 0) + 1)
+  }
+
   // RLS probe on dcs.mdr_settings — the first dcs.* table with its own
   // policies (deferred-tasks g, closed: this replaced the temporary
   // timesheet_entries probe, so DCS no longer reads TES tables). Untouched
@@ -60,6 +73,11 @@ export default async function ProjectsPage() {
     throw new Error(`RLS probe (select) failed: ${mdrError.message}`)
   }
 
+  // The same unfiltered read the probe below makes, reused for the Cycle
+  // column rather than issued twice (1b.05 owns the probe and will remove it;
+  // the column then keeps its own query).
+  const settingsByProject = new Map(mdrSettings.map((row) => [row.project_id, row]))
+
   // Write half: this is where the database distinguishes the roles. The
   // insert carries cycle_idc_to_ifr = 0, which violates a CHECK, so it can
   // never persist — but the error code tells who was stopped by what:
@@ -78,7 +96,17 @@ export default async function ProjectsPage() {
 
   return (
     <div className="mx-auto max-w-3xl">
-      <h1 className="mb-1 text-2xl font-bold">Projects</h1>
+      <div className="mb-1 flex items-center justify-between">
+        <h1 className="text-2xl font-bold">Projects</h1>
+        {isAdmin && (
+          <Link
+            href="/admin/projects/new"
+            className="rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-blue-700"
+          >
+            New project MDR
+          </Link>
+        )}
+      </div>
       <p className="mb-4 text-xs text-gray-500">
         {filter.kind === 'all'
           ? 'Every project — you are an admin.'
@@ -103,6 +131,8 @@ export default async function ProjectsPage() {
             <tr className="border-b border-gray-200 bg-gray-100 text-left">
               <th className="px-4 py-2 font-medium">Code</th>
               <th className="px-4 py-2 font-medium">Name</th>
+              <th className="px-4 py-2 font-medium">Cycle</th>
+              <th className="px-4 py-2 font-medium">Team</th>
               <th className="px-4 py-2 font-medium">Status</th>
             </tr>
           </thead>
@@ -118,6 +148,15 @@ export default async function ProjectsPage() {
                     <span className="block text-xs text-gray-500">{project.description}</span>
                   ) : null}
                 </td>
+                <td className="px-4 py-2 text-gray-600">
+                  {(() => {
+                    const settings = settingsByProject.get(project.id)
+                    return settings
+                      ? `${settings.cycle_idc_to_ifr}/${settings.cycle_ifr_to_retcom}/${settings.cycle_retcom_to_ifc}`
+                      : '—'
+                  })()}
+                </td>
+                <td className="px-4 py-2 text-gray-600">{teamSizeByProject.get(project.id) ?? 0}</td>
                 <td className="px-4 py-2">
                   <span
                     className={

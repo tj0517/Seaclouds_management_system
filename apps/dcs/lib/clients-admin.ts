@@ -129,14 +129,26 @@ export function parseSetClientActiveInput(raw: unknown): SetClientActiveInput | 
   return { id, isActive }
 }
 
+/** Narrower than ActionResult<string>: requireAdmin only ever fails these two ways. */
+export type AdminGuardResult =
+  | { ok: true; data: string }
+  | { ok: false; error: 'unauthenticated' | 'forbidden' }
+
 /**
  * Admin-only guard — see the module comment for why this has no DC branch,
  * unlike requireAdminOrAnyDc (lib/dictionaries-admin.ts) and requireAdminOrDc
  * (lib/project-roles.ts). A non-admin is refused here regardless of whether
  * they hold a `dc` role anywhere, which is exactly the behaviour the task
  * asks to prove against both a plain member and a project DC.
+ *
+ * Exported since DCS 1a.17: lib/project-mdr.ts needs the identical guard
+ * (project creation is admin-only for the same 1a.16 reason), and a second
+ * copy of "read profiles.role, compare to admin" is exactly the kind of
+ * duplication that drifts. Its result type is deliberately narrower than
+ * ActionResult<ClientRow> so a caller with a different error union can reuse
+ * it without inheriting ClientError.
  */
-async function requireAdmin(supabase: DbClient): Promise<ActionResult<string>> {
+export async function requireAdmin(supabase: DbClient): Promise<AdminGuardResult> {
   const {
     data: { user },
   } = await supabase.auth.getUser()
