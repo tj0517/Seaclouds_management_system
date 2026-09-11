@@ -390,8 +390,25 @@ wzorzec jak `lib/project-roles.ts` (klient przekazywany, bez Next.js). Zapis
 (`requireAdminOrAnyDc`, mirror aplikacyjny `is_any_doc_controller()`), `code`
 niemodyfikowalny (typ `UpdateDictionaryEntryInput` go nie niesie), dezaktywacja
 zamiast kasowania (`setDictionaryEntryActive`).
+Niemodyfikowalność `code` egzekwuje **baza**, nie aplikacja (1a.15b, migracja
+`20260911091125_dictionaries_code_immutable`): trigger `BEFORE UPDATE`
+`dictionaries_code_immutable` → `public.forbid_dictionary_code_change()`
+podnosi `23001` (`restrict_violation`), gdy `NEW.code IS DISTINCT FROM
+OLD.code`. Bezwarunkowo — bez wyjątku dla admina: polityki UPDATE (admin ALL,
+DC przy aal2) nie patrzą, które kolumny się zmieniły, więc bez triggera DC
+z sesją aal2 mógł zmienić `code` przez PostgREST. Poprawka błędnego kodu =
+nowy wiersz + `is_active = false` na starym; zmiana nazwy pojęcia = `label`.
+`dict_type` **nie** jest objęty triggerem (świadomie poza zakresem 1a.15b —
+`docs/deferred-tasks.md` bb).
+Zapis z aplikacji jest **różnicowy** (1a.15b): `updateDictionaryEntry` czyta
+bieżący wiersz i wysyła wyłącznie pola faktycznie zmienione, a przy braku
+zmian nie wysyła UPDATE-u w ogóle (`set_updated_at` podbija `updated_at` przy
+każdym UPDATE, także pustym) — ten sam wzorzec co `updateClient` (1a.16).
 Test: `supabase/tests/rls_dictionaries.test.sql` (kształt, CHECK, UNIQUE,
-anon/pracownik/outsider/DC/admin, wpisy w `audit_log`).
+anon/pracownik/outsider/DC/admin, wpisy w `audit_log`) oraz
+`supabase/tests/dictionaries_code_immutable.test.sql` (1a.15b: kształt
+triggera, odmowa dla postgres/admina/DC przy aal2, edycja `label` przechodzi
+z jednym wpisem w `audit_log`).
 
 ### `dcs.documents`
 `id`, `project_id (FK, RLS)`, `scl_doc_number (unique globalnie, generowany,
