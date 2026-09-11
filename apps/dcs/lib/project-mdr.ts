@@ -125,7 +125,8 @@ export type UpdateProjectMdrInput = {
   projectId: string
   name?: string
   clientId?: string | null
-  processType?: ProcessType
+  /** `null` clears it back to "not classified" — the column is nullable (O-13 backfill left SCYYNN codes NULL). */
+  processType?: ProcessType | null
   year?: number | null
   cpyNumbering?: boolean
   cycleIdcToIfr?: number
@@ -363,7 +364,7 @@ export function parseUpdateProjectMdrInput(raw: unknown): ActionResult<UpdatePro
     out.clientId = r.clientId as string | null
   }
   if (r.processType !== undefined) {
-    if (!isProcessType(r.processType)) return fail('invalid_input', 'unknown process type')
+    if (r.processType !== null && !isProcessType(r.processType)) return fail('invalid_input', 'unknown process type')
     out.processType = r.processType
   }
   if (r.year !== undefined) {
@@ -396,7 +397,7 @@ export function parseUpdateProjectMdrInput(raw: unknown): ActionResult<UpdatePro
   // being changed. Only decidable here when the edit sets processType itself;
   // an edit that changes only client_id is checked in updateProjectMdr, which
   // has the stored row to compare against.
-  if (out.processType !== undefined && skipsClientStep(out.processType)) {
+  if (out.processType != null && skipsClientStep(out.processType)) {
     if (out.clientId != null || out.cpyNumbering === true) {
       return fail('internal_project_has_client', 'an internal project has no client and no CPY numbering')
     }
@@ -535,7 +536,11 @@ export async function updateProjectMdr(
   // The internal-project rule, evaluated against the row as it will be after
   // this edit — an edit that adds a client to an already-internal project
   // never mentions processType, so parseUpdateProjectMdrInput cannot see it.
-  const nextProcessType = input.processType ?? current.project.process_type
+  // `!== undefined`, not `??`: processType null means "clear to not
+  // classified" and must be evaluated as such — `null ?? current` would fall
+  // back to the OLD type and check the invariant against a value the edit is
+  // removing.
+  const nextProcessType = input.processType !== undefined ? input.processType : current.project.process_type
   const nextClientId = input.clientId !== undefined ? input.clientId : current.project.client_id
   const nextCpy = input.cpyNumbering !== undefined ? input.cpyNumbering : (current.settings?.cpy_numbering ?? false)
   if (nextProcessType !== null && skipsClientStep(nextProcessType) && (nextClientId != null || nextCpy)) {

@@ -373,6 +373,15 @@ describe('parseUpdateProjectMdrInput', () => {
     expect(result.ok && result.data.clientId).toBeNull()
   })
 
+  it('treats processType null as "clear to not classified", not as absent', () => {
+    // public.projects.process_type is nullable and the 20260902114743
+    // backfill deliberately left every SCYYNN code unclassified, so the
+    // dialog's "Not classified" option has to be able to put it back.
+    const result = parseUpdateProjectMdrInput({ projectId: PROJECT_ID, processType: null })
+    expect(result.ok && result.data.processType).toBeNull()
+    expect(result.ok && 'processType' in result.data).toBe(true)
+  })
+
   it('rejects switching a project to internal while keeping its client', () => {
     expect(
       parseUpdateProjectMdrInput({ projectId: PROJECT_ID, processType: 'internal', clientId: CLIENT_ID }),
@@ -589,6 +598,25 @@ describe('updateProjectMdr (diff-only)', () => {
       error: 'internal_project_has_client',
     })
     expect(projectUpdates).toEqual([])
+  })
+
+  it('clears process_type when the edit sets it to null', async () => {
+    const { client, projectUpdates } = stubClient({})
+    const result = await updateProjectMdr(client, { projectId: PROJECT_ID, processType: null })
+    expect(result.ok).toBe(true)
+    expect(projectUpdates).toEqual([{ process_type: null }])
+  })
+
+  it('checks the internal rule against the process type AFTER the edit, not before', async () => {
+    // Clearing an internal project's type while giving it a client is legal —
+    // it stops being internal. A `??` here would compare against the old
+    // 'internal' and refuse it.
+    const { client, projectUpdates } = stubClient({
+      project: makeProject({ process_type: 'internal', client_id: null }),
+    })
+    const result = await updateProjectMdr(client, { projectId: PROJECT_ID, processType: null, clientId: CLIENT_ID })
+    expect(result.ok).toBe(true)
+    expect(projectUpdates).toEqual([{ client_id: CLIENT_ID, process_type: null }])
   })
 
   it('will not enrol a project into DCS through an edit when it has no mdr_settings row', async () => {

@@ -112,7 +112,10 @@ export default function EditProjectDialog({ project, settings, clients, trigger 
       projectId: project.id,
       name,
       clientId: internal || clientId === '' ? null : clientId,
-      ...(processType === '' ? {} : { processType }),
+      // '' is the "Not classified" option and means NULL, not "leave alone" —
+      // the column is nullable and the 20260902114743 backfill deliberately
+      // left every SCYYNN code unclassified, so clearing it back has to work.
+      processType: processType === '' ? null : processType,
       year: year.trim() === '' ? null : Number(year),
       ...(settings
         ? {
