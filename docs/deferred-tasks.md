@@ -967,6 +967,13 @@ for dcs.mdr_settings").
   Timesheetu**, a `apps/timesheet/.../EditProjectDialog.tsx` ma pole
   `project_code` do edycji i dziś działa. Osobne zadanie musi najpierw
   ustalić, czy TES ma to pole stracić, czy dostać wyjątek.
+  **Termin decyzji: przed 1b.02.** Od 1b.02 generator numeracji zaczyna
+  wydawać numery `SCYYNN-SCL-…`, których pierwszym członem jest właśnie
+  `project_code`. Dopóki nie ma ani jednego wydanego numeru, zmiana kodu jest
+  tylko przemianowaniem; po 1b.02 każda taka zmiana unieważnia wstecz numery
+  już wydane i rozjeżdża je z `dcs.documents`. Decyzja do podjęcia, nie do
+  odłożenia: albo trigger jak w 1a.15b (i TES traci edytowalne pole), albo
+  jawny, datowany wyjątek dla TES z uzasadnieniem — ale nie milczenie.
 - **Rola `view` jest w kreatorze, choć zakres zadania wymieniał pięć ról**
   (ORIG/REV/CHK/APP/DC). Krok „Team and roles" renderuje `PROJECT_ROLES`
   z wygenerowanego enuma (konwencja z `03-conventions.md`: nigdy ręcznie
@@ -984,6 +991,19 @@ for dcs.mdr_settings").
   Zgłoszone już w (cc); to zadanie nie zmienia baseline'u (funkcja jest
   `SECURITY INVOKER`), więc znowu nie jest to jego poprawka do zrobienia,
   ale liczba w konwencjach myli przy każdym porównaniu.
+- **Seed nie nadaje modułu `dcs` zaseedowanemu adminowi**, więc logowanie do
+  `apps/dcs` na lokalnym stacku wypada z powrotem przez bramkę modułów
+  w `proxy.ts` na `NEXT_PUBLIC_TES_URL` — wygląda jak zepsuty login, a jest
+  brakiem wiersza w `public.module_permissions`. Przyczyna jest kolejnością:
+  backfill w migracji `20260904170000` nadaje `dcs` kontom z `role='admin'`
+  **w momencie migracji**, a `supabase/seed.sql` wykonuje się po migracjach,
+  więc jego użytkownicy dostają od triggera `grant_default_module_access()`
+  wyłącznie `tes`. Obejście na czas weryfikacji 1a.17 to jednorazowy
+  `insert into public.module_permissions (user_id, module) … 'dcs'`.
+  Nie naprawione tutaj: `seed.sql` jest poza zakresem tego zadania, a kształt
+  backfillu z 1a.22 jest celowy — poprawka należy do seeda (dopisać nadanie
+  `dcs` kontom `admin` na końcu `seed.sql`), nie do migracji. Drobne, ale
+  potyka się o to każdy, kto pierwszy raz uruchamia DCS lokalnie.
 - **Atomowości nie da się udowodnić samym pgTAP-em.** `throws_ok` wykonuje
   swoją instrukcję w bloku `exception` plpgsql, czyli w podtransakcji — więc
   granicą rollbacku jest **wywołanie**, nie ciało funkcji, i wewnątrz jednej
@@ -996,3 +1016,34 @@ for dcs.mdr_settings").
   opisu PR; gdyby ktoś chciał go mieć w CI, wymagałby drugiego połączenia
   (`dblink`) albo testu integracyjnego nad PostgREST-em — dziś nie ma ani
   jednego, ani drugiego.
+
+
+## ff) Beat 2 DCS 1a.17 — wiersz demo na scl-dev (zostawiony celowo)
+
+Projekt utworzony **przez UI** (kreator Create Project MDR) na scl-dev
+2026-09-11, jako `dcs1a14-admin@example.com`, po merge'u PR #46 i zielonym
+`deploy-db.yml` (run 34592873062 na `386426d`).
+
+| | |
+|---|---|
+| `projects.id` | `dc6b9485-7f47-430b-b7ef-262526549b7c` |
+| `project_code` | `SC2699` |
+| nazwa | DCS 1a.17 Demo — Create Project MDR |
+| klient | `TST` (`8e89b365-…`, „1a.16 Verification Client (renamed)") |
+| `process_type` / `year` | `project` / 2026 |
+| cykl / budżet / status | 7/10/7 · 1200 h · `active` · `cpy_numbering = true` |
+| role | `dc` = `dcs1a14-dc@example.com`, `orig` = `dcs1a14-member@example.com` (oba `assigned_by` = admin z sesji) |
+| kody CTR | `SC2699_CTR100` (Project management), `SC2699_CTR200` (Survey and reporting) |
+
+Wszystkie siedem wierszy ma identyczny znacznik czasu
+`2026-09-11 11:15:46.615155+00` — jedna transakcja, widać to w danych.
+
+**Zostawiony na scl-dev celowo** (materiał demo dla 1a.21, polecenie
+właściciela). Kod `SC2699` wybrany świadomie z góry zakresu SCYYNN, żeby nie
+kolidować z prawdziwymi projektami importowanymi w **1a.19** — gdyby import
+potrzebował akurat `SC2699`, ten wiersz trzeba najpierw usunąć lub
+przenumerować, a nie obchodzić.
+
+Konta użyte: te same co w (aa), `dcs1a14-*` — hasła i sekrety TOTP nadal
+wyłącznie w `~/Desktop/seaclouds/backups/dcs1a14-test-accounts-scl-dev-2026-09-08.txt`,
+nie w repo.
