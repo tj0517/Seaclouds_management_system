@@ -49,6 +49,25 @@ na żadną rolę DCS; administrator DCS = `role = 'admin'`.
 = 'SCC005')`. `IT admin` dostał kod `SCMS-IT` (był pusty). Jedyne odstępstwo
 `SCC005` (ISO Certyfikacja) to wyjątek **imienny**, nie wzorzec — patrz O-11
 i `docs/deferred-tasks.md`.
+Niemodyfikowalność `project_code` egzekwuje **baza**, nie aplikacja (1a.17c,
+migracja `20260915081813_project_code_immutable`): trigger `BEFORE UPDATE`
+`projects_project_code_immutable` → `public.forbid_project_code_change()`
+podnosi `23001` (`restrict_violation`), gdy `NEW.project_code IS DISTINCT FROM
+OLD.project_code`. Bezwarunkowo — bez wyjątku dla admina i bez wyjątku dla
+TES: polityka `Admin zarządza projektami` (ALL, `is_admin()`) nie patrzy,
+które kolumny się zmieniły, więc bez triggera admin mógł zmienić kod przez
+PostgREST, a dialog edycji projektu w `apps/timesheet` wprost to oferował.
+Powód jest ten sam co przy `dcs.dictionaries.code` (1a.15b): kod siedzi już
+w kodach CTR (`SC2699_CTR100`) i w historii timesheetu, a od 1b.02 jest
+pierwszym członem numeru dokumentu. Poprawka błędnego kodu = nowy projekt
++ `is_active = false` na starym. TES: pole `project_code` w
+`apps/timesheet/app/admin/projects/[id]/EditProjectDialog.tsx` jest odtąd
+tylko do odczytu, a `updateProject` buduje payload przez
+`apps/timesheet/lib/project-update.ts`, który tej kolumny nie niesie (input
+`disabled` wypada z `FormData`, więc odczyt pola wysłałby `null` na kolumnę
+NOT NULL). Test: `supabase/tests/project_code_immutable.test.sql` (kształt
+triggera, odmowa dla postgres i dla admina, UPDATE innych kolumn i restatement
+tej samej wartości przechodzą, blankowanie daje 23001 a nie 23502).
 `client_id (uuid, nullable, FK clients, ON DELETE RESTRICT)` — od migracji
 `20260901123548_add_clients_table`; NULL = projekt wewnętrzny (patrz
 `public.clients` niżej).

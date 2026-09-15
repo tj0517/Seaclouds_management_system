@@ -974,6 +974,17 @@ for dcs.mdr_settings").
   już wydane i rozjeżdża je z `dcs.documents`. Decyzja do podjęcia, nie do
   odłożenia: albo trigger jak w 1a.15b (i TES traci edytowalne pole), albo
   jawny, datowany wyjątek dla TES z uzasadnieniem — ale nie milczenie.
+  **Rozstrzygnięte i wykonane w 1a.17c (2026-09-15, PR #48), przed 1b.02:**
+  wybrano pierwszą opcję — trigger jak w 1a.15b, bez wyjątku dla TES i bez
+  daty ważności. Migracja `20260915081813_project_code_immutable` zakłada
+  `projects_project_code_immutable` → `public.forbid_project_code_change()`,
+  bezwarunkowo (23001, bez gałęzi dla admina), test
+  `supabase/tests/project_code_immutable.test.sql`. TES: pole `project_code`
+  w `EditProjectDialog.tsx` jest odtąd tylko do odczytu, a `updateProject`
+  buduje payload przez `apps/timesheet/lib/project-update.ts`, który tej
+  kolumny nie niesie. Szczegóły w `docs/02-data-model.md`, sekcja
+  `public.projects`. Nadal otwarte i poza zakresem 1a.17c: `dict_type` (bb)
+  oraz audyt `dcs.mdr_settings` (1a.17b).
 - **Rola `view` jest w kreatorze, choć zakres zadania wymieniał pięć ról**
   (ORIG/REV/CHK/APP/DC). Krok „Team and roles" renderuje `PROJECT_ROLES`
   z wygenerowanego enuma (konwencja z `03-conventions.md`: nigdy ręcznie
