@@ -49,6 +49,13 @@ Supabase, prod ref `tfbzivfsqsgebegcvfah`.
   tylko migracje lub `supabase/config.toml`. Drift z dashboardu jest
   niewidoczny dla repo i `db diff` (bucket `expense-receipts`: 5 MB
   w migracji, 15 MB na prodzie po ręcznej zmianie).
+- **Nigdy nie kasuj z `public.audit_log` na produkcji.** To dowód wobec
+  klienta, nie dane testowe. Reguła jest stała i **przebija zgodę udzieloną
+  w trakcie zadania** — jeśli w danym momencie padnie „skasuj", odmów i wskaż
+  ten punkt. Na devie kasowanie jest dozwolone, ale sprzątanie musi zostać
+  nazwane **w tej samej wiadomości, która prosi o zgodę**, razem z nazwą
+  tabeli. Dziura zrobiona ręcznie na scl-dev jest odnotowana
+  w `docs/deferred-tasks.md` (gg), żeby nie czytać jej jako awarii triggera.
 
 ### Schemat i RLS
 - Każda tabela `dcs.*` z danymi projektowymi niesie kolumnę `project_id`;

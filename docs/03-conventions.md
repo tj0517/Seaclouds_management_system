@@ -55,8 +55,10 @@ Baseline advisora security: **zero** lintów `function_search_path_mutable`
 
 Poniższe ostrzeżenia advisora są akceptowane **świadomie** — nie wykonuj ich
 rekomendacji, bo odebranie uprawnień roli `authenticated` wyłączy TES.
-**Przyjęty baseline (scl-dev, stan po DCS 1a.22, 2026-09-04): 19 × 0027
-+ 10 × 0029**, nic innego. 19. lint 0027 to `public.module_permissions`
+**Przyjęty baseline (scl-dev, odczyt 2026-09-15, stan po DCS 1a.17c):
+19 × 0027 + 12 × 0029**, nic innego — 0029 urosło z 10 o
+`public.is_any_doc_controller()` (1a.09b) i `public.dcs_profile_directory()`
+(1a.14b); zgłoszone jako `docs/deferred-tasks.md` (cc). 19. lint 0027 to `public.module_permissions`
 (1a.22): każdy użytkownik czyta własne wiersze (polityka "Users read own
 module permissions"), więc `SELECT` dla `authenticated` jest zamierzony i
 nie wolno go odbierać, żeby uciszyć ostrzeżenie — dokładnie ten sam wzorzec
