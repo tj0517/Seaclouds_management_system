@@ -1058,3 +1058,52 @@ przenumerować, a nie obchodzić.
 Konta użyte: te same co w (aa), `dcs1a14-*` — hasła i sekrety TOTP nadal
 wyłącznie w `~/Desktop/seaclouds/backups/dcs1a14-test-accounts-scl-dev-2026-09-08.txt`,
 nie w repo.
+
+
+## gg) Follow-ups noted during DCS 1a.17c (`projects.project_code` immutable)
+
+- **Pułapka `FormData`: input z `disabled` nie trafia do `FormData` w ogóle.**
+  To wzorzec, nie jednorazowa usterka — powtórzy się przy każdym następnym
+  polu „tylko do odczytu" w tej aplikacji. Zrobienie pola nieedytowalnym
+  **wyłącznie** w dialogu nie wystarcza i jest gorsze niż nic: `formData.get()`
+  zwraca wtedy `null`, a akcja serwera wysyła `null` na kolumnę, która w bazie
+  jest `NOT NULL` — czyli zamiast „nie zmieniaj tego pola" wychodzi „wyzeruj
+  je". W 1a.17c dotyczyło to `updateProject`, które liczyło
+  `(formData.get('project_code') as string)?.trim() || null`; gdyby zmieniono
+  tylko `EditProjectDialog.tsx`, każdy zapis projektu kończyłby się błędem
+  (23001 z triggera, a bez triggera 23502 z `NOT NULL`). Reguła: pole
+  read-only usuwa się **z payloadu**, nie tylko z formularza, a test ma
+  sprawdzać nieobecność klucza. `supabase/tests/project_code_immutable.test.sql`
+  pilnuje tego od strony bazy (blankowanie daje 23001, nie 23502), a
+  `apps/timesheet/lib/project-update.test.ts` od strony aplikacji.
+- **`buildProjectUpdate()` to trzeci ręcznie pisany builder payloadu**, obok
+  `updateClient` i `updateDictionaryEntry` — czyli nadszedł „trzeci wywołujący",
+  na którego czekał wpis w (cc) („arguably worth waiting for the third caller
+  (1a.17) before generalising"). Uwaga na różnicę, żeby uogólnienie nie
+  wyszło błędne: tamte dwa **różnicują** (czytają bieżący wiersz i wysyłają
+  tylko faktycznie zmienione pola, pomijając UPDATE przy pustym patchu),
+  a `buildProjectUpdate` tylko **składa** payload z `FormData` i nic nie
+  czyta — wspólny jest kształt „jedna funkcja decyduje, które kolumny lecą do
+  bazy", nie algorytm. Świadomie nieuogólnione w 1a.17c (jeden temat na PR).
+- **pgTAP nie jest w tym repo pełnoprawnym narzędziem przeciwko remote.**
+  scl-dev nie ma rozszerzenia `pgtap` i nic go tam nie zakłada: `ci.yml`
+  uruchamia `supabase test db` na efemerycznym lokalnym stacku („no remote
+  project is touched here"), a `deploy-db.yml` robi wyłącznie `db push` +
+  `config push`. Weryfikacja 1a.17c na scl-dev przeszła sztuczką: `create
+  extension pgtap` **wewnątrz** transakcji testu — `CREATE EXTENSION` jest
+  transakcyjny, więc końcowy `rollback` usuwa je z powrotem i schemat zostaje
+  bit-w-bit ten sam (sprawdzone odczytem po fakcie). Tym samym chwytem zrobiono
+  dowód czerwony: `drop trigger` wewnątrz tej samej wycofywanej transakcji, więc
+  scl-dev ani przez chwilę nie było naprawdę bez triggera. Zrobienie z tego
+  normalnej możliwości wymagałoby migracji zakładającej `pgtap` — a ta
+  **dojedzie na produkcję**, więc to osobna decyzja. **Nie działać bez zgody.**
+- **`public.audit_log` na scl-dev został ręcznie zmodyfikowany dla rekordu
+  `a17c0000-0000-4000-8000-000000000099`.** To projekt-jednorazówka (`SC9901`)
+  utworzony do surowej weryfikacji SQL w 1a.17c i skasowany po niej; razem
+  z wierszem usunięto jego wpisy w `audit_log` (INSERT, dwa zaakceptowane
+  UPDATE-y i DELETE) — na wyraźne polecenie, wbrew rekomendacji, żeby ślad
+  zostawić. Zapisane tutaj, żeby późniejszy przegląd **nie odczytał tej dziury
+  jako awarii triggera audytowego**: `audit_projects` działał poprawnie przez
+  cały czas, wpisy powstały i zostały skasowane ręcznie.
+  Reguła na przyszłość: **nigdy nie kasować z `audit_log` na produkcji**; na
+  devie — pytać w tej samej wiadomości co o sprzątanie i wprost nazwać tabelę.
