@@ -1105,5 +1105,6 @@ nie w repo.
   zostawić. Zapisane tutaj, żeby późniejszy przegląd **nie odczytał tej dziury
   jako awarii triggera audytowego**: `audit_projects` działał poprawnie przez
   cały czas, wpisy powstały i zostały skasowane ręcznie.
-  Reguła na przyszłość: **nigdy nie kasować z `audit_log` na produkcji**; na
-  devie — pytać w tej samej wiadomości co o sprzątanie i wprost nazwać tabelę.
+  Sama reguła mieszka od teraz w `CLAUDE.md` (sekcja „Baza produkcyjna"), nie
+  tutaj: `deferred-tasks.md` nie jest czytane w każdym zadaniu, więc reguła
+  zapisana wyłącznie w nim nie dotarłaby do następnego agenta.
