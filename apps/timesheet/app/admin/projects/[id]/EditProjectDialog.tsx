@@ -56,7 +56,11 @@ export default function EditProjectDialog({ project }: { project: Project }) {
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="project_code">Project Code</Label>
-                            <Input id="project_code" name="project_code" defaultValue={project.project_code || ''} />
+                            <Input id="project_code" value={project.project_code || ''} readOnly disabled />
+                            <p className="text-xs text-muted-foreground">
+                                The first segment of every document number in this project, and part of every CTR
+                                code — it cannot be changed once the project exists.
+                            </p>
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="description">Description</Label>

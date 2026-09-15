@@ -4,6 +4,7 @@ import { createClient } from '@scl/db/server'
 import { revalidatePath } from 'next/cache'
 import { Database } from '@scl/db'
 import { getUserRoleAndProjects, hasProjectAccess } from './auth-helpers'
+import { buildProjectUpdate } from '@/lib/project-update'
 
 type Project = Database['public']['Tables']['projects']['Row']
 type SubProject = Database['public']['Tables']['sub_projects']['Row']
@@ -237,16 +238,17 @@ export async function updateSubProject(id: string, projectId: string, formData: 
 
 export async function updateProject(id: string, formData: FormData) {
     const supabase = await createClient()
-    const name = formData.get('name') as string
-    const project_code = (formData.get('project_code') as string)?.trim() || null
-    const description = formData.get('description') as string
-    const is_active = formData.get('is_active') === 'true'
 
-    if (!name) return { error: 'Name is required' }
+    // project_code is deliberately not read from the form and not sent: it is
+    // immutable in the database since 1a.17c (trigger
+    // projects_project_code_immutable). See lib/project-update.ts.
+    const payload = buildProjectUpdate(formData)
+
+    if (!payload.name) return { error: 'Name is required' }
 
     const { error } = await supabase
         .from('projects')
-        .update({ name, project_code, description, is_active } as any)
+        .update(payload as any)
         .eq('id', id)
 
     if (error) return { error: error.message }
