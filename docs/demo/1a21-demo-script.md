@@ -17,7 +17,7 @@ of the shared screen at that point.
 
 | | |
 |---|---|
-| **URL** | `<<PREVIEW URL OF THIS PR'S FINAL COMMIT — fill in before the demo>>` |
+| **URL** | **https://dcs-kqpda9tl4-tymon-jezionek.vercel.app** |
 | **Backup URL** | none. If Preview is down, the demo does not move to prod. |
 | **Vercel login** | Log in to Vercel **before** joining the call. Preview deployments on the `dcs` project sit behind Vercel Authentication (`ssoProtection = all_except_custom_domains`). Because you present by screen share, the client never sees that wall — but you must clear it first, in the same browser profile you will demo from. |
 | **Accounts** | `dcs1a14-admin@example.com` (admin, TOTP enrolled) · `dcs1a14-dc@example.com` (DC, TOTP enrolled) · `dcs1a14-member@example.com` (plain employee, **no** TOTP) |
@@ -25,9 +25,16 @@ of the shared screen at that point.
 | **Second browser** | Use a private/incognito window for step 7 so the admin session in step 1–6 stays live. |
 | **Supabase dashboard** | Open the **scl-dev** project's SQL editor in another tab, with the step-6 query already pasted but not run. |
 
-> **If the URL line above still says `<<PREVIEW URL …>>`, this script is not
-> ready.** Any commit pushed to the branch produces a new Preview URL; the one
-> written here must be the URL of the exact commit being demonstrated.
+> **That URL is the immutable deployment of commit `87712ee`** (PR #54,
+> `chore/dcs-1a21a-demo-prep`), built green on 2026-09-16. It is pinned to that
+> commit, not to the branch — pushing more commits does not change where it
+> points, and it will keep serving that exact build.
+>
+> Every commit after `87712ee` on this branch changes **documentation only**
+> (this file included), so the app behind that URL is the app being
+> demonstrated. **If a later commit touches anything under `apps/`,
+> `packages/` or `supabase/`, this line is wrong** — take the new commit's
+> deployment URL from `vercel` and replace it here before the demo.
 
 **State this script assumes on scl-dev** (created during the 1a.21a data prep,
 see `docs/deferred-tasks.md`):
