@@ -45,7 +45,14 @@ see `docs/deferred-tasks.md`):
 - `dcs1a14-admin` holds **no** `rev` role on SC2602 (removed during prep, so
   step 7's contrast is clean);
 - dictionaries are seeded (1a.18): 4 active **Area** entries, 23 active
-  **Document Type** entries.
+  **Document Type** entries;
+- project **SC2690 · "1a.21a Rehearsal — delete on request"** also exists — it
+  is the dress rehearsal's throwaway, left in place under the "rows stay for
+  review" rule. **It is visible on the admin project list during the demo**,
+  and to `dcs1a14-dc`. Decide before the call whether to leave it (and say
+  "that is our own test data" if asked), rename it through **Edit** on its
+  project page to something neutral, or have it removed. Its `project_code`
+  cannot be changed — that column is immutable.
 
 ---
 
@@ -61,13 +68,15 @@ build. Five minutes, any time before the call:
    appears — that is Vercel, not the app.
 2. Log in as `dcs1a14-dc@example.com`, with its TOTP code. **Note the time.**
 3. Confirm the sidebar reads **Projects · Dictionaries · Clients**. A DC gets
-   all three; that is the 1a.21a change.
-4. Confirm the project list shows a **Team** link on **SC2602** and **SC2699**
-   and on no other row — this account is DC of those two only. In particular
-   SC2601 must have no Team link, because this account holds no role on it.
+   all three; that is the 1a.21a change. (Opening either of them asks for the
+   TOTP code first — the `/admin` gate, same as for an admin.)
+4. Confirm the project list shows **exactly three** rows — `SC2602`, `SC2699`,
+   `SC2690` — each with a **Team** link. **`SC2601` must not appear at all**:
+   this account holds no role on it, so the list never offers it. That absence
+   is the check; do not look for a link that is merely missing.
 5. Open **Clients**: it must render, and it must say *"Read-only — only an
    admin can add or edit clients here."* A DC reaches that screen and cannot
-   edit it.
+   edit it. **Open Dictionaries too: no such banner** — a DC edits those.
 6. Sign out.
 
 Then confirm the deployment really talks to scl-dev, which is the whole point
@@ -90,17 +99,22 @@ on that URL**.
 **Account:** `dcs1a14-admin@example.com` · **Where:** the URL above
 
 1. Open the URL. The DCS login page appears.
-2. Enter the email and password, submit.
-3. The app sends you to `/mfa`. Enter the 6-digit TOTP code from the
-   authenticator app.
+2. Enter the email and password, submit. **You land straight on the project
+   list — no second-factor prompt yet.** The sidebar reads **SCL DCS**, your
+   name, then **Projects · Dictionaries · Clients**, and **Sign out**.
+3. Now click **Dictionaries** in the sidebar. *This* is where the app asks for
+   the 6-digit TOTP code. Enter it; you arrive on the dictionaries screen.
+4. Click **Projects** to go back. No second prompt — the session is now aal2
+   for the rest of the demo.
 
-**Expected:** you land on the DCS project list. The sidebar reads **SCL DCS**,
-your name, then **Projects · Dictionaries · Clients**, and **Sign out**.
+**Expected:** exactly that order. The gate is on the `/admin` screens, not on
+the login.
 
-**Say:** "Second factor is not optional for an admin or a Document Controller
-— and it is not just the screen asking. The same requirement is written into
-the database's own access rules, so it holds even for someone calling the API
-directly."
+**Say:** "Notice where it asked. Logging in is not what needs the second
+factor — reaching the administrative screens is. And it is not just this
+screen asking: the same requirement is written into the database's own access
+rules, so it holds for someone calling the API directly, with no browser
+involved."
 
 **Fallback:** if the code is rejected, it is almost always clock drift — wait
 for the next 30-second code and retry. Do not try a second account mid-step.
@@ -140,7 +154,8 @@ switcher in the sidebar; the grant is what matters, not the trip.
 1. On the project list, find the row **SC2601 · OW_Fishing Support**. The
    Cycle column shows `7/10/7`, Team shows `0`.
 2. Click **Team** in that row. (The link only appears for someone who may
-   change that project's team — an admin, or that project's own DC.)
+   change that project's team — an admin, or that project's own DC. No TOTP
+   prompt here: step 1 already cleared the `/admin` gate for this session.)
 3. On the project page, use **Add a member…** to pick
    `DCS1a14 Test DC-of-PEJ`, tick **Document Controller**, click **Add**.
 4. Repeat for `DCS1a14 Test Member-of-PEJ` → tick **Originator**.
@@ -209,10 +224,19 @@ later in the script depends on which code it was. `SC2690` is *not* a reserve
 2. Open the **Area** tab. The four seeded areas are `00 General`,
    `10 Offshore`, `20 Nearshore`, `30 Onshore`. On the **`30 · Onshore`** row,
    click **Deactivate**.
-   - The row dims and its badge changes to **Inactive**.
-   - Note the button now reads **Reactivate** — nothing was deleted.
+   - **The row disappears from the list** — four rows become three. Pause here;
+     this is the beat worth making.
+   - Now flip the **Show inactive** switch above the table. `30 · Onshore` is
+     back, greyed out, badged **Inactive**, and its button now reads
+     **Reactivate**. Nothing was deleted.
+   - Leave the switch on for a moment so they can see both states at once.
 
 **Expected:** both changes appear immediately, without a page reload.
+
+**Say (at the moment the row vanishes):** "It has not been deleted — it has
+been retired. New documents will not be offered it; every document that
+already used it keeps its meaning. That distinction is the whole reason this
+screen has no delete button."
 
 **Say:** "These are the company-wide code lists every project draws on:
 document types, disciplines, areas, languages, the 1–4 acceptance codes.
