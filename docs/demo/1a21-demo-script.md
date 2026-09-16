@@ -49,6 +49,42 @@ see `docs/deferred-tasks.md`):
 
 ---
 
+## Presenter smoke check — do this once, before the demo
+
+**Performed by the presenter, not by the agent.** The dress rehearsal for this
+script was run against a local production build of commit `87712ee` pointed at
+scl-dev — same code, same database, different hostname. What that cannot prove
+is that the **Preview deployment itself** is wired to scl-dev and serves this
+build. Five minutes, any time before the call:
+
+1. Open the pinned Preview URL above. Clear Vercel's own login wall if it
+   appears — that is Vercel, not the app.
+2. Log in as `dcs1a14-dc@example.com`, with its TOTP code. **Note the time.**
+3. Confirm the sidebar reads **Projects · Dictionaries · Clients**. A DC gets
+   all three; that is the 1a.21a change.
+4. Confirm the project list shows a **Team** link on **SC2602** and **SC2699**
+   and on no other row — this account is DC of those two only. In particular
+   SC2601 must have no Team link, because this account holds no role on it.
+5. Open **Clients**: it must render, and it must say *"Read-only — only an
+   admin can add or edit clients here."* A DC reaches that screen and cannot
+   edit it.
+6. Sign out.
+
+Then confirm the deployment really talks to scl-dev, which is the whole point
+of the check — on the scl-dev SQL editor:
+
+```sql
+select email, last_sign_in_at
+from auth.users
+where email = 'dcs1a14-dc@example.com';
+```
+
+`last_sign_in_at` must match the time you noted in step 2. If it does not, the
+Preview deployment is pointed somewhere else and **the demo does not go ahead
+on that URL**.
+
+---
+
 ## Step 1 — Admin logs in, with 2FA
 
 **Account:** `dcs1a14-admin@example.com` · **Where:** the URL above
