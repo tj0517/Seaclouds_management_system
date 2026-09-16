@@ -228,8 +228,10 @@ select results_eq(
   'both CTR codes exist under this project; an empty description is stored as NULL, tracking_type takes its default');
 
 -- The audit trail the existing trigger already produces — asserted, not
--- extended. dcs.mdr_settings is deliberately NOT in it (its PK is project_id,
--- not id; docs/02-data-model.md, and task 1a.17b).
+-- extended. dcs.mdr_settings joined it in 1a.17b (migration 20260916145603):
+-- record_id is resolved by row shape, so a table keyed by project_id keys the
+-- trail on project_id. The creation therefore leaves a trail on all three
+-- tables it writes.
 select is(
   (select count(*) from public.audit_log
     where table_name = 'public.projects' and record_id = (select project_id from t_created) and action = 'INSERT'),
@@ -242,9 +244,11 @@ select is(
   3::bigint,
   'audit_log has one row per project_roles INSERT');
 select is(
-  (select count(*) from public.audit_log where table_name = 'dcs.mdr_settings'),
-  0::bigint,
-  'audit_log has NOTHING for dcs.mdr_settings — not audited by audit_trigger(), which assumes PK id (task 1a.17b)');
+  (select count(*) from public.audit_log
+    where table_name = 'dcs.mdr_settings' and action = 'INSERT'
+      and record_id = (select project_id from t_created)),
+  1::bigint,
+  'audit_log has the mdr_settings INSERT, keyed on project_id (1a.17b)');
 
 -- ============================================================
 -- 4. Defaults: 7/10/7 when the cycle arguments are omitted entirely.

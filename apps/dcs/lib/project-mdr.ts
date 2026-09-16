@@ -508,16 +508,20 @@ export async function getProjectMdr(supabase: DbClient, projectId: string): Prom
  * statement at all for a table whose patch came out empty.
  *
  * That last part is not a micro-optimisation. On dcs.mdr_settings an UPDATE
- * that changes nothing still fires set_updated_at() and moves updated_at,
- * which is the only witness this table has (audit_trigger() does not cover it
- * — its PK is project_id, not id, see the 1a.17b note below and in the
- * dialog). supabase/tests/dictionaries_code_immutable.test.sql section 2
- * proves exactly this: audit_log cannot distinguish "no UPDATE sent" from
- * "full row resent unchanged", so the app must send nothing.
+ * that changes nothing still fires set_updated_at() and moves updated_at, so
+ * an empty patch sent anyway would rewrite the row's timestamp and make it
+ * look edited when nothing was. Since 1a.17b that statement would be a no-op
+ * in the audit log too — audit_trigger() writes one row per column that
+ * actually changed, and a full row resent unchanged changes none — but a
+ * write with nothing to write remains a write, and updated_at is not free.
+ * supabase/tests/dictionaries_code_immutable.test.sql section 2 and
+ * supabase/tests/audit_mdr_settings.test.sql section 3 both prove the log
+ * side: audit_log cannot distinguish "no UPDATE sent" from "full row resent
+ * unchanged", which is exactly why the app sends nothing.
  *
- * Changes to public.projects columns ARE audited, by the existing trigger
- * from 1a.08 — one audit_log row per column that actually changed, which is
- * what acceptance criterion 6 reads.
+ * Both tables are audited: public.projects since 1a.08, dcs.mdr_settings
+ * since 1a.17b (migration 20260916145603) — one audit_log row per column that
+ * actually changed, which is what acceptance criterion 6 reads.
  */
 export async function updateProjectMdr(
   supabase: DbClient,
