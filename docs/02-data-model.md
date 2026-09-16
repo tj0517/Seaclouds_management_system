@@ -419,8 +419,11 @@ area, language, acceptance_code, workflow_status, workflow_step)`, `code text`,
 `created_at`, `updated_at` (trigger `set_updated_at`). UNIQUE `(dict_type,
 code)`; indeks częściowy `(dict_type, sort_order) WHERE is_active` pod
 jedyny częsty odczyt (aktywne pozycje jednego typu w kolejności).
-Utworzona migracją `20260904081501` (DCS 1a.07), **pusta** — treść
-z załączników A/B wgrywa 1a.18; ekran administracyjny 1a.15.
+Utworzona migracją `20260904081501` (DCS 1a.07) jako pusta; treść
+z załączników A/B briefu wgrywa migracja `20260916094843_seed_dcs_dictionaries`
+(DCS 1a.18, **77 wierszy**: `doc_type` 23, `discipline` 29, `workflow_status` 9,
+`workflow_step` 6, `area` 4, `acceptance_code` 4, `language` 2 — wszystkie
+`is_active = true`). Ekran administracyjny 1a.15.
 Decyzje 1a.07:
 - Jedna generyczna tabela zamiast siedmiu (`doc_types`, `disciplines`, …):
   brief §5.8 wymaga edycji słowników z panelu bez deployu; jeden ekran
@@ -495,6 +498,39 @@ Zapis z aplikacji jest **różnicowy** (1a.15b): `updateDictionaryEntry` czyta
 bieżący wiersz i wysyła wyłącznie pola faktycznie zmienione, a przy braku
 zmian nie wysyła UPDATE-u w ogóle (`set_updated_at` podbija `updated_at` przy
 każdym UPDATE, także pustym) — ten sam wzorzec co `updateClient` (1a.16).
+Decyzje 1a.18 (seed):
+- Źródłem jest **brief (załączniki A i B, §7.4), nie arkusz „Legend" SMDR** —
+  §13.2 (D-03) mówi, że rozszerzona lista Legend nigdy nie była używana i jest
+  przycięta do 23 kodów procedur. `discipline` ma 29 pozycji (tabela B.2
+  briefu), nie 32 z notatki planistycznej.
+- `on conflict (dict_type, code) do nothing`, nie `do update`: po pierwszym
+  wgraniu słowniki należą do DC (brief §5.8), więc repozytorium nie nadpisuje
+  jego edycji. Migracja niczego nie kasuje ani nie dezaktywuje — wcześniejszy
+  wiersz `doc_type/TST` na scl-dev zostaje nietknięty (nieaktywny,
+  `sort_order` 0).
+- `sort_order` startuje od 10 i idzie co 10 — miejsce na wstawki i **powyżej
+  zera**, którego używa domyślna wartość kolumny, więc wiersz z seeda nigdy nie
+  remisuje z ręcznym.
+- `meta` wypełnia **wyłącznie `budget_hours` na `doc_type`** (jedyny klucz
+  o zdefiniowanym znaczeniu, wyżej). Obowiązkowy komentarz przy kodzie
+  akceptacji `3` trafia do `description`, bo klucza `comment_required`
+  nikt jeszcze nie zdefiniował; `colour` dla `workflow_status` to nadal O-05.
+- `workflow_status` ma **9 wierszy — IFC/IFI/IFB są rozbite na trzy kody**,
+  zgodnie z listą stanów `dcs.documents.workflow_status` wyżej. Kody są
+  WIELKIMI literami (`NOT_STARTED`, `STARTED`, `IDC`, `IFR`, `RETCOM`, `IFC`,
+  `IFI`, `IFB`, `VOID`): sześć z dziewięciu to akronimy z glosariusza, pisane
+  wersalikami w całym briefie i w `workflow_step`; snake_case z
+  `docs/03-conventions.md` dotyczy identyfikatorów bazy, nie wartości
+  słownikowych. Gdyby O-15 rozstrzygnął się na enuma, jego etykiety są
+  małymi literami z listy wyżej, a te kody zostają.
+- Migracja wygenerowała **77 wierszy `INSERT` w `public.audit_log`**
+  z `user_id = NULL` (w trakcie `db push` nie ma `auth.uid()`) — to poprawne
+  zachowanie `audit_trigger()`, nie awaria; przy czytaniu logu seed wygląda
+  jak akcja systemowa.
+Test: `supabase/tests/dictionaries_seed.test.sql` (1a.18: liczności per typ,
+kolejność cyklu życia `workflow_step`/`workflow_status`, `budget_hours`
+GD/RA/XD, brak `meta` poza `doc_type`, RED na `process_type` i na re-insert
+bez `on conflict`).
 Test: `supabase/tests/rls_dictionaries.test.sql` (kształt, CHECK, UNIQUE,
 anon/pracownik/outsider/DC/admin, wpisy w `audit_log`) oraz
 `supabase/tests/dictionaries_code_immutable.test.sql` (1a.15b: kształt
