@@ -11,7 +11,7 @@
 --   outsider created below            no profile row until fixture insert
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(33);
+select plan(34);
 
 -- ============================================================
 -- Schema assertions (red without the migration)
@@ -78,14 +78,18 @@ grant select on t_fixture to authenticated;
 -- user (including the outsider just created above) — nothing manual.
 select is((select count(*) from public.module_permissions where module = 'tes'), 4::bigint,
   'sanity: every one of the 4 profiles (3 seed + outsider) already has TES from the default-grant trigger');
-select is((select count(*) from public.module_permissions where module = 'dcs'), 0::bigint,
-  'sanity: nobody has DCS yet — the data migration ran before these fixture users existed');
-
--- Give the admin DCS access directly, as postgres, mirroring what the 1a.22
--- data migration does for real admin rows on dev/prod (the fixture users
--- here are created after that migration ran, so they start from zero).
-insert into public.module_permissions (user_id, module)
-values ((select admin_id from t_fixture), 'dcs');
+-- The 1a.22 data migration cannot reach these users — it runs before the
+-- seed creates them — so the seed grants DCS to its admin itself (the
+-- follow-up to 1a.18; before it, logging into apps/dcs on a fresh local
+-- stack bounced straight back to TES). That grant is the admin fixture the
+-- rest of this file reads, so it is asserted rather than re-created: an
+-- insert here would now be a duplicate-key error.
+select is((select count(*) from public.module_permissions where module = 'dcs'), 1::bigint,
+  'sanity: exactly one DCS grant exists — the seeded admin''s, from supabase/seed.sql');
+select is(
+  (select count(*) from public.module_permissions
+    where module = 'dcs' and user_id = (select admin_id from t_fixture)),
+  1::bigint, 'sanity: the one DCS grant belongs to the seeded admin, not to a fixture user');
 
 -- ============================================================
 -- 1. Constraints (as postgres — RLS is not what is being tested here)
