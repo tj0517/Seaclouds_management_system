@@ -1167,3 +1167,56 @@ nie w repo.
   `projects.process_type` (decyzja z 1a.05/1a.07). `dictionaries_seed.test.sql`
   pilnuje tego czerwonym przypadkiem, żeby kolejne zadanie nie „dosiało" go
   z rozpędu.
+
+## ii) `supabase db reset` fails on the storage health check after the SQL is done
+
+Observed repeatedly on 2026-09-16 (CLI 2.75.0, macOS/Docker Desktop) while
+working the 1a.18 follow-up. `supabase db reset` applies every migration and
+runs `supabase/seed.sql` successfully, then fails at the **`Restarting
+containers...`** step:
+
+```
+Restarting containers...
+HTTP GET: http://127.0.0.1:54321/storage/v1/bucket
+failed to execute http request: Get "http://127.0.0.1:54321/storage/v1/bucket":
+net/http: request canceled (Client.Timeout exceeded while awaiting headers)
+error running container: exit 1
+```
+
+**The database is correct anyway.** The failure happens after the data work:
+on the failing runs `dcs.dictionaries`, `public.module_permissions` and
+`public.audit_log` all held exactly what the migrations and the seed had
+written. The non-zero exit is the trap — a script that chains
+`supabase db reset && …` stops here even though the reset itself did its job.
+
+Not deterministic: a later reset in the same session passed the same probe in
+55 ms (`supabase_storage_*` logs, `user_agent: SupabaseCLI/2.75.0`, 200). It
+looks like the CLI polls storage too soon after restarting it and gives up
+before the container is accepting connections — the container itself is
+healthy and answers `/storage/v1/bucket` with 200 seconds later.
+
+Two things sit next to it in this environment and are **not** the cause, but
+are worth knowing before anyone debugs this:
+
+- `supabase_edge_runtime_Seaclouds_management_system` has been
+  `Exited (255)` for days; `supabase status` reports `imgproxy`,
+  `edge_runtime` and `pooler` as stopped services. The reset does not wait on
+  any of them.
+- A second, unrelated stack (`…_uwxrstbplaoxfghrchcy`) runs alongside on
+  **different ports** (kong `54421` vs our `54321`), so this is not a port
+  collision. Two full stacks do compete for Docker CPU/IO, which plausibly
+  stretches the restart window.
+
+`supabase test db` is unaffected — it exits 0 on a green run (verified); the
+`error running container: exit 1` line that appears next to it shows up only
+when the tests themselves fail.
+
+Not fixed here because the obvious lever is a CLI upgrade (2.75.0 → 2.117.0
+is offered on every invocation), and **the CLI version is pinned**:
+`docs/toolchain.md` requires bumping it locally and in `SUPABASE_CLI_VERSION`
+in both workflows in one PR, then regenerating
+`packages/db/src/database.ts`, because the type-drift check in CI is
+sensitive to the generator version. That is a toolchain task with its own
+verification, not a side fix inside a data migration. Until then: if a reset
+fails only at `Restarting containers`, check the data before assuming the
+reset did not happen.
