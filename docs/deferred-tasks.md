@@ -1388,3 +1388,48 @@ zadanie, nie dopisek do demo.
 **Czego nie robić:** wyłączyć `ssoProtection` na projekcie `dcs`. Każdy
 Preview każdej nieprzejrzanej gałęzi celuje w scl-dev; zdjęcie ściany
 wystawia je wszystkie publicznie, a raz rozesłanych URL-i się nie cofa.
+
+## ll) Follow-ups noted during DCS 1a.21a (demo prep for the 1a gate)
+
+- **`public.sub_projects` (kody CTR) nie ma żadnego triggera — zero śladu
+  w `public.audit_log`. Kandydat na zadanie, bez właściciela.** Odczyt
+  scl-dev 2026-09-16: `pg_trigger` dla tej tabeli = **0** wierszy
+  użytkownika, PK = **`id uuid`**, 7 wierszy danych. Widać to gołym okiem
+  w demie 1a.21: kreator Create Project MDR zapisuje projekt, `mdr_settings`,
+  role **i** kody CTR w jednej transakcji, a zapytanie z kroku 6 pokazuje
+  trzy pierwsze i ani jednego CTR-a. Dziś to tylko luka w narracji „każda
+  zmiana jest zapisana"; **od Fazy 5 to problem realny** — raporty
+  budżet/CTR liczą się z tych wierszy, więc „kto i kiedy dodał albo zmienił
+  kod CTR" przestanie być pytaniem retorycznym.
+  Naprawa jest mała i **nie wymaga zmiany funkcji**: `audit_trigger()` po
+  1a.17b bierze `record_id` z `coalesce(id, project_id)`, a `sub_projects`
+  ma `id` — czyli wystarczy `create trigger audit_sub_projects ... execute
+  function audit_trigger()` w migracji, plus test pgTAP w tym samym PR
+  (`CLAUDE.md`). **To trzeba zweryfikować przed pisaniem migracji**, nie
+  przyjąć z tej notatki.
+
+- **`postgres_logs` na scl-dev NIE zapisuje błędów na poziomie zapytania —
+  kryteria akceptacji muszą używać `edge_logs`.** Sprawdzone, nie założone
+  (2026-09-16): przy żywej sondzie RLS jedna wizyta na `/` wykonała
+  `INSERT` na `dcs.mdr_settings`, który CHECK odrzucił (SQLSTATE 23514,
+  widoczne w panelu sondy) — a w `postgres_logs` w tym oknie były wyłącznie
+  wpisy `checkpoint`. Gdyby ktoś oparł dowód „sonda zniknęła" na tym logu,
+  dostałby fałszywe potwierdzenie: log milczy tak samo przed zmianą i po
+  niej. Działa `edge_logs` (strumień PostgREST): przed zmianą
+  `POST /rest/v1/mdr_settings` → 2 × 400 w jednej wizycie, po zmianie
+  0 przy trzech wizytach, przy niezmienionym `GET`. Uwaga praktyczna:
+  `edge_logs` ma kilkuminutowe opóźnienie ingestu — odczyt tuż po akcji
+  potrafi zwrócić pustkę, co łatwo wziąć za dowód.
+
+- **`next start` lokalnie zawsze przekierowuje na `localhost:<port>`,
+  niezależnie od nagłówka `Host`.** `apps/dcs/proxy.ts` buduje cele
+  przekierowań przez `new URL(path, request.url)`, a `request.url`
+  w middleware Next 16 niesie origin wewnętrzny, nie ten z żądania
+  (sprawdzone curlem z trzema różnymi `Host`: zawsze
+  `location: http://localhost:3001/...`). Skutek wyłącznie lokalny:
+  przeglądarka wchodząca na `127.0.0.1:3001` dostaje przekierowanie na
+  `localhost:3001`, czyli inny origin, i CORS ubija prefetche. Na Vercelu
+  host jest zachowany — brama aal2 działa tam poprawnie, co widać po tym,
+  że w ogóle przepuszcza po podaniu kodu. **Nic nie zmieniono**: `proxy.ts`
+  był poza zakresem 1a.21a, a `request.nextUrl` zamiast `request.url` to
+  zmiana warta własnego PR-a i własnego dowodu, nie dopisku przy demie.

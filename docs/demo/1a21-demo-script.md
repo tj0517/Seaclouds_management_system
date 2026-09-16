@@ -46,13 +46,21 @@ see `docs/deferred-tasks.md`):
   step 7's contrast is clean);
 - dictionaries are seeded (1a.18): 4 active **Area** entries, 23 active
   **Document Type** entries;
-- project **SC2690 · "1a.21a Rehearsal — delete on request"** also exists — it
-  is the dress rehearsal's throwaway, left in place under the "rows stay for
-  review" rule. **It is visible on the admin project list during the demo**,
-  and to `dcs1a14-dc`. Decide before the call whether to leave it (and say
-  "that is our own test data" if asked), rename it through **Edit** on its
-  project page to something neutral, or have it removed. Its `project_code`
-  cannot be changed — that column is immutable.
+- project **SC2690 · "Internal test project"** also exists — the dress
+  rehearsal's throwaway, kept under the "rows stay for review" rule and
+  renamed through the app so it reads plainly if it comes up. It is visible on
+  the admin project list and to `dcs1a14-dc`; its client is `DEMO`, it has two
+  CTR codes and one DC. Nothing in the demo touches it. It was renamed rather
+  than removed on purpose: DCS has no delete, and deleting it by SQL would
+  break the rule that scl-dev changes go through the app. Its `project_code`
+  stayed `SC2690` — that column is immutable (1a.17c), and the Edit dialog
+  shows the field disabled for exactly that reason;
+- doc_type **`ZZT · "1a.21a rehearsal"`** exists but is **inactive** — the
+  rehearsal's entry, retired rather than deleted, so it is hidden from the
+  Document Type list unless **Show inactive** is on, and is not offered
+  anywhere a document type is chosen. If you turn that switch on during
+  step 5 it will be visible alongside `30 · Onshore`; that is fine, and is
+  itself an example of the point being made.
 
 ---
 
