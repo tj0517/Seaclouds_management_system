@@ -122,13 +122,13 @@ describe('parseCreateDictionaryEntryInput', () => {
     const parsed = parseCreateDictionaryEntryInput({
       dictType: 'doc_type',
       code: 'RA',
-      label: 'Risk Assessment',
+      label: 'Report',
       budgetHours: 12,
     })
     expect(parsed).toEqual({
       dictType: 'doc_type',
       code: 'RA',
-      label: 'Risk Assessment',
+      label: 'Report',
       description: null,
       sortOrder: 0,
       budgetHours: 12,
@@ -315,7 +315,7 @@ describe('updateDictionaryEntry: diff-only', () => {
     // DictionaryEntryDialog sends budgetHours: null for a doc_type row whose
     // budget field is empty — that must diff as "unchanged" against meta {},
     // not as a write of { budget_hours: null }.
-    const currentRow = makeRow({ dict_type: 'doc_type', code: 'RA', label: 'Risk Assessment', meta: {} })
+    const currentRow = makeRow({ dict_type: 'doc_type', code: 'RA', label: 'Report', meta: {} })
     const { client, updateMock } = stubClient({ sessionUserId: ADMIN, role: 'admin', currentRow })
 
     const result = await updateDictionaryEntry(client, {
@@ -334,7 +334,7 @@ describe('updateDictionaryEntry: diff-only', () => {
     const currentRow = makeRow({
       dict_type: 'doc_type',
       code: 'RA',
-      label: 'Risk Assessment',
+      label: 'Report',
       meta: { budget_hours: 12 },
     })
     const { client, updateMock } = stubClient({ sessionUserId: ADMIN, role: 'admin', currentRow })
@@ -354,7 +354,7 @@ describe('updateDictionaryEntry: diff-only', () => {
     const currentRow = makeRow({
       dict_type: 'doc_type',
       code: 'RA',
-      label: 'Risk Assessment',
+      label: 'Report',
       meta: { budget_hours: 12 },
     })
     const { client, updateMock } = stubClient({ sessionUserId: ADMIN, role: 'admin', currentRow })
@@ -369,7 +369,7 @@ describe('updateDictionaryEntry: diff-only', () => {
     const currentRow = makeRow({
       dict_type: 'doc_type',
       code: 'RA',
-      label: 'Risk Assessment',
+      label: 'Report',
       meta: { budget_hours: 12, colour: 'red' },
     })
     const { client, updateMock } = stubClient({ sessionUserId: ADMIN, role: 'admin', currentRow })

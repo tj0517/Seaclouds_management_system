@@ -10,7 +10,7 @@
 --   outsider created below            no assignment, no role anywhere
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(59);
+select plan(60);
 
 -- ============================================================
 -- Schema assertions (red without the migration)
@@ -99,8 +99,15 @@ select
   'dddddddd-dddd-4ddd-8ddd-ddddddddddd2'::uuid as inactive_id;
 grant select on t_fixture to authenticated;
 
-select is((select count(*) from dcs.dictionaries), 0::bigint,
-  'sanity: the table is empty (content is seeded by 1a.18)');
+-- Until DCS 1a.18 this asserted an empty table. The seed migration
+-- (20260916094843_seed_dcs_dictionaries) fills every dictionary, so the
+-- precondition this test actually needs is narrower: the two fixture rows
+-- below must not exist yet, and the seed must be there at all.
+select is((select count(*) from dcs.dictionaries
+            where id in ((select active_id from t_fixture), (select inactive_id from t_fixture))),
+          0::bigint, 'sanity: neither fixture row exists yet');
+select cmp_ok((select count(*) from dcs.dictionaries), '>', 0::bigint,
+  'sanity: the 1a.18 seed is present (this test no longer owns every row)');
 
 -- tymon becomes DC of PEJ — a DC, but never an admin.
 insert into dcs.project_roles (project_id, user_id, role)
@@ -151,6 +158,14 @@ select bag_eq(
   'the dict_type CHECK accepts exactly these seven values (pinned; mirror of DICT_TYPES)');
 delete from dcs.dictionaries where code = 'T' or (dict_type = 'area' and code = 'PR');
 
+-- The RLS sections below prove "this user sees every row" with a bare
+-- count(*) and no WHERE (docs/03-conventions.md: a query that filters in the
+-- application proves nothing about policies). Since 1a.18 the row count is
+-- the seed's, not a constant, so it is read here once as postgres — which is
+-- RLS-exempt — and compared against, instead of hard-coding 2.
+create temp table t_all_rows as select count(*) as n from dcs.dictionaries;
+grant select on t_all_rows to authenticated;
+
 -- ============================================================
 -- 2. anon: nothing
 -- ============================================================
@@ -166,8 +181,8 @@ set local role authenticated;
 select set_config('request.jwt.claims',
   json_build_object('sub', (select ernest_id from t_fixture), 'role', 'authenticated')::text, true);
 
-select is((select count(*) from dcs.dictionaries), 2::bigint,
-  'GREEN: employee reads both rows');
+select is((select count(*) from dcs.dictionaries), (select n from t_all_rows),
+  'GREEN: employee reads every row (seed + both fixture rows)');
 select is(
   (select is_active from dcs.dictionaries where id = (select inactive_id from t_fixture)),
   false, 'GREEN: the inactive row is still returned to a plain employee (deactivation hides in forms, not in the database)');
@@ -187,7 +202,7 @@ select is((select count(*) from dcs.dictionaries where id = (select active_id fr
 -- ============================================================
 select set_config('request.jwt.claims',
   json_build_object('sub', (select outsider_id from t_fixture), 'role', 'authenticated')::text, true);
-select is((select count(*) from dcs.dictionaries), 2::bigint,
+select is((select count(*) from dcs.dictionaries), (select n from t_all_rows),
   'GREEN: a signed-in user without any project still reads dictionaries');
 select throws_ok(
   $$insert into dcs.dictionaries (dict_type, code, label) values ('discipline', 'EL', 'Electrical')$$,
@@ -205,7 +220,8 @@ select ok(public.is_doc_controller((select pej_id from t_fixture)),
   'sanity: tymon is a DC (of PEJ) in this session');
 select ok(public.is_any_doc_controller(),
   'sanity: tymon is a DC of some project, so is_any_doc_controller() is true');
-select is((select count(*) from dcs.dictionaries), 2::bigint, 'GREEN: DC reads both rows (aal2 is not required for SELECT)');
+select is((select count(*) from dcs.dictionaries), (select n from t_all_rows),
+  'GREEN: DC reads every row (aal2 is not required for SELECT)');
 
 -- RED (1a.11): DC session at aal1 (no verified second factor) is rejected —
 -- is_any_doc_controller() alone is no longer sufficient.
@@ -325,8 +341,8 @@ select is(
       and old_value ->> 'code' = 'EL'),
   1::bigint, 'GREEN: admin DELETE produced one audit row carrying the old record');
 
-select is((select count(*) from dcs.dictionaries), 2::bigint,
-  'GREEN: admin still sees both fixture rows (inactive one included)');
+select is((select count(*) from dcs.dictionaries), (select n from t_all_rows),
+  'GREEN: admin still sees every row, the inactive fixture one included');
 
 select * from finish();
 rollback;
