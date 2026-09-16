@@ -215,6 +215,24 @@ BEGIN
   ON CONFLICT (id) DO NOTHING;
 
   -- ============================================================
+  -- DCS: module access for the seeded admin
+  -- ============================================================
+  -- The 1a.22 backfill in migration 20260904170000 grants `dcs` to every
+  -- role='admin' profile *at migration time*, and this seed runs after the
+  -- migrations — so its users are born only with the `tes` that the
+  -- grant_default_module_access() trigger hands out, and the seeded admin
+  -- is bounced back to NEXT_PUBLIC_TES_URL by the module gate in proxy.ts
+  -- the moment they open apps/dcs. That looks like a broken login and is
+  -- only a missing row. Fixed here, in the seed, rather than in the
+  -- migration: the backfill's shape is deliberate (it is a one-off over
+  -- accounts that already existed), and these accounts exist only locally
+  -- and in CI. Same predicate as the backfill, so a seeded account that
+  -- becomes an admin later still gets it on the next reset.
+  INSERT INTO public.module_permissions (user_id, module)
+  SELECT id, 'dcs' FROM profiles WHERE role = 'admin'
+  ON CONFLICT (user_id, module) DO NOTHING;
+
+  -- ============================================================
   -- Fix NULL string columns in auth.users (GoTrue scans them as non-nullable strings)
   -- ============================================================
   UPDATE auth.users SET

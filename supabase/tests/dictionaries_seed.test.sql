@@ -9,7 +9,7 @@
 -- policy on dcs.dictionaries is already proven next door.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(14);
+select plan(18);
 
 -- ============================================================
 -- 1. Counts per dictionary — the acceptance criteria of 1a.18.
@@ -101,6 +101,63 @@ select throws_ok(
   $$insert into dcs.dictionaries (dict_type, code, label) values ('language', 'EN', 'English (re-run)')$$,
   '23505', null,
   'RED: the same re-insert WITHOUT the clause is a unique violation — idempotency is the clause, not the data');
+
+-- ============================================================
+-- 6. Descriptions are English and carry no repository path
+-- (follow-up to 1a.18, migration
+-- 20260916104238_dcs_dictionaries_english_descriptions).
+-- ============================================================
+-- The defect that started the follow-up: acceptance code 3 shipped with
+-- "(docs/00-glossary.md: …)" inside user-facing data. A DC has no docs/
+-- tree, so no description may name one — asserted across every dictionary,
+-- not just the row that had it, because the next one would be a new row.
+select is(
+  (select count(*) from dcs.dictionaries where is_active and description like '%docs/%'),
+  0::bigint, 'no active dictionary description leaks a repository path');
+
+-- The other half: the glosses were the brief's Polish, next to English
+-- labels. Diacritics are the cheap, total check — it also covers a future
+-- row pasted straight out of the brief.
+select is(
+  (select count(*) from dcs.dictionaries
+     where is_active and description ~ '[ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]'),
+  0::bigint, 'no active dictionary description is left in Polish');
+
+-- Diacritics miss four of the 23 (OC, TQ, XD, XW have none), so the texts
+-- themselves are pinned. These are DC's approved wordings: a later edit on
+-- the 1a.15 screen is legitimate and this test is where it gets noticed.
+select results_eq(
+  $$select code, description from dcs.dictionaries
+     where dict_type = 'doc_type' and is_active order by code$$,
+  $$values ('AA', 'Budgeting, cost estimating, commercial pricing'),
+           ('AS', 'Methodology, assumptions, input data and interpretation of results'),
+           ('CL', 'List of items, tasks or activities to be completed'),
+           ('DP', 'Structured set of design documentation'),
+           ('GD', 'Guidance supporting the application of a procedure or standard'),
+           ('JD', 'Scope of duties for a position'),
+           ('KA', 'Tasks, methods and operations described in detail'),
+           ('KQ', 'Quality and HSE system documentation, plans, risk assessments, HAZOP / HIRA'),
+           ('LA', 'Process standardisation, recording of project information'),
+           ('NC', 'Recording and handling of deviations from requirements'),
+           ('OC', 'Organisational structure'),
+           ('OF', 'Commercial offer, proposal, tender materials including CVs'),
+           ('PO', 'Company-level principle, commitment or rule'),
+           ('PR', 'Presentation for meetings, training, project activities'),
+           ('RA', 'Results, conclusions and summary after completion of work'),
+           ('SA', 'Technical requirements for equipment and services'),
+           ('TN', 'Short document recording technical clarifications'),
+           ('TQ', 'Technical and operational queries during a project or supervision'),
+           ('XD', 'General arrangement drawing'),
+           ('XE', 'Arrangement drawing of equipment, site or works'),
+           ('XW', 'Drawing of route and corridor alignments'),
+           ('XX', 'Drawing not covered by the other codes'),
+           ('XZ', 'Map presenting survey results')$$,
+  'the 23 doc_type descriptions are the approved English texts');
+
+select is(
+  (select description from dcs.dictionaries where dict_type = 'acceptance_code' and code = '3'),
+  'Comment mandatory — document returns to the Originator.',
+  'acceptance code 3 states the mandatory-comment rule without a docs/ path');
 
 select * from finish();
 rollback;
