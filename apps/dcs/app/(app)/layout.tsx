@@ -5,6 +5,7 @@
 // defence in depth, matching apps/timesheet/app/admin/layout.tsx.
 import { redirect } from 'next/navigation'
 import { createClient } from '@scl/db/server'
+import { canOpenAdminScreens } from '@/lib/auth-helpers'
 import { fetchMyModuleAccess } from '@/lib/module-permissions'
 import DcsSidebar from '@/components/DcsSidebar'
 
@@ -18,7 +19,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     redirect('/login')
   }
 
-  const { data: profile } = await supabase.from('profiles').select('full_name').eq('id', user.id).maybeSingle()
+  const { data: profile } = await supabase.from('profiles').select('full_name, role').eq('id', user.id).maybeSingle()
   // Switcher renders only for a 2+ module account; on a degraded read, fail
   // open rather than guess "one module" (see fetchMyModuleAccess()) — the
   // trap being that failing closed here would strand a two-module user
@@ -26,12 +27,19 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const { modules: myModules, degraded } = await fetchMyModuleAccess(supabase, user.id)
   const hasTesAccess = degraded || myModules.includes('tes')
 
+  // DCS 1a.21a: which nav links the sidebar offers — the same decision the
+  // two guarded pages make for themselves, so a visible link never leads to
+  // a redirect and a hidden one never hides a reachable page. Cosmetic on
+  // its own: canOpenAdminScreens() is called again inside each page.
+  const canSeeAdminLinks = await canOpenAdminScreens(supabase, user.id, profile?.role === 'admin')
+
   return (
     <div className="flex min-h-screen bg-gray-100">
       <DcsSidebar
         email={user.email ?? ''}
         fullName={profile?.full_name ?? null}
         hasTesAccess={hasTesAccess}
+        canSeeAdminLinks={canSeeAdminLinks}
       />
       <main className="flex-1 overflow-auto p-8">{children}</main>
     </div>

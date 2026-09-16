@@ -548,9 +548,22 @@ PR (one topic per PR). Each item names its owner task or trigger:
 
 ## x) Follow-ups noted during DCS 1a.13 (module switcher)
 
-- **`apps/dcs/app/(app)/page.tsx` still carries the `dcs.mdr_settings`
-  RLS-probe debug block** from 1a.05/1a.09 test scaffolding, moved as-is into
-  the new route shell. It still demonstrates RLS correctly (unfiltered
+- ~~**`apps/dcs/app/(app)/page.tsx` still carries the `dcs.mdr_settings`
+  RLS-probe debug block**~~ — **CLOSED 2026-09-16 (DCS 1a.21a,
+  `chore/dcs-1a21a-demo-prep`).** Ownership moved from 1b.05 to 1a.21a: the
+  1a gate is a live demo in front of the client's Document Controller and MD,
+  and diagnostic UI cannot be on screen for it — that need arrived before the
+  MDR register did. Removed: the write half (a deliberately CHECK-violating
+  `INSERT` on every render of `/`) and the blue panel reporting its SQLSTATE.
+  Kept: the unfiltered `select` on `dcs.mdr_settings`, which was always the
+  Cycle column's source and is now commented as such. The RLS proof it stood
+  for lives on in `supabase/tests/rls_mdr_settings.test.sql`; a regression
+  test in `apps/dcs/app/(app)/nav.test.ts` asserts the page never INSERTs
+  into that table again. The `supabase/seed.sql` comment naming the probe was
+  corrected in the same PR. Original text follows.
+
+- **[original]** The block came from 1a.05/1a.09 test scaffolding, moved as-is
+  into the new route shell. It still demonstrates RLS correctly (unfiltered
   select + CHECK-tripping write probe). **Owner: 1b.05**, where the MDR
   register replaces this placeholder project list and the block disappears
   on its own (owner's decision, 2026-09-05 — no task number for this was
@@ -783,6 +796,20 @@ report a blocked criterion after building everything else.
   called it yet, so this was a same-PR rename, not a breaking change needing
   its own task.
 - **No nav link to `/admin/dictionaries` was added** to `DcsSidebar` —
+  **PARTIALLY CLOSED 2026-09-16 (DCS 1a.21a).** `DcsSidebar` now carries
+  `Dictionaries` and `Clients`, visible to an admin or the DC of any project
+  (the same condition as the page guards 1a.21a added to both screens — see
+  `docs/03-conventions.md`, „Dostęp do ekranów `/admin` w DCS"). The project
+  team screen (`/admin/projects/[projectId]`) got a per-row „Team" link on
+  the project list instead of a sidebar entry, shown only to whoever may edit
+  that project's team. **Still open: `/admin/users`.** There is no users-list
+  screen in `apps/dcs` to link to — only `/admin/users/[userId]` — and
+  building one was out of 1a.21a's scope as it was out of 1a.14's. A sidebar
+  entry cannot close this one; whoever builds the users list closes it.
+  Original text follows.
+
+- **[original]** No nav link to `/admin/dictionaries` was added to
+  `DcsSidebar` —
   reachable only by direct URL, same as `/admin/projects/[projectId]` and
   `/admin/users/[userId]` before it (`docs/deferred-tasks.md` (aa): "No
   discovery path to either new screen beyond a direct URL"). Consistent with
@@ -1274,3 +1301,51 @@ reset did not happen.
   osobny PR dokumentacyjny). 1a.17b nie zmienia tego baseline'u — nie dodaje
   funkcji ani tabeli, a `create or replace` zachowuje ACL, więc `revoke`
   z 1a.08 nadal trzyma `audit_trigger()` poza lintem 0029.
+
+## kk) Środowisko demo dla klienta — opcje odrzucone w DCS 1a.21a
+
+Demo bramki 1a (2026-09-16) poszło **opcją A**: prowadzący dzieli ekran ze
+swojej maszyny, otwiera Preview deployment tego PR-a i loguje się do Vercela
+wcześniej, więc ściana logowania jest dla widzów niewidoczna. To jest tanie
+i jednorazowe. Przy **powtarzalnych** demach obie odrzucone opcje wracają —
+zapisane tu, żeby nie odkrywać ich od nowa.
+
+Stan faktyczny, odczytany z API Vercela 2026-09-16 (projekt `dcs`,
+`prj_7DuhcGzn0rYndf62F8fdsNAN3hdY`):
+
+- `ssoProtection = {"deploymentType": "all_except_custom_domains"}` —
+  Vercel Authentication chroni **każdy** URL deploymentu poza własną domeną
+  produkcyjną. Preview jest więc za ścianą logowania. Projekt Timesheetu
+  (`seaclouds-management-system`) nie ma jej wcale — tylko DCS.
+- `NEXT_PUBLIC_AUTH_COOKIE_DOMAIN` istnieje **wyłącznie** na targecie
+  `production`. `getSupabaseCookieOptions()` zwraca wtedy `undefined`
+  (`packages/db/src/cookie-options.ts`), czyli ciasteczko sesji jest
+  host-scoped. **Konsekwencja: na Preview przełączenie TES → DCS zawsze
+  wymaga ponownego logowania**, niezależnie od ściany. Dodanie tam tej
+  zmiennej niczego nie naprawi: oba Preview URL-e leżą na `*.vercel.app`,
+  które jest na public suffix list, więc żadne ciasteczko nie może objąć obu.
+  Bezszwowe przełączenie istnieje tylko tam, gdzie obie aplikacje dzielą
+  `.seaclouds.eu` — czyli na produkcji (`app.seaclouds.eu` +
+  `dcs.seaclouds.eu`), a ta celuje w prod, nie w scl-dev.
+
+**Opcja B — Protection Bypass for Automation.** Włączyć bypass na projekcie
+`dcs` i dać klientowi link
+`?x-vercel-protection-bypass=<sekret>&x-vercel-set-bypass-cookie=true`.
+Klient otwiera sam, bez konta Vercela; zero zmian w repo. Koszt: sekret
+krąży w linku — rotować po demie. Nie naprawia ponownego logowania przy
+kroku „przełącz na DCS".
+
+**Opcja D — dedykowane subdomeny dev.** `dcs-dev.seaclouds.eu` +
+`tes-dev.seaclouds.eu`, oba wskazujące na scl-dev, oba z
+`NEXT_PUBLIC_AUTH_COOKIE_DOMAIN=.seaclouds.eu`. Własne domeny są wyjęte spod
+`ssoProtection`, więc klient wchodzi wprost, a przełączanie modułów działa
+naprawdę — jedyna opcja, która pokazuje krok 2 takim, jakim jest na
+produkcji. Koszt: DNS, domeny i nowe targety zmiennych w dwóch projektach
+Vercela, oraz wpis w `additional_redirect_urls` w `config.toml` — a
+`docs/03-conventions.md` („Środowiska i deploymenty") trzyma tę listę wąsko
+świadomie, więc to nie jest zmiana do przemycenia przy okazji. Osobne
+zadanie, nie dopisek do demo.
+
+**Czego nie robić:** wyłączyć `ssoProtection` na projekcie `dcs`. Każdy
+Preview każdej nieprzejrzanej gałęzi celuje w scl-dev; zdjęcie ściany
+wystawia je wszystkie publicznie, a raz rozesłanych URL-i się nie cofa.

@@ -52,7 +52,23 @@ describe('resolveProjectListFilter', () => {
   it('member with zero roles gets an empty id list, not degraded', async () => {
     const client = stubClient({ roleRows: [] })
     const result = await resolveProjectListFilter(client, USER, false)
-    expect(result).toEqual({ kind: 'ids', ids: [] })
+    expect(result).toEqual({ kind: 'ids', ids: [], rolesByProject: new Map() })
+  })
+
+  // DCS 1a.21a: the project list decides the per-row "Team" link from these
+  // roles, so the map has to survive the trip, not just the ids derived
+  // from it.
+  it('carries the per-project roles alongside the ids', async () => {
+    const client = stubClient({
+      roleRows: [
+        { project_id: PEJ, role: 'dc' },
+        { project_id: IT, role: 'orig' },
+      ],
+    })
+    const result = await resolveProjectListFilter(client, USER, false)
+    expect(result.kind).toBe('ids')
+    expect(result.kind === 'ids' && result.rolesByProject.get(PEJ)).toEqual(['dc'])
+    expect(result.kind === 'ids' && result.rolesByProject.get(IT)).toEqual(['orig'])
   })
 
   it('a read failure degrades to kind "degraded", not a silent empty list', async () => {

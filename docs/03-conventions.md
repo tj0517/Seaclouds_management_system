@@ -119,6 +119,48 @@ osiągalnym celem dla tego projektu.
 - `apps/dcs`: klient Supabase zawsze z generykiem `<Database>`; zakaz
   `as any` na zapytaniach (dług Timesheet nie przechodzi do DCS).
 
+## Dostęp do ekranów `/admin` w DCS
+
+Trzy warstwy, w tej kolejności, i tylko pierwsze dwie są egzekwowaniem:
+
+1. **RLS** — ostatnia linia obrony, jedyna, która przeżywa bezpośrednie
+   wywołanie API. Niezmieniana przez decyzje z tej sekcji.
+2. **Guard strony (RSC)** — `redirect('/')` na początku strony, zanim
+   powstanie jakikolwiek JSX. Plus bramka aal2 po prefiksie `/admin`
+   w `apps/dcs/proxy.ts` (1a.11 / O-14), która dotyczy wyłącznie sesji
+   admina lub DC.
+3. **Widoczność linku** (`DcsSidebar`, link „Team" w wierszu listy
+   projektów) — wyłącznie nawigacja. Nigdy nie traktuj „link się
+   wyrenderował" jako autoryzacji; `<IfRole>` mówi to samo.
+
+Reguła: **widoczność linku musi odpowiadać guardowi strony, do której
+prowadzi** — widoczny link nigdy nie kończy się przekierowaniem, a ukryty
+nigdy nie chowa osiągalnej strony. Obie decyzje liczy jedna funkcja
+(`canOpenAdminScreens` / `isAdminOrAnyDc` w `apps/dcs/lib/auth-helpers.ts`),
+złożona z prymitywów `fetchUserProjectRoles` + `hasAnyRole`, a nie osobne
+zapytanie.
+
+Stan po **DCS 1a.21a** (zmiana zachowania — wcześniej `/admin/dictionaries`
+i `/admin/clients` renderowały się każdemu zalogowanemu użytkownikowi):
+
+| Ekran | Guard strony | Prawo edycji w środku | Link w `DcsSidebar` |
+|---|---|---|---|
+| `/admin/dictionaries` | admin lub DC dowolnego projektu | to samo (`requireAdminOrAnyDc`) | tak, ten sam warunek |
+| `/admin/clients` | admin lub DC dowolnego projektu | **tylko admin** (`requireAdmin`) | tak, ten sam warunek |
+| `/admin/projects/new` | brak (komunikat dla nie-admina) | admin | nie — wejście z listy projektów |
+| `/admin/projects/[projectId]` | brak (każdy członek projektu czyta zespół) | admin lub DC **tego** projektu | nie — link „Team" w wierszu, ten sam warunek co edycja |
+| `/admin/users/[userId]` | admin (`redirect('/')`, 1a.14) | admin | nie — ekranu listy użytkowników nie ma |
+
+Guard szerszy niż prawo edycji to norma, nie błąd: DC musi czytać klientów
+(numeracja CPY), więc wchodzi na `/admin/clients` i widzi je w trybie tylko
+do odczytu. Odwrotność — prawo edycji szersze niż guard — jest błędem.
+
+Kierunek degradacji przy nieudanym odczycie `dcs.project_roles`:
+**zamknięty** (jak `resolveProjectListFilter`, w przeciwieństwie do
+`fetchMyModuleAccess`, które celowo degraduje otwarcie — patrz komentarz
+w `apps/dcs/lib/module-permissions.ts`). Admin nie jest tym dotknięty:
+`profiles.role` rozstrzyga sprawę wcześniej i zapytanie nie jest wykonywane.
+
 ## Workspace (pnpm) i zakres buildów Vercela
 
 - Członkami workspace (`pnpm-workspace.yaml`) są `apps/*`, `packages/*`
