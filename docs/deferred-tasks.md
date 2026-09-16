@@ -1118,16 +1118,10 @@ nie w repo.
   „Issued for Review", …, „As-Built"), więc ekran 1a.15 pokazuje dwa różne
   style w sąsiednich zakładkach. Nie „naprawione" w seedzie, bo etykiety
   statusów nie były podane w wersji rozwiniętej, a zmyślanie treści słownika
-  jest wyraźnie zabronione. **Wymaga decyzji DC**: albo statusy dostają
-  rozwinięcia (jeden `update` etykiet — `label` jest edytowalne z ekranu
-  1a.15, bez migracji), albo zostaje jak jest. Kuszące, nietknięte.
-- **`RA` w fikstrze `apps/dcs/lib/dictionaries-admin.test.ts` to nadal
-  „Risk Assessment"**, podczas gdy prawdziwy `doc_type/RA` z briefu to
-  „Report". Kolizji nie ma i test nie pada: to test jednostkowy na
-  zaślepionym kliencie Supabase, nigdy nie dotyka bazy — więc zgodnie
-  z zakresem 1a.18 fikstra została nietknięta. Zostaje jako mylący napis dla
-  następnego czytelnika; zmiana to jedno słowo w trzech miejscach. Kuszące,
-  nietknięte.
+  jest wyraźnie zabronione. **Rozstrzygnięte przez właściciela przy przeglądzie
+  PR #50 (2026-09-16): zostaje jak jest** — jeśli DC zechce rozwinięć, zmienia
+  `label` z ekranu 1a.15, bez migracji. Wpis zostaje jako wyjaśnienie, skąd
+  bierze się różnica stylu między sąsiednimi zakładkami.
 - **`rls_dictionaries.test.sql` nie może już liczyć wierszy na sztywno.**
   Trzy asercje „użytkownik widzi wszystko" porównywały `count(*)` z literałem
   `2`, a sanity-check na wejściu wymagał pustej tabeli („content is seeded by
