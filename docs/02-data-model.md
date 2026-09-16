@@ -523,6 +523,16 @@ Decyzje 1a.18 (seed):
   `docs/03-conventions.md` dotyczy identyfikatorów bazy, nie wartości
   słownikowych. Gdyby O-15 rozstrzygnął się na enuma, jego etykiety są
   małymi literami z listy wyżej, a te kody zostają.
+- **`description` jest po angielsku i nie niesie ścieżek z repo** —
+  poprawka z 2026-09-16, migracja
+  `20260916104238_dcs_dictionaries_english_descriptions`: 1a.18 zaseedowało
+  23 glosy `doc_type` polskim tekstem z briefu (obok angielskich `label`),
+  a `acceptance_code` 3 miał w treści `docs/00-glossary.md`. Migracja robi
+  24 osłonięte `UPDATE`-y — po jednym na wiersz, każdy dopasowany do
+  dokładnego tekstu z 1a.18 — więc wiersz zmieniony wcześniej z ekranu 1a.15
+  **nie jest nadpisywany**, tą samą zasadą co `do nothing` wyżej. Reguła na
+  przyszłość: `label` i `description` są angielskie, a `description` nigdy nie
+  cytuje ścieżki w repozytorium — czyta ją DC w aplikacji, nie programista.
 - Migracja wygenerowała **77 wierszy `INSERT` w `public.audit_log`**
   z `user_id = NULL` (w trakcie `db push` nie ma `auth.uid()`) — to poprawne
   zachowanie `audit_trigger()`, nie awaria; przy czytaniu logu seed wygląda
@@ -530,7 +540,9 @@ Decyzje 1a.18 (seed):
 Test: `supabase/tests/dictionaries_seed.test.sql` (1a.18: liczności per typ,
 kolejność cyklu życia `workflow_step`/`workflow_status`, `budget_hours`
 GD/RA/XD, brak `meta` poza `doc_type`, RED na `process_type` i na re-insert
-bez `on conflict`).
+bez `on conflict`; follow-up 2026-09-16: brak ścieżki `docs/` i polskich
+diakrytyków w żadnym aktywnym opisie oraz 23 + 1 tekst przypięte dosłownie —
+diakrytyki same nie wystarczą, `OC`/`TQ`/`XD`/`XW` żadnych nie miały).
 Test: `supabase/tests/rls_dictionaries.test.sql` (kształt, CHECK, UNIQUE,
 anon/pracownik/outsider/DC/admin, wpisy w `audit_log`) oraz
 `supabase/tests/dictionaries_code_immutable.test.sql` (1a.15b: kształt

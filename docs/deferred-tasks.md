@@ -1002,19 +1002,24 @@ for dcs.mdr_settings").
   Zgłoszone już w (cc); to zadanie nie zmienia baseline'u (funkcja jest
   `SECURITY INVOKER`), więc znowu nie jest to jego poprawka do zrobienia,
   ale liczba w konwencjach myli przy każdym porównaniu.
-- **Seed nie nadaje modułu `dcs` zaseedowanemu adminowi**, więc logowanie do
-  `apps/dcs` na lokalnym stacku wypada z powrotem przez bramkę modułów
-  w `proxy.ts` na `NEXT_PUBLIC_TES_URL` — wygląda jak zepsuty login, a jest
-  brakiem wiersza w `public.module_permissions`. Przyczyna jest kolejnością:
-  backfill w migracji `20260904170000` nadaje `dcs` kontom z `role='admin'`
-  **w momencie migracji**, a `supabase/seed.sql` wykonuje się po migracjach,
-  więc jego użytkownicy dostają od triggera `grant_default_module_access()`
-  wyłącznie `tes`. Obejście na czas weryfikacji 1a.17 to jednorazowy
-  `insert into public.module_permissions (user_id, module) … 'dcs'`.
-  Nie naprawione tutaj: `seed.sql` jest poza zakresem tego zadania, a kształt
-  backfillu z 1a.22 jest celowy — poprawka należy do seeda (dopisać nadanie
-  `dcs` kontom `admin` na końcu `seed.sql`), nie do migracji. Drobne, ale
-  potyka się o to każdy, kto pierwszy raz uruchamia DCS lokalnie.
+- ~~**Seed nie nadaje modułu `dcs` zaseedowanemu adminowi**~~ — **zamknięte
+  2026-09-16** (follow-up do 1a.18). Logowanie do `apps/dcs` na lokalnym
+  stacku wypadało z powrotem przez bramkę modułów w `proxy.ts` na
+  `NEXT_PUBLIC_TES_URL` — wyglądało jak zepsuty login, a było brakiem wiersza
+  w `public.module_permissions`. Przyczyną była kolejność: backfill w migracji
+  `20260904170000` nadaje `dcs` kontom z `role='admin'` **w momencie
+  migracji**, a `supabase/seed.sql` wykonuje się po migracjach, więc jego
+  użytkownicy dostawali od triggera `grant_default_module_access()` wyłącznie
+  `tes`. Poprawione dokładnie tak, jak zapowiadał ten wpis — w seedzie, nie
+  w migracji: `insert into public.module_permissions select id, 'dcs' from
+  profiles where role = 'admin' on conflict (user_id, module) do nothing` na
+  końcu `seed.sql`, tym samym predykatem co backfill. Kształt backfillu z
+  1a.22 został nietknięty; żadnej zmiany schematu, triggera ani funkcji.
+  Efekt uboczny: `rls_module_permissions.test.sql` opierał się na tym, że
+  „nikt jeszcze nie ma DCS" i sam wstawiał adminowi wiersz — teraz byłby to
+  duplikat klucza, więc test **asercjonuje** nadanie z seeda zamiast je
+  tworzyć (plan 33 → 34). Po `supabase db reset` zaseedowany admin wchodzi na
+  `/dcs` bez ręcznego INSERT-a.
 - **Atomowości nie da się udowodnić samym pgTAP-em.** `throws_ok` wykonuje
   swoją instrukcję w bloku `exception` plpgsql, czyli w podtransakcji — więc
   granicą rollbacku jest **wywołanie**, nie ciało funkcji, i wewnątrz jednej
@@ -1141,6 +1146,22 @@ nie w repo.
   w `description` właśnie dlatego, że klucza `comment_required` nikt nie
   zdefiniował — jeśli logika obiegu (1b) ma go czytać maszynowo, potrzebny
   jest klucz i migracja przenosząca tę informację.
+- **Opisy (`description`) były po polsku, a jeden niósł ścieżkę z repo** —
+  **poprawione 2026-09-16** migracją
+  `20260916104238_dcs_dictionaries_english_descriptions`. 23 glosy `doc_type`
+  przyszły z briefu po polsku, obok angielskich `label`, a `acceptance_code`
+  3 miał w treści „(docs/00-glossary.md: powrót do Originatora)" — DC nie ma
+  drzewa `docs/`. Teksty zastępcze są zatwierdzone przez DC i wpisane
+  dosłownie. Migracja jest **osłonięta**: każdy `UPDATE` dopasowuje się do
+  dokładnego tekstu z 1a.18, więc wiersz już zmieniony z ekranu 1a.15 nie
+  zostaje nadpisany — to odpowiednik `on conflict do nothing` z 1a.18 i ta
+  sama zasada (od pierwszego wgrania słowniki należą do DC, brief §5.8).
+  Cena: plik jest jednorazowy i na środowisku z dryfem po cichu robi mniej,
+  więc czyta się liczbę wierszy, nie kod wyjścia. `dictionaries_seed.test.sql`
+  pilnuje teraz obu rzeczy naraz — zero opisów ze ścieżką `docs/`, zero
+  z polskimi znakami diakrytycznymi i 23 + 1 tekst przypięte dosłownie
+  (diakrytyki same nie wystarczą: `OC`, `TQ`, `XD`, `XW` nie miały żadnych).
+  Plan testu 14 → 18.
 - **`process_type` (brief B.4: Internal / Tender / Project / Course) nie jest
   słownikiem** i nie został dodany do CHECK-a — zostaje enumem
   `projects.process_type` (decyzja z 1a.05/1a.07). `dictionaries_seed.test.sql`
