@@ -126,11 +126,11 @@ Six steps, one at a time, one write at the end.
 
 | Wizard step | What to enter |
 |---|---|
-| 1 · Identification | Project code `<<CODE — confirm before the demo; proposed: SC2698>>`, Name `OW_Export Cable Survey`, Process type **Project**, Year `2026` |
+| 1 · Identification | Project code **`SC2698`**, Name `OW_Export Cable Survey`, Process type **Project**, Year `2026` |
 | 2 · Client | **DEMO — Demo Client** |
 | 3 · Review cycle | leave the defaults **7 / 10 / 7** |
 | 4 · Team and roles | add `DCS1a14 Test DC-of-PEJ` → **Document Controller** |
-| 5 · CTR codes | `<<CODE>>_CTR100` "Project management", `<<CODE>>_CTR200` "Survey and reporting" |
+| 5 · CTR codes | `SC2698_CTR100` "Project management", `SC2698_CTR200` "Survey and reporting" |
 | 6 · Budget | `1200` |
 
 Then submit. The app sends you to the new project's page.
@@ -148,9 +148,10 @@ timesheet books hours against, so documents and hours land on one structure."
 document number in the project — `SC2601-SCL-RA-0012-EN`. Once the project
 exists, that code cannot be edited; the database refuses it."
 
-**Fallback:** if the code is rejected as already taken, use the reserve code
-`<<RESERVE CODE — proposed: SC2697>>` and carry on; nothing later in the
-script depends on which code it was.
+**Fallback:** if `SC2698` is rejected as already taken, use the reserve code
+**`SC2697`** (and `SC2697_CTR100` / `SC2697_CTR200`) and carry on; nothing
+later in the script depends on which code it was. `SC2690` is *not* a reserve
+— it is the rehearsal's throwaway project and already exists.
 
 ---
 

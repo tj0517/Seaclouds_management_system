@@ -572,16 +572,35 @@ PR (one topic per PR). Each item names its owner task or trigger:
   them) and 1a.14 (role matrix screen — reached by clicking into a project
   from a list, doesn't own the list itself).
 - **No mobile drawer/hamburger on `apps/dcs/components/DcsSidebar.tsx`**,
-  unlike Timesheet's `AdminSidebar` (which has one). DCS has exactly one nav
-  entry today ("Projects"). Trigger: **1a.14** (role matrix screen) —
-  confirmed DCS-side (`docs/02-data-model.md`: its guard lives in
-  `apps/dcs/app/data/actions/project-roles.ts`) and the next planned DCS UI
-  task, so it is the first one that actually adds a second nav entry.
-- **`DcsSidebar` nav uses plain text, no icon library** —
-  `apps/dcs/package.json` still has no icon dependency (unlike Timesheet's
-  `lucide-react`). Same trigger as above: **1a.14** — add an icon library
-  together with the drawer once there is more than one nav entry to
-  distinguish.
+  unlike Timesheet's `AdminSidebar` (which has one). Trigger was **1a.14**
+  ("the first task that adds a second nav entry") — 1a.14 came and went
+  without one. **Update (DCS 1a.21a, 2026-09-16): the premise "DCS has
+  exactly one nav entry today" is no longer true** — the sidebar now carries
+  three (Projects, Dictionaries, Clients), so the condition this item waited
+  on has actually fired. Still not done: 1a.21a's scope was the links, and a
+  drawer is a layout change with its own review. No new trigger invented —
+  whoever next touches `DcsSidebar` owns it.
+- ~~**`DcsSidebar` nav uses plain text, no icon library**~~ — the dependency
+  half is **obsolete**: `apps/dcs/package.json` has carried `lucide-react`
+  since 1a.15 brought in shadcn/ui, so "DCS has no icon dependency" is simply
+  stale (verified 2026-09-16). What remains is a choice, not a blocker: the
+  nav is still plain text. 1a.21a kept it that way deliberately — adding
+  icons to two new entries and not the existing one would have introduced a
+  second style mid-task. Do it in one pass, with the drawer above.
+
+- **A non-admin session issues two identical `dcs.project_roles` reads per
+  guarded `/admin` page** (DCS 1a.21a): once in `app/(app)/layout.tsx` for
+  the sidebar links, once inside the page itself for its guard — plus a third
+  in `proxy.ts`, which reads the same table on the same prefix for the aal2
+  gate. Deduping the first two is easy in principle (`getUserProjectRoles` in
+  `app/data/actions/auth-helpers.ts` is already `cache()`-backed per request),
+  and was **deliberately not done**: `canOpenAdminScreens` takes a Supabase
+  client instead of reaching for React's `cache()`, and that is precisely
+  what lets it be unit-tested without a Next.js runtime — the same trade-off
+  `lib/auth-helpers.ts` documents for `loadUserProjectRoles`. An admin pays
+  none of it (the read is skipped when `profiles.role = 'admin'`). Trigger:
+  a measured problem, or a third non-admin caller on the same request. Not
+  before — untestable-but-faster is the wrong direction for this file.
 
 ## y) Follow-ups noted during DCS 1a.23 (portal tiles + shared-domain SSO)
 
@@ -1114,6 +1133,26 @@ przenumerować, a nie obchodzić.
 Konta użyte: te same co w (aa), `dcs1a14-*` — hasła i sekrety TOTP nadal
 wyłącznie w `~/Desktop/seaclouds/backups/dcs1a14-test-accounts-scl-dev-2026-09-08.txt`,
 nie w repo.
+
+**Uzupełnienie (DCS 1a.21a, 2026-09-16) — dlaczego demo bramki 1a używa
+`SC2601`, a nie kolejnego kodu z góry zakresu.** SC2699 wybrano tu z góry
+zakresu, żeby nie kolidować z importem 1a.19. Dla `SC2601` rozumowanie jest
+inne i prowadzi do odwrotnego wniosku: **SC2601 jest jednym z pięciu projektów,
+które już istnieją na prodzie**, a 1a.19 traktuje te pięć jako **UPDATE-only,
+nigdy INSERT**. Wiersz devowy `SC2601 · OW_Fishing Support` jest więc tym, co
+import spodziewa się zastać, a nie czymś, z czym się zderzy. Decyzja
+właściciela, 2026-09-16.
+
+Konsekwencja do zapamiętania: gdyby dry-run 1a.19 na scl-dev kiedykolwiek
+**wstawił** SC2601 zamiast go zaktualizować, to jest **błąd importu**, a nie
+powód do przenumerowania tego wiersza. `projects.project_code` jest zresztą
+niezmienialny od 1a.17c — „przenumerowanie" i tak oznaczałoby skasowanie
+wiersza.
+
+Kody użyte przez 1a.21a na scl-dev: `SC2601` (przygotowanie demo, krok 3),
+`SC2698` (projekt tworzony na żywo w kroku 4, rezerwa `SC2697`), `SC2690`
+(projekt-śmieć z próby generalnej, `1a.21a Rehearsal — delete on request`).
+Klient `DEMO · Demo Client` założony w tym samym przebiegu; `TST` nietknięty.
 
 
 ## gg) Follow-ups noted during DCS 1a.17c (`projects.project_code` immutable)
