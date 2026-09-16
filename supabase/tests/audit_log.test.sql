@@ -54,8 +54,9 @@ select is(
 );
 select col_has_check('public', 'audit_log', 'action', 'action is CHECK-constrained');
 
--- Trigger attached exactly where 1a.08 says (+ dcs.dictionaries since 1a.07)
--- — and nowhere in TES / mdr_settings
+-- Trigger attached exactly where 1a.08 says (+ dcs.dictionaries since 1a.07,
+-- public.module_permissions since 1a.22, dcs.mdr_settings since 1a.17b)
+-- — and nowhere in TES
 select has_trigger('public', 'projects', 'audit_projects', 'audit trigger on public.projects');
 select has_trigger('dcs', 'project_roles', 'audit_project_roles', 'audit trigger on dcs.project_roles');
 select has_trigger('public', 'profiles', 'audit_profiles', 'audit trigger on public.profiles');
@@ -63,16 +64,16 @@ select has_trigger('public', 'clients', 'audit_clients', 'audit trigger on publi
 select is(
   (select count(*) from pg_trigger t
     where t.tgfoid = 'public.audit_trigger()'::regprocedure and not t.tgisinternal),
-  6::bigint,
-  'audit_trigger() is attached to exactly six tables (four from 1a.08 + dcs.dictionaries from 1a.07 + public.module_permissions from 1a.22)'
+  7::bigint,
+  'audit_trigger() is attached to exactly seven tables (four from 1a.08 + dcs.dictionaries from 1a.07 + public.module_permissions from 1a.22 + dcs.mdr_settings from 1a.17b)'
 );
 select is(
   (select count(*) from pg_trigger t
     where t.tgfoid = 'public.audit_trigger()'::regprocedure
-      and t.tgrelid in ('dcs.mdr_settings'::regclass, 'public.timesheet_entries'::regclass,
+      and t.tgrelid in ('public.timesheet_entries'::regclass,
                         'public.timesheet_submissions'::regclass, 'public.project_assignments'::regclass)),
   0::bigint,
-  'audit_trigger() is NOT attached to mdr_settings or any TES table'
+  'audit_trigger() is NOT attached to any TES table'
 );
 
 -- ============================================================

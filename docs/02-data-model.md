@@ -184,17 +184,28 @@ INSERT/DELETE = jeden wiersz z całym rekordem w `new_value`/`old_value`;
 UPDATE = **jeden wiersz na każdą faktycznie zmienioną kolumnę** (`IS
 DISTINCT FROM` na jsonb; `updated_at` pomijane; JSON `null` zapisywane jako
 SQL NULL). UPDATE bez zmiany wartości nie zapisuje nic. Jedyne założenie
-strukturalne: PK `id uuid` (tabela z innym PK, np. `mdr_settings`, wymaga
-osobnej gałęzi w funkcji). Funkcja nie ma `EXECUTE` dla ról API (trigger
+strukturalne od 1a.17b: `record_id` rozstrzygany **po kształcie wiersza**, nie
+po nazwie tabeli — `coalesce((row->>'id')::uuid, (row->>'project_id')::uuid)`,
+czyli PK `id uuid` tam, gdzie jest, a `project_id` dla tabeli kluczowanej nim
+(`dcs.mdr_settings`). Tabela bez żadnego z tych kluczy nadal wywraca zapis na
+NOT NULL `record_id` (23502) — świadomie: wpis, którego nie da się powiązać
+z rekordem, jest gorszy niż nieudany zapis. Sześć tabel audytowanych przed
+1a.17b ma `id`, więc `coalesce` zwraca dla nich dokładnie to, co poprzednie
+wyrażenie. Funkcja nie ma `EXECUTE` dla ról API (trigger
 odpala się bez tego uprawnienia — sprawdzane przy `CREATE TRIGGER`, nie przy
 wykonaniu), więc nie powiększa lintu 0029.
 Jawna lista tabel objętych triggerem: `public.projects`,
 `dcs.project_roles`, `public.profiles`, `public.clients` (1a.08),
 `dcs.dictionaries` (1a.07, migracja `20260904081501`),
-`public.module_permissions` (1a.22, migracja `20260904170000`). Celowo NIE: `dcs.mdr_settings` (brief nie
-wymienia konfiguracji MDR jako obowiązkowego zdarzenia na tym etapie — uwaga:
-pola cykli `cycle_*` mieszkają właśnie tam, nie w `projects`), żadna tabela
-TES (izolacja TES/DCS), przyszłe `dcs.documents`/`revisions` (Faza 1b).
+`public.module_permissions` (1a.22, migracja `20260904170000`),
+`dcs.mdr_settings` (1a.17b, migracja `20260916145603`) — **siedem tabel**.
+`dcs.mdr_settings` dołączyła jako pierwsza tabela z PK innym niż `id`: cykle
+`cycle_*` mieszkają właśnie tam, nie w `projects`, a Faza 2 przelicza z nich
+daty Planned, więc „kto skrócił cykl z 10 na 3 dni” musi mieć odpowiedź
+(brief §5.2). `record_id` = `project_id` = projekt, co przy okazji wkłada te
+wpisy w politykę „DC czyta audyt swoich projektów” z 1a.09 bez dodatkowej
+pracy. Celowo NIE: żadna tabela TES (izolacja TES/DCS), przyszłe
+`dcs.documents`/`revisions` (Faza 1b).
 Zdarzenie „pobranie pliku” loguje server action w 1b, nie trigger.
 RLS: SELECT — `is_admin()` (wszystko) oraz od 1a.09 „Doc controllers read
 own project audit log”: `project_id IS NOT NULL AND
@@ -205,6 +216,7 @@ uprawnienia INSERT/UPDATE/DELETE/TRUNCATE rolom `authenticated`
 i `service_role` (ta druga omija RLS, a TRUNCATE nie podlega RLS) — z warstwy
 aplikacji nikt nie zmieni śladu; pisze wyłącznie trigger jako właściciel
 tabeli. Retencja — O-04. Testy: `supabase/tests/audit_log.test.sql`,
+`supabase/tests/audit_mdr_settings.test.sql` (1a.17b),
 `supabase/tests/rls_project_role_functions.test.sql`.
 
 ### ✅ Funkcje pomocnicze RLS (`public`, DCS 1a.09)
@@ -323,9 +335,9 @@ Aplikacja: `apps/dcs/lib/project-mdr.ts` (`createProjectMdr` /
 reużyty z `lib/clients-admin.ts`), akcje w
 `apps/dcs/app/data/actions/project-mdr.ts`, kreator
 `app/(app)/admin/projects/new` + `components/CreateProjectWizard.tsx`,
-edycja `components/EditProjectDialog.tsx`. `dcs.mdr_settings` **nie jest**
-audytowana (`audit_trigger()` zakłada PK `uuid id`) — rozszerzenie triggera to
-zadanie 1a.17b, `docs/deferred-tasks.md`.
+edycja `components/EditProjectDialog.tsx`. `dcs.mdr_settings` **jest**
+audytowana od 1a.17b (migracja `20260916145603`, trigger `audit_mdr_settings`)
+— audyt obu połówek edycji jest już symetryczny.
 Test: `supabase/tests/dcs_create_project_mdr.test.sql` (55 asercji).
 
 Tabele TES (`timesheet_*`, `expense_*`, `earnings_*`, `pdf_exports`,
@@ -367,7 +379,14 @@ RLS: SELECT dla każdego zalogowanego (bez zmian); zapis — admin
 controllers manage mdr settings`, ALL, `is_doc_controller(project_id)` —
 tu właśnie stosuje się kryterium Notion „cykle/budżet: tylko admin/DC”,
 bo te kolumny leżą tutaj, nie w `projects`). DC innego projektu nie ma
-dostępu do zapisu. Testy: `supabase/tests/rls_mdr_settings.test.sql`,
+dostępu do zapisu.
+Audyt: trigger `audit_mdr_settings` = siódma tabela pod `audit_trigger()`
+(1a.17b, migracja `20260916145603`) i pierwsza z PK innym niż `id`;
+`record_id` = `project_id`. UPDATE zapisuje jeden wiersz na faktycznie
+zmienioną kolumnę, `updated_at` jest wykluczone, więc trigger `set_updated_at`
+nie zalewa logu, a UPDATE bez zmiany wartości nie zapisuje nic.
+Testy: `supabase/tests/rls_mdr_settings.test.sql`,
+`supabase/tests/audit_mdr_settings.test.sql`,
 `supabase/tests/rls_project_role_functions.test.sql`.
 
 ### ✅ `dcs.project_roles`

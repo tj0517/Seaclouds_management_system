@@ -921,7 +921,31 @@ report a blocked criterion after building everything else.
   merged.
 
 
-## dd) 1a.17b — audyt `dcs.mdr_settings`
+## ~~dd) 1a.17b — audyt `dcs.mdr_settings`~~ — **zamknięte 2026-09-16**
+
+**Zrobione w 1a.17b** dokładnie w kształcie, który ten wpis zapowiadał: jedna
+gałąź we wspólnej funkcji, nie druga funkcja triggera. Migracja
+`20260916145603_audit_mdr_settings` robi `create or replace` na
+`public.audit_trigger()` zmieniając w ciele **jedną linię** —
+`v_record_id := coalesce((v_row ->> 'id')::uuid, (v_row ->> 'project_id')::uuid)`
+— i zakłada trigger `audit_mdr_settings`. `project_id` nie wymagał nic:
+istniejąca gałąź `elsif v_row ? 'project_id'` rozstrzygała go poprawnie już
+wcześniej. Sześć tabel audytowanych wcześniej ma `id`, więc `coalesce` zwraca
+dla nich to samo co poprzednie wyrażenie — zachowanie bez zmian.
+Rozstrzygnięcie po kształcie wiersza, a nie po nazwie tabeli, było świadomym
+wyborem: `if v_table = '…'` zacząłby listę, która rośnie, a przyszła tabela
+`dcs.*` kluczowana `project_id` jest teraz audytowana samym `create trigger`.
+ADR nie powstał — to jest projekt, który ten wpis i sekcja `public.audit_log`
+w `docs/02-data-model.md` już zakładały; zapisany w nagłówku migracji
+i w `02-data-model.md` (decyzja właściciela, 2026-09-16).
+Test: `supabase/tests/audit_mdr_settings.test.sql` (23 asercje, w tym dowód
+czerwony: ze starą funkcją i podpiętym triggerem UPDATE na `mdr_settings`
+wywraca się na 23502 `record_id`). Komentarz „AUDITING IS ASYMMETRIC, ON
+PURPOSE" w `apps/dcs/components/EditProjectDialog.tsx` przestał być prawdziwy
+i został poprawiony w tym samym PR — patrz wpis (jj) niżej.
+
+Oryginalny opis zadania:
+
 
 Zmiany cykli review, budżetu, `cpy_numbering` i statusu MDR **nie zostawiają
 żadnego śladu** w `public.audit_log`. Jedynym świadkiem jest
@@ -1220,3 +1244,33 @@ sensitive to the generator version. That is a toolchain task with its own
 verification, not a side fix inside a data migration. Until then: if a reset
 fails only at `Restarting containers`, check the data before assuming the
 reset did not happen.
+
+## jj) Follow-ups noted during DCS 1a.17b (audyt `dcs.mdr_settings`)
+
+- ~~**Trzy komentarze w kodzie mówią teraz nieprawdę.**~~ — **poprawione w tym
+  samym PR** (decyzja właściciela: PR, który je unieważnia, ma je naprawić).
+  Wyłącznie komentarze, zero zmian logiki:
+  `apps/dcs/components/EditProjectDialog.tsx` — blok „AUDITING IS ASYMMETRIC,
+  ON PURPOSE" zastąpiony przez „BOTH HALVES ARE AUDITED (since 1a.17b)";
+  `apps/dcs/lib/project-mdr.ts` — nagłówek `updateProjectMdr`: zachowanie
+  „nie wysyłaj pustego UPDATE-a" i cały argument za nim zostają, zmienia się
+  **powód** (nie „nie ma audytu", tylko „nie ruszaj `updated_at` bez
+  potrzeby"); `supabase/tests/dcs_create_project_mdr.test.sql` — komentarz nad
+  sekcją 3.
+
+- **Dowód czerwony dla przypadku no-op nie istnieje i nie może istnieć.**
+  Zadanie prosiło, żeby pokazać także asercję no-op jako czerwoną przed
+  poprawką. Nie da się: ze starą funkcją i podpiętym triggerem UPDATE, który
+  niczego nie zmienia, wstawia **zero** wierszy do `audit_log`, więc nigdy nie
+  dochodzi do naruszenia NOT NULL na `record_id` — asercje 10–13 nowego testu
+  przechodzą również przed poprawką (zweryfikowane). Czerwony jest dopiero
+  pierwszy UPDATE, który coś zmienia (23502). To nie jest luka w teście:
+  asercje no-op pilnują filtra `k <> 'updated_at'`, nie rozstrzygania
+  `record_id`, i to one wywrócą się, gdyby ktoś ten filtr usunął.
+
+- **`docs/03-conventions.md` nadal pisze „19 × 0027 + 10 × 0029"** — odczyt
+  scl-dev z 2026-09-16 to **19 × 0027 + 12 × 0029**, tak samo jak 2026-09-11.
+  Zgłoszone w (cc) i (ee), znowu nie poprawione tutaj (polecenie właściciela:
+  osobny PR dokumentacyjny). 1a.17b nie zmienia tego baseline'u — nie dodaje
+  funkcji ani tabeli, a `create or replace` zachowuje ACL, więc `revoke`
+  z 1a.08 nadal trzyma `audit_trigger()` poza lintem 0029.

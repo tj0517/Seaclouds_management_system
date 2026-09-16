@@ -11,17 +11,18 @@
 // (lib/project-mdr.ts) diffs each table separately and issues no statement at
 // all for a table whose fields did not change.
 //
-// *** AUDITING IS ASYMMETRIC, ON PURPOSE ***
-// Changes to the public.projects half are recorded by the existing
-// audit_trigger() (1a.08) — one public.audit_log row per column that actually
-// changed. Changes to the dcs.mdr_settings half are NOT recorded anywhere:
-// that table is deliberately outside audit_trigger()'s table list, because
-// the function assumes a `uuid id` primary key and mdr_settings' PK is
-// project_id (documented in 20260903173128_create_audit_log.sql and
-// docs/02-data-model.md). So editing a review cycle or a budget here leaves
-// no audit trail beyond mdr_settings.updated_at. Extending the trigger is
-// task 1a.17b (docs/deferred-tasks.md) — deliberately not folded into this
-// PR, which is why this comment exists rather than a quick fix.
+// *** BOTH HALVES ARE AUDITED (since 1a.17b) ***
+// Every field in this dialog leaves a trail in public.audit_log — one row per
+// column that actually changed, with the editor's user_id and IP. The
+// public.projects half has been audited since 1a.08; the dcs.mdr_settings
+// half (the review cycle, the budget, cpy_numbering, status) joined in 1a.17b,
+// migration 20260916145603_audit_mdr_settings. That table has no `uuid id` —
+// its PK is project_id — so audit_trigger() resolves record_id by row shape
+// (`coalesce(id, project_id)`) and the cycle entries key on the project.
+// It matters here because brief §5.2 makes the cycle an attribute documents
+// inherit and Phase 2 computes Planned dates from it: "who shortened the
+// cycle from 10 days to 3" is answerable from audit_log, not guesswork off
+// mdr_settings.updated_at.
 //
 // project_code is absent by design, not omission: it is the first segment of
 // every document number in the project (SC2601-SCL-RA-0012-EN), so changing
