@@ -159,12 +159,14 @@ script depends on which code it was.
 **Account:** admin · **Where:** sidebar → **Dictionaries**
 
 1. Open the **Document Type** tab. Click **Add Document Type**.
-   - Code `<<e.g. MOM>>`, Label `<<e.g. Minutes of Meeting>>`, Sort order
-     after the existing entries.
-   - Save. The new row appears with an **Active** badge.
-2. Open the **Area** tab. On any one row, click **Deactivate**.
+   - Code `MOM`, Label `Minutes of Meeting`, Sort order `240` (after the 23
+     seeded entries).
+   - Save. The new row appears at the bottom with an **Active** badge.
+2. Open the **Area** tab. The four seeded areas are `00 General`,
+   `10 Offshore`, `20 Nearshore`, `30 Onshore`. On the **`30 · Onshore`** row,
+   click **Deactivate**.
    - The row dims and its badge changes to **Inactive**.
-   - Note the button now reads **Reactivate**.
+   - Note the button now reads **Reactivate** — nothing was deleted.
 
 **Expected:** both changes appear immediately, without a page reload.
 
@@ -175,9 +177,9 @@ offered on new documents while every document that already used it keeps its
 meaning. The same is true of clients and of document numbers: a number that
 is voided never returns to the pool."
 
-**Fallback:** if the code you typed already exists, the dialog says so — add a
-suffix and continue. If the **Area** row you picked is already used somewhere
-you would rather not touch, deactivate a different one; any of the four works.
+**Fallback:** if `MOM` already exists (someone rehearsed with it), use `MOM2`
+and carry on. If `30 · Onshore` is already inactive, deactivate
+`20 · Nearshore` instead; either makes the point.
 
 ---
 
