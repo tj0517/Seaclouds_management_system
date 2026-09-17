@@ -548,9 +548,22 @@ PR (one topic per PR). Each item names its owner task or trigger:
 
 ## x) Follow-ups noted during DCS 1a.13 (module switcher)
 
-- **`apps/dcs/app/(app)/page.tsx` still carries the `dcs.mdr_settings`
-  RLS-probe debug block** from 1a.05/1a.09 test scaffolding, moved as-is into
-  the new route shell. It still demonstrates RLS correctly (unfiltered
+- ~~**`apps/dcs/app/(app)/page.tsx` still carries the `dcs.mdr_settings`
+  RLS-probe debug block**~~ — **CLOSED 2026-09-16 (DCS 1a.21a,
+  `chore/dcs-1a21a-demo-prep`).** Ownership moved from 1b.05 to 1a.21a: the
+  1a gate is a live demo in front of the client's Document Controller and MD,
+  and diagnostic UI cannot be on screen for it — that need arrived before the
+  MDR register did. Removed: the write half (a deliberately CHECK-violating
+  `INSERT` on every render of `/`) and the blue panel reporting its SQLSTATE.
+  Kept: the unfiltered `select` on `dcs.mdr_settings`, which was always the
+  Cycle column's source and is now commented as such. The RLS proof it stood
+  for lives on in `supabase/tests/rls_mdr_settings.test.sql`; a regression
+  test in `apps/dcs/app/(app)/nav.test.ts` asserts the page never INSERTs
+  into that table again. The `supabase/seed.sql` comment naming the probe was
+  corrected in the same PR. Original text follows.
+
+- **[original]** The block came from 1a.05/1a.09 test scaffolding, moved as-is
+  into the new route shell. It still demonstrates RLS correctly (unfiltered
   select + CHECK-tripping write probe). **Owner: 1b.05**, where the MDR
   register replaces this placeholder project list and the block disappears
   on its own (owner's decision, 2026-09-05 — no task number for this was
@@ -559,16 +572,35 @@ PR (one topic per PR). Each item names its owner task or trigger:
   them) and 1a.14 (role matrix screen — reached by clicking into a project
   from a list, doesn't own the list itself).
 - **No mobile drawer/hamburger on `apps/dcs/components/DcsSidebar.tsx`**,
-  unlike Timesheet's `AdminSidebar` (which has one). DCS has exactly one nav
-  entry today ("Projects"). Trigger: **1a.14** (role matrix screen) —
-  confirmed DCS-side (`docs/02-data-model.md`: its guard lives in
-  `apps/dcs/app/data/actions/project-roles.ts`) and the next planned DCS UI
-  task, so it is the first one that actually adds a second nav entry.
-- **`DcsSidebar` nav uses plain text, no icon library** —
-  `apps/dcs/package.json` still has no icon dependency (unlike Timesheet's
-  `lucide-react`). Same trigger as above: **1a.14** — add an icon library
-  together with the drawer once there is more than one nav entry to
-  distinguish.
+  unlike Timesheet's `AdminSidebar` (which has one). Trigger was **1a.14**
+  ("the first task that adds a second nav entry") — 1a.14 came and went
+  without one. **Update (DCS 1a.21a, 2026-09-16): the premise "DCS has
+  exactly one nav entry today" is no longer true** — the sidebar now carries
+  three (Projects, Dictionaries, Clients), so the condition this item waited
+  on has actually fired. Still not done: 1a.21a's scope was the links, and a
+  drawer is a layout change with its own review. No new trigger invented —
+  whoever next touches `DcsSidebar` owns it.
+- ~~**`DcsSidebar` nav uses plain text, no icon library**~~ — the dependency
+  half is **obsolete**: `apps/dcs/package.json` has carried `lucide-react`
+  since 1a.15 brought in shadcn/ui, so "DCS has no icon dependency" is simply
+  stale (verified 2026-09-16). What remains is a choice, not a blocker: the
+  nav is still plain text. 1a.21a kept it that way deliberately — adding
+  icons to two new entries and not the existing one would have introduced a
+  second style mid-task. Do it in one pass, with the drawer above.
+
+- **A non-admin session issues two identical `dcs.project_roles` reads per
+  guarded `/admin` page** (DCS 1a.21a): once in `app/(app)/layout.tsx` for
+  the sidebar links, once inside the page itself for its guard — plus a third
+  in `proxy.ts`, which reads the same table on the same prefix for the aal2
+  gate. Deduping the first two is easy in principle (`getUserProjectRoles` in
+  `app/data/actions/auth-helpers.ts` is already `cache()`-backed per request),
+  and was **deliberately not done**: `canOpenAdminScreens` takes a Supabase
+  client instead of reaching for React's `cache()`, and that is precisely
+  what lets it be unit-tested without a Next.js runtime — the same trade-off
+  `lib/auth-helpers.ts` documents for `loadUserProjectRoles`. An admin pays
+  none of it (the read is skipped when `profiles.role = 'admin'`). Trigger:
+  a measured problem, or a third non-admin caller on the same request. Not
+  before — untestable-but-faster is the wrong direction for this file.
 
 ## y) Follow-ups noted during DCS 1a.23 (portal tiles + shared-domain SSO)
 
@@ -783,6 +815,20 @@ report a blocked criterion after building everything else.
   called it yet, so this was a same-PR rename, not a breaking change needing
   its own task.
 - **No nav link to `/admin/dictionaries` was added** to `DcsSidebar` —
+  **PARTIALLY CLOSED 2026-09-16 (DCS 1a.21a).** `DcsSidebar` now carries
+  `Dictionaries` and `Clients`, visible to an admin or the DC of any project
+  (the same condition as the page guards 1a.21a added to both screens — see
+  `docs/03-conventions.md`, „Dostęp do ekranów `/admin` w DCS"). The project
+  team screen (`/admin/projects/[projectId]`) got a per-row „Team" link on
+  the project list instead of a sidebar entry, shown only to whoever may edit
+  that project's team. **Still open: `/admin/users`.** There is no users-list
+  screen in `apps/dcs` to link to — only `/admin/users/[userId]` — and
+  building one was out of 1a.21a's scope as it was out of 1a.14's. A sidebar
+  entry cannot close this one; whoever builds the users list closes it.
+  Original text follows.
+
+- **[original]** No nav link to `/admin/dictionaries` was added to
+  `DcsSidebar` —
   reachable only by direct URL, same as `/admin/projects/[projectId]` and
   `/admin/users/[userId]` before it (`docs/deferred-tasks.md` (aa): "No
   discovery path to either new screen beyond a direct URL"). Consistent with
@@ -1088,6 +1134,26 @@ Konta użyte: te same co w (aa), `dcs1a14-*` — hasła i sekrety TOTP nadal
 wyłącznie w `~/Desktop/seaclouds/backups/dcs1a14-test-accounts-scl-dev-2026-09-08.txt`,
 nie w repo.
 
+**Uzupełnienie (DCS 1a.21a, 2026-09-16) — dlaczego demo bramki 1a używa
+`SC2601`, a nie kolejnego kodu z góry zakresu.** SC2699 wybrano tu z góry
+zakresu, żeby nie kolidować z importem 1a.19. Dla `SC2601` rozumowanie jest
+inne i prowadzi do odwrotnego wniosku: **SC2601 jest jednym z pięciu projektów,
+które już istnieją na prodzie**, a 1a.19 traktuje te pięć jako **UPDATE-only,
+nigdy INSERT**. Wiersz devowy `SC2601 · OW_Fishing Support` jest więc tym, co
+import spodziewa się zastać, a nie czymś, z czym się zderzy. Decyzja
+właściciela, 2026-09-16.
+
+Konsekwencja do zapamiętania: gdyby dry-run 1a.19 na scl-dev kiedykolwiek
+**wstawił** SC2601 zamiast go zaktualizować, to jest **błąd importu**, a nie
+powód do przenumerowania tego wiersza. `projects.project_code` jest zresztą
+niezmienialny od 1a.17c — „przenumerowanie" i tak oznaczałoby skasowanie
+wiersza.
+
+Kody użyte przez 1a.21a na scl-dev: `SC2601` (przygotowanie demo, krok 3),
+`SC2698` (projekt tworzony na żywo w kroku 4, rezerwa `SC2697`), `SC2690`
+(projekt-śmieć z próby generalnej, `1a.21a Rehearsal — delete on request`).
+Klient `DEMO · Demo Client` założony w tym samym przebiegu; `TST` nietknięty.
+
 
 ## gg) Follow-ups noted during DCS 1a.17c (`projects.project_code` immutable)
 
@@ -1274,3 +1340,96 @@ reset did not happen.
   osobny PR dokumentacyjny). 1a.17b nie zmienia tego baseline'u — nie dodaje
   funkcji ani tabeli, a `create or replace` zachowuje ACL, więc `revoke`
   z 1a.08 nadal trzyma `audit_trigger()` poza lintem 0029.
+
+## kk) Środowisko demo dla klienta — opcje odrzucone w DCS 1a.21a
+
+Demo bramki 1a (2026-09-16) poszło **opcją A**: prowadzący dzieli ekran ze
+swojej maszyny, otwiera Preview deployment tego PR-a i loguje się do Vercela
+wcześniej, więc ściana logowania jest dla widzów niewidoczna. To jest tanie
+i jednorazowe. Przy **powtarzalnych** demach obie odrzucone opcje wracają —
+zapisane tu, żeby nie odkrywać ich od nowa.
+
+Stan faktyczny, odczytany z API Vercela 2026-09-16 (projekt `dcs`,
+`prj_7DuhcGzn0rYndf62F8fdsNAN3hdY`):
+
+- `ssoProtection = {"deploymentType": "all_except_custom_domains"}` —
+  Vercel Authentication chroni **każdy** URL deploymentu poza własną domeną
+  produkcyjną. Preview jest więc za ścianą logowania. Projekt Timesheetu
+  (`seaclouds-management-system`) nie ma jej wcale — tylko DCS.
+- `NEXT_PUBLIC_AUTH_COOKIE_DOMAIN` istnieje **wyłącznie** na targecie
+  `production`. `getSupabaseCookieOptions()` zwraca wtedy `undefined`
+  (`packages/db/src/cookie-options.ts`), czyli ciasteczko sesji jest
+  host-scoped. **Konsekwencja: na Preview przełączenie TES → DCS zawsze
+  wymaga ponownego logowania**, niezależnie od ściany. Dodanie tam tej
+  zmiennej niczego nie naprawi: oba Preview URL-e leżą na `*.vercel.app`,
+  które jest na public suffix list, więc żadne ciasteczko nie może objąć obu.
+  Bezszwowe przełączenie istnieje tylko tam, gdzie obie aplikacje dzielą
+  `.seaclouds.eu` — czyli na produkcji (`app.seaclouds.eu` +
+  `dcs.seaclouds.eu`), a ta celuje w prod, nie w scl-dev.
+
+**Opcja B — Protection Bypass for Automation.** Włączyć bypass na projekcie
+`dcs` i dać klientowi link
+`?x-vercel-protection-bypass=<sekret>&x-vercel-set-bypass-cookie=true`.
+Klient otwiera sam, bez konta Vercela; zero zmian w repo. Koszt: sekret
+krąży w linku — rotować po demie. Nie naprawia ponownego logowania przy
+kroku „przełącz na DCS".
+
+**Opcja D — dedykowane subdomeny dev.** `dcs-dev.seaclouds.eu` +
+`tes-dev.seaclouds.eu`, oba wskazujące na scl-dev, oba z
+`NEXT_PUBLIC_AUTH_COOKIE_DOMAIN=.seaclouds.eu`. Własne domeny są wyjęte spod
+`ssoProtection`, więc klient wchodzi wprost, a przełączanie modułów działa
+naprawdę — jedyna opcja, która pokazuje krok 2 takim, jakim jest na
+produkcji. Koszt: DNS, domeny i nowe targety zmiennych w dwóch projektach
+Vercela, oraz wpis w `additional_redirect_urls` w `config.toml` — a
+`docs/03-conventions.md` („Środowiska i deploymenty") trzyma tę listę wąsko
+świadomie, więc to nie jest zmiana do przemycenia przy okazji. Osobne
+zadanie, nie dopisek do demo.
+
+**Czego nie robić:** wyłączyć `ssoProtection` na projekcie `dcs`. Każdy
+Preview każdej nieprzejrzanej gałęzi celuje w scl-dev; zdjęcie ściany
+wystawia je wszystkie publicznie, a raz rozesłanych URL-i się nie cofa.
+
+## ll) Follow-ups noted during DCS 1a.21a (demo prep for the 1a gate)
+
+- **`public.sub_projects` (kody CTR) nie ma żadnego triggera — zero śladu
+  w `public.audit_log`. Kandydat na zadanie, bez właściciela.** Odczyt
+  scl-dev 2026-09-16: `pg_trigger` dla tej tabeli = **0** wierszy
+  użytkownika, PK = **`id uuid`**, 7 wierszy danych. Widać to gołym okiem
+  w demie 1a.21: kreator Create Project MDR zapisuje projekt, `mdr_settings`,
+  role **i** kody CTR w jednej transakcji, a zapytanie z kroku 6 pokazuje
+  trzy pierwsze i ani jednego CTR-a. Dziś to tylko luka w narracji „każda
+  zmiana jest zapisana"; **od Fazy 5 to problem realny** — raporty
+  budżet/CTR liczą się z tych wierszy, więc „kto i kiedy dodał albo zmienił
+  kod CTR" przestanie być pytaniem retorycznym.
+  Naprawa jest mała i **nie wymaga zmiany funkcji**: `audit_trigger()` po
+  1a.17b bierze `record_id` z `coalesce(id, project_id)`, a `sub_projects`
+  ma `id` — czyli wystarczy `create trigger audit_sub_projects ... execute
+  function audit_trigger()` w migracji, plus test pgTAP w tym samym PR
+  (`CLAUDE.md`). **To trzeba zweryfikować przed pisaniem migracji**, nie
+  przyjąć z tej notatki.
+
+- **`postgres_logs` na scl-dev NIE zapisuje błędów na poziomie zapytania —
+  kryteria akceptacji muszą używać `edge_logs`.** Sprawdzone, nie założone
+  (2026-09-16): przy żywej sondzie RLS jedna wizyta na `/` wykonała
+  `INSERT` na `dcs.mdr_settings`, który CHECK odrzucił (SQLSTATE 23514,
+  widoczne w panelu sondy) — a w `postgres_logs` w tym oknie były wyłącznie
+  wpisy `checkpoint`. Gdyby ktoś oparł dowód „sonda zniknęła" na tym logu,
+  dostałby fałszywe potwierdzenie: log milczy tak samo przed zmianą i po
+  niej. Działa `edge_logs` (strumień PostgREST): przed zmianą
+  `POST /rest/v1/mdr_settings` → 2 × 400 w jednej wizycie, po zmianie
+  0 przy trzech wizytach, przy niezmienionym `GET`. Uwaga praktyczna:
+  `edge_logs` ma kilkuminutowe opóźnienie ingestu — odczyt tuż po akcji
+  potrafi zwrócić pustkę, co łatwo wziąć za dowód.
+
+- **`next start` lokalnie zawsze przekierowuje na `localhost:<port>`,
+  niezależnie od nagłówka `Host`.** `apps/dcs/proxy.ts` buduje cele
+  przekierowań przez `new URL(path, request.url)`, a `request.url`
+  w middleware Next 16 niesie origin wewnętrzny, nie ten z żądania
+  (sprawdzone curlem z trzema różnymi `Host`: zawsze
+  `location: http://localhost:3001/...`). Skutek wyłącznie lokalny:
+  przeglądarka wchodząca na `127.0.0.1:3001` dostaje przekierowanie na
+  `localhost:3001`, czyli inny origin, i CORS ubija prefetche. Na Vercelu
+  host jest zachowany — brama aal2 działa tam poprawnie, co widać po tym,
+  że w ogóle przepuszcza po podaniu kodu. **Nic nie zmieniono**: `proxy.ts`
+  był poza zakresem 1a.21a, a `request.nextUrl` zamiast `request.url` to
+  zmiana warta własnego PR-a i własnego dowodu, nie dopisku przy demie.

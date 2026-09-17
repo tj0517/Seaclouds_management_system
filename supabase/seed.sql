@@ -108,7 +108,9 @@ BEGIN
   -- ============================================================
   -- DCS: MDR settings (local test data only — a row means "DCS runs this
   -- project"; remotes get rows via the Create Project MDR wizard, 1a.17).
-  -- Gives the apps/dcs RLS probe and future DCS work something to read.
+  -- Gives the /dcs project list's Cycle column and future DCS work
+  -- something to read (DCS 1a.21a: the RLS probe this line used to name is
+  -- gone from apps/dcs/app/(app)/page.tsx).
   -- ============================================================
   INSERT INTO dcs.mdr_settings (project_id, budget_hours) VALUES
     (pid_pej, 1200)

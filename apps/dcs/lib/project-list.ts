@@ -6,13 +6,18 @@
 // query — "reuse, don't duplicate".
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@scl/db'
-import { fetchUserProjectRoles } from './auth-helpers'
+import { fetchUserProjectRoles, type ProjectRole } from './auth-helpers'
 
 type DbClient = SupabaseClient<Database>
 
 export type ProjectListFilter =
   | { kind: 'all' }
-  | { kind: 'ids'; ids: string[] }
+  // DCS 1a.21a: `rolesByProject` is the very map the ids were derived from,
+  // handed back rather than thrown away — the project list now also needs
+  // per-project roles to decide which rows get a "Team" link
+  // (isAdminOrProjectDc). Returning it here keeps that to one read of
+  // dcs.project_roles instead of a second identical query on the page.
+  | { kind: 'ids'; ids: string[]; rolesByProject: Map<string, ProjectRole[]> }
   | { kind: 'degraded' }
 
 /**
@@ -37,7 +42,7 @@ export async function resolveProjectListFilter(
 
   try {
     const rolesByProject = await fetchUserProjectRoles(supabase, userId)
-    return { kind: 'ids', ids: [...rolesByProject.keys()] }
+    return { kind: 'ids', ids: [...rolesByProject.keys()], rolesByProject }
   } catch (error) {
     console.error('resolveProjectListFilter: fetchUserProjectRoles failed, degrading to no projects', error)
     return { kind: 'degraded' }

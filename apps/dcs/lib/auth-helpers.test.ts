@@ -3,9 +3,12 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@scl/db'
 import {
   ProjectRoleAuthorizationError,
+  canOpenAdminScreens,
   checkProjectRole,
   fetchUserProjectRoles,
   hasAnyRole,
+  isAdminOrAnyDc,
+  isAdminOrProjectDc,
   loadUserProjectRoles,
   type ProjectRole,
 } from './auth-helpers'
@@ -125,5 +128,122 @@ describe('checkProjectRole / requireProjectRole', () => {
       expect(e.projectId).toBe(PEJ)
       expect(e.requiredRoles).toEqual(['dc', 'chk'])
     }
+  })
+})
+
+// ---------------------------------------------------------------------------
+// DCS 1a.21a: the three rendering/guard decisions added for the 1a gate demo.
+// Cases are named after the real scl-dev personas the acceptance criteria
+// use, so a failure here reads as "which account broke".
+// ---------------------------------------------------------------------------
+
+const SC2601 = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+
+/** dcs1a14-dc: DC of SC2602 and SC2699, plus a non-DC role on SC2602. */
+const DC_OF_TWO = new Map<string, ProjectRole[]>([
+  [PEJ, ['dc', 'rev']],
+  [IT, ['dc']],
+])
+
+/** dcs1a14-member: roles on two projects, DC of none. */
+const MEMBER_ROLES = new Map<string, ProjectRole[]>([
+  [PEJ, ['orig', 'view']],
+  [IT, ['orig']],
+])
+
+describe('isAdminOrAnyDc (the /admin page guards and the sidebar links)', () => {
+  it('admin: true, without consulting the roles map at all', () => {
+    expect(isAdminOrAnyDc(true, new Map())).toBe(true)
+  })
+
+  it('dcs1a14-dc: true — DC of at least one project', () => {
+    expect(isAdminOrAnyDc(false, DC_OF_TWO)).toBe(true)
+  })
+
+  it('dcs1a14-member: false — roles on two projects, DC of neither', () => {
+    expect(isAdminOrAnyDc(false, MEMBER_ROLES)).toBe(false)
+  })
+
+  it('a user with no DCS roles at all: false', () => {
+    expect(isAdminOrAnyDc(false, new Map())).toBe(false)
+  })
+
+  it('one dc row anywhere is enough, even among non-dc roles on other projects', () => {
+    const mixed = new Map<string, ProjectRole[]>([
+      [PEJ, ['orig', 'view']],
+      [IT, ['chk', 'dc']],
+    ])
+    expect(isAdminOrAnyDc(false, mixed)).toBe(true)
+  })
+})
+
+describe('isAdminOrProjectDc (the per-row "Team" link)', () => {
+  it('admin: true on every project, including one they hold no role on', () => {
+    expect(isAdminOrProjectDc(true, new Map(), SC2601)).toBe(true)
+    expect(isAdminOrProjectDc(true, new Map(), PEJ)).toBe(true)
+  })
+
+  it('dcs1a14-dc: true on the projects they are DC of', () => {
+    expect(isAdminOrProjectDc(false, DC_OF_TWO, PEJ)).toBe(true)
+    expect(isAdminOrProjectDc(false, DC_OF_TWO, IT)).toBe(true)
+  })
+
+  it('dcs1a14-dc: false on a project they are not DC of — this is the scoping', () => {
+    expect(isAdminOrProjectDc(false, DC_OF_TWO, SC2601)).toBe(false)
+  })
+
+  it('being DC somewhere does not carry to a project held with a lesser role', () => {
+    const dcElsewhere = new Map<string, ProjectRole[]>([
+      [IT, ['dc']],
+      [PEJ, ['orig']],
+    ])
+    expect(isAdminOrProjectDc(false, dcElsewhere, PEJ)).toBe(false)
+  })
+
+  it('dcs1a14-member: false on every project they hold', () => {
+    expect(isAdminOrProjectDc(false, MEMBER_ROLES, PEJ)).toBe(false)
+    expect(isAdminOrProjectDc(false, MEMBER_ROLES, IT)).toBe(false)
+  })
+})
+
+describe('canOpenAdminScreens (the read behind the guards)', () => {
+  it('admin: true without issuing the project_roles query', async () => {
+    const { client, eq } = stubClient([])
+    await expect(canOpenAdminScreens(client, 'user-1', true)).resolves.toBe(true)
+    expect(eq).not.toHaveBeenCalled()
+  })
+
+  it('dcs1a14-dc: true, read from dcs.project_roles', async () => {
+    const { client } = stubClient([{ project_id: PEJ, role: 'dc' }])
+    await expect(canOpenAdminScreens(client, 'user-1', false)).resolves.toBe(true)
+  })
+
+  it('dcs1a14-member: false', async () => {
+    const { client } = stubClient([
+      { project_id: PEJ, role: 'orig' },
+      { project_id: PEJ, role: 'view' },
+    ])
+    await expect(canOpenAdminScreens(client, 'user-1', false)).resolves.toBe(false)
+  })
+
+  it('degrades CLOSED on a read failure instead of throwing', async () => {
+    const eq = vi.fn().mockResolvedValue({ data: null, error: { message: 'connection reset' } })
+    const client = {
+      schema: () => ({ from: () => ({ select: () => ({ eq }) }) }),
+    } as unknown as SupabaseClient<Database>
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    await expect(canOpenAdminScreens(client, 'user-1', false)).resolves.toBe(false)
+    expect(logged).toHaveBeenCalled()
+    logged.mockRestore()
+  })
+
+  it('a read failure never refuses an admin — the query is skipped', async () => {
+    const eq = vi.fn().mockRejectedValue(new Error('connection reset'))
+    const client = {
+      schema: () => ({ from: () => ({ select: () => ({ eq }) }) }),
+    } as unknown as SupabaseClient<Database>
+
+    await expect(canOpenAdminScreens(client, 'user-1', true)).resolves.toBe(true)
   })
 })

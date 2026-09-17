@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { createClient } from '@scl/db/server'
+import { isAdminOrProjectDc, type ProjectRole } from '@/lib/auth-helpers'
 import { resolveProjectListFilter } from '@/lib/project-list'
 
 export default async function ProjectsPage() {
@@ -24,6 +25,12 @@ export default async function ProjectsPage() {
   // error; a read failure degrades to the same empty list plus its own
   // distinct message (fails closed on purpose — see lib/project-list.ts).
   const filter = await resolveProjectListFilter(supabase, user.id, isAdmin)
+
+  // DCS 1a.21a: the same roles the filter already read, reused to decide
+  // which rows get a "Team" link. Empty for an admin — the filter short-
+  // circuits before reading roles, and isAdminOrProjectDc never consults the
+  // map for one.
+  const rolesByProject = filter.kind === 'ids' ? filter.rolesByProject : new Map<string, ProjectRole[]>()
 
   let projects: {
     id: string
@@ -53,46 +60,28 @@ export default async function ProjectsPage() {
     teamSizeByProject.set(row.project_id, (teamSizeByProject.get(row.project_id) ?? 0) + 1)
   }
 
-  // RLS probe on dcs.mdr_settings — the first dcs.* table with its own
-  // policies (deferred-tasks g, closed: this replaced the temporary
-  // timesheet_entries probe, so DCS no longer reads TES tables). Untouched
-  // by 1a.14b — owner is 1b.05, where the MDR register replaces this
-  // placeholder project list and the probe disappears on its own
-  // (deferred-tasks x).
+  // Source of the Cycle column. Unfiltered in code on purpose, same as the
+  // team read above: mdr_settings' SELECT policy admits any signed-in user,
+  // so the database decides the row set.
   //
-  // Read half: a clean select with NO filter in code. The current SELECT
-  // policy admits every authenticated user, so identical results for admin
-  // and employee are the EXPECTED outcome here — this probe is about
-  // dcs.mdr_settings, not the project list above it.
+  // DCS 1a.21a: this read is all that remains of the "RLS probe" block that
+  // lived here from 1a.05 through 1a.17 (deferred-tasks (x), first bullet).
+  // The probe's demonstration half — a second, deliberately CHECK-violating
+  // INSERT on every render, plus the blue panel reporting its SQLSTATE — is
+  // gone: diagnostic UI has no place in front of a client, and the RLS proof
+  // it stood for is covered by supabase/tests/rls_mdr_settings.test.sql.
+  // Ownership moved from 1b.05 to 1a.21a when the 1a gate demo needed it
+  // removed before the MDR register exists.
   const { data: mdrSettings, error: mdrError } = await supabase
     .schema('dcs')
     .from('mdr_settings')
-    .select('project_id, status, cycle_idc_to_ifr, cycle_ifr_to_retcom, cycle_retcom_to_ifc')
+    .select('project_id, cycle_idc_to_ifr, cycle_ifr_to_retcom, cycle_retcom_to_ifc')
 
   if (mdrError) {
-    throw new Error(`RLS probe (select) failed: ${mdrError.message}`)
+    throw new Error(`Failed to load MDR settings: ${mdrError.message}`)
   }
 
-  // The same unfiltered read the probe below makes, reused for the Cycle
-  // column rather than issued twice (1b.05 owns the probe and will remove it;
-  // the column then keeps its own query).
   const settingsByProject = new Map(mdrSettings.map((row) => [row.project_id, row]))
-
-  // Write half: this is where the database distinguishes the roles. The
-  // insert carries cycle_idc_to_ifr = 0, which violates a CHECK, so it can
-  // never persist — but the error code tells who was stopped by what:
-  // 42501 = RLS rejected the row before constraints ran (non-admin),
-  // 23514 = RLS let it through and the CHECK stopped it (admin).
-  const { error: writeProbeError } = await supabase
-    .schema('dcs')
-    .from('mdr_settings')
-    .insert({ project_id: projects[0]?.id ?? user.id, cycle_idc_to_ifr: 0 })
-  const writeProbeOutcome =
-    writeProbeError?.code === '42501'
-      ? 'blocked by RLS (42501) — this user cannot write mdr_settings'
-      : writeProbeError?.code === '23514'
-        ? 'passed RLS, stopped by CHECK (23514) — this user may write mdr_settings'
-        : `unexpected: ${writeProbeError ? `${writeProbeError.code} ${writeProbeError.message}` : 'insert succeeded — probe is broken'}`
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -156,7 +145,22 @@ export default async function ProjectsPage() {
                       : '—'
                   })()}
                 </td>
-                <td className="px-4 py-2 text-gray-600">{teamSizeByProject.get(project.id) ?? 0}</td>
+                <td className="px-4 py-2 text-gray-600">
+                  {teamSizeByProject.get(project.id) ?? 0}
+                  {/* DCS 1a.21a: an editor's entry point, not an access
+                      decision — shown only to whoever may change this
+                      project's team (admin, or its own DC), mirroring
+                      requireAdminOrDc. The project name beside it already
+                      links to the same page for every reader. */}
+                  {isAdminOrProjectDc(isAdmin, rolesByProject, project.id) && (
+                    <Link
+                      href={`/admin/projects/${project.id}`}
+                      className="ml-2 text-xs font-medium text-blue-700 hover:underline"
+                    >
+                      Team
+                    </Link>
+                  )}
+                </td>
                 <td className="px-4 py-2">
                   <span
                     className={
@@ -173,22 +177,6 @@ export default async function ProjectsPage() {
           </tbody>
         </table>
       )}
-
-      <section className="mt-8 rounded-lg border border-blue-200 bg-blue-50 p-4">
-        <h2 className="text-sm font-semibold text-blue-900">RLS probe: dcs.mdr_settings</h2>
-        <p className="mt-1 text-sm text-blue-900">
-          Unfiltered <code className="font-mono">select</code> returned{' '}
-          <strong>{mdrSettings.length}</strong> row(s). The query has no filter
-          in code; the current SELECT policy admits every signed-in user, so
-          admin and employee see the same rows by design.
-        </p>
-        <p className="mt-2 text-sm text-blue-900">
-          Write probe (insert that a CHECK always rejects, so it can never
-          persist): <strong>{writeProbeOutcome}</strong>. Sign in as an admin
-          and as an employee to see the database, not the app, produce the
-          difference.
-        </p>
-      </section>
     </div>
   )
 }
