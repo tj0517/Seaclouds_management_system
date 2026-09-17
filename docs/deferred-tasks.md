@@ -1472,20 +1472,86 @@ wystawia je wszystkie publicznie, a raz rozesłanych URL-i się nie cofa.
 
 ## mm) Follow-ups noted during DCS 1a.24 (UI overhaul of `apps/dcs`)
 
-- **`app/mfa/page.tsx` hangs on "Verifying…" when `/mfa` is reached by a
-  client-side navigation.** Reproducible: sign in as an admin at aal1, click
-  **Dictionaries** in the sidebar, `proxy.ts` redirects to `/mfa`, enter a
-  valid TOTP code — `supabase.auth.mfa.challengeAndVerify()` never settles,
-  so the button stays disabled on "Verifying…" for ever and the only way out
-  is a reload. Reaching the *same* page by a full load (`goto /mfa`, or a
-  reload after the redirect) verifies normally, every time. **Pre-existing,
-  not caused by 1a.24** — that task changed nothing under `app/mfa/` or
-  `proxy.ts`, and it reproduces the same way on both sides of the change. It
-  is invisible in the 1a demo only because step 1's presenter arrives by a
-  fresh page load. Not fixed here: it is an auth-flow bug, not a styling one.
-  The 1a.24 verification walk works around it by asserting only the
-  *redirect* — which is what step 1 actually claims — and taking its aal2
-  session the way a reload would.
+- **Demo step 1 freezes on "Verifying…" — the second factor SUCCEEDS, only
+  the redirect after it is lost.** Reproducible 3/3 on a local production
+  build against scl-dev, as the presenter performs it: fresh login, click
+  **Dictionaries** in the sidebar, type the code, press Verify once. The
+  button sits on "Verifying…" for ever and no error is shown.
+
+  What actually happens, measured rather than inferred — the same run on both
+  paths:
+
+  | | client-side nav (the presenter's) | full page load |
+  |---|---|---|
+  | `POST /auth/v1/factors/…/verify` | **200** | 200 |
+  | auth cookie after | **aal2** (2959 → 2998 b) | aal2 (2958 → 2999 b) |
+  | ends up on | **`/mfa`, stuck** | `/admin/dictionaries` |
+
+  So `challengeAndVerify()` settles, GoTrue issues the aal2 session and
+  `@supabase/ssr` writes it to the cookie. Only `router.push(next)` fails to
+  move. The session behind the frozen button is fully aal2: typing
+  `/admin/dictionaries` renders it, and clicking **Clients** in the sidebar
+  goes straight there with no second prompt. **The presenter is not blocked**
+  — any click continues — but they stare at a dead button during the exact
+  beat step 1 exists to make.
+
+  Likely cause, untested and left for whoever takes the fix: the Next.js
+  client router cached the RSC entry for `/admin/dictionaries` on the first
+  click, when it resolved to the `/mfa` redirect; `router.push(next)` re-uses
+  that cached entry and resolves back to `/mfa`. A full load has no such
+  cache. `router.refresh()` is called *after* `push`, so it never clears it
+  in time. Candidate fixes are a one-liner either way — refresh before push,
+  or `window.location.assign(next)` — but they are auth-flow changes and
+  1a.24 was UI-only, so they were deliberately NOT made here.
+
+  **Pre-existing, not caused by 1a.24** — nothing under `app/mfa/` or
+  `proxy.ts` changed, and it reproduces the same on both sides of the change.
+  **Owner: a separate task, to land BEFORE the 1a gate demo** (owner's
+  decision, 2026-09-17). The demo script was deliberately left describing the
+  intended behaviour rather than a workaround, so if that task slips, step 1
+  shows a frozen button — check this entry first.
+
+  Two corrections to the first version of this entry, both mine, kept
+  because the wrong version would send the next reader to the wrong layer:
+  it claimed `challengeAndVerify()` "never settles" (it does — 200) and that
+  "the only way out is a reload" (a reload of `/mfa` naturally stays on
+  `/mfa`, which has no aal guard; that was a bad inference from a bad test,
+  not a finding).
+
+- **1a.24's demo walk did not actually cover step 1's verify leg, and said
+  32/32 anyway.** The walk clicked **Dictionaries**, asserted the redirect to
+  `/mfa` — which is what step 1 claims — then closed that browser context and
+  took its aal2 session in a fresh one via a full page load. That is exactly
+  the path that works, so the hang above survived a "green" walk. Rule for
+  the next walk of this script: a step is only walked if it is walked
+  end to end, in one context, the way the presenter does it.
+
+- **`dcs1a14-member` carries an UNVERIFIED TOTP factor on scl-dev, created by
+  1a.24's own verification walk.** Factor
+  `8abe5128-44d9-438d-9d4c-ce2a997789e5`, `status = unverified`,
+  `friendly_name = "totp-1789634199280"`, created 2026-09-17T08:36:39.471Z.
+  The friendly name is `Date.now()` from `app/mfa/page.tsx`'s auto-enrolment,
+  and it decodes to 08:36:39.280Z — 191 ms before the row, so that line
+  minted it. Mechanism: while the account still held the stray `dc` role (see
+  the SC2699 entry below), the walk's step 7 opened `/admin/dictionaries`,
+  `proxy.ts` sent it to `/mfa`, and `MfaPage`'s mount effect enrolled a
+  factor because none existed. Only one exists despite several runs, because
+  `resolveMfaFactorState` returns `pending` for an existing unverified factor
+  and reuses it instead of enrolling again.
+
+  **It changes nothing at step 7**: an unverified factor does not raise AAL
+  (that session is `aal1`, `amr` password-only, zero verified factors), and
+  the `proxy.ts` gate only fires for an admin or a DC, which this account is
+  no longer. Proven directly — the passing walk ran at 08:55:18Z, after the
+  factor existed at 08:36:39Z, and step 7 passed in full.
+
+  **Left in place deliberately** — deleting it is an Auth-data change and
+  needs the owner's go (not given). The residual risk, if it stays: should
+  this account ever be made a DC or admin again, `/mfa` opens in `pending`
+  mode ("You already started setting up…") for a secret nobody recorded, and
+  the presenter must click **Start over**. Trap worth naming for anyone
+  scripting against `/admin` as a non-enrolled DC: merely *visiting* the gate
+  enrols a factor as a side effect.
 
 - **The per-row "Team" link is the one link in the app with no in-flight
   indicator, and a test pins it that way.**
