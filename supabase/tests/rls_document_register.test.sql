@@ -91,18 +91,34 @@ select col_is_unique('dcs', 'revisions', array['document_id', 'scl_revision'],
 select col_is_unique('dcs', 'dictionaries', array['id', 'dict_type'],
   '1b.01 added UNIQUE (id, dict_type) on dcs.dictionaries — the target of the composite dictionary FKs');
 
--- Every FK covered by an index (advisor lint 0001 must not gain a finding).
-select is(
-  (select count(*)
-     from pg_constraint c
-    where c.conrelid in ('dcs.documents'::regclass, 'dcs.revisions'::regclass, 'dcs.files'::regclass)
-      and c.contype = 'f'
-      and not exists (
-        select 1 from pg_index i
-         where i.indrelid = c.conrelid
-           and (i.indkey::int2[])[0] = c.conkey[1])),
-  0::bigint,
-  'every foreign key on the three tables has an index on its leading column (advisor 0001)');
+-- Every FK covered by an index over its FULL column list, in FK order.
+--
+-- This assertion was weaker in 1b.01: it compared only (indkey)[0] against
+-- conkey[1], i.e. the leading column. Eleven composite FKs on these tables had
+-- an index on their first column only, passed that test, and were then flagged
+-- by the performance advisor (unindexed_foreign_keys 10 → 21 on scl-dev after
+-- 1b.01 merged). The advisor was right and the test was wrong, so the test now
+-- checks what the advisor checks. Fixed by 20260917… fix_dcs_composite_fk_indexes.
+--
+-- is_empty rather than a count, so a failure prints WHICH foreign keys are
+-- uncovered instead of just how many. indnkeyatts excludes INCLUDE columns
+-- from counting as coverage, and indpred excludes partial indexes, which do
+-- not cover every row.
+select is_empty(
+  $$select c.conrelid::regclass::text || '.' || c.conname as uncovered_fk
+      from pg_constraint c
+     where c.conrelid in ('dcs.documents'::regclass, 'dcs.revisions'::regclass, 'dcs.files'::regclass)
+       and c.contype = 'f'
+       and not exists (
+         select 1
+           from pg_index i
+          where i.indrelid = c.conrelid
+            and i.indisvalid
+            and i.indpred is null
+            and i.indnkeyatts >= array_length(c.conkey, 1)
+            and (i.indkey::int2[])[0:array_length(c.conkey, 1) - 1] = c.conkey::int2[])
+     order by 1$$,
+  'every FK on the three tables has an index whose leading columns are exactly the FK''s full column list, in FK order (advisor unindexed_foreign_keys)');
 
 select ok(
   (select relrowsecurity from pg_class where oid = 'dcs.documents'::regclass),
