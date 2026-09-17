@@ -1549,6 +1549,13 @@ wystawia je wszystkie publicznie, a raz rozesłanych URL-i się nie cofa.
   above, for all three ways of entering `/mfa` (verified / enrolment /
   pending). Shown red on the old two lines first.
 
+  The same PR also added `safeNextPath()` beside it: `next` came off the query
+  string and went into the navigation unvalidated, which was an open redirect
+  and — because `location.assign()` executes a `javascript:` URL in the page's
+  own origin — worse than one. Pre-existing, not introduced by the change of
+  navigation method, but on the line this task was editing. Thirteen rejection
+  cases, shown red first. The Timesheet twin is (nn).
+
   **Refresh-before-push was the other candidate and was rejected** (owner's
   decision, 2026-09-17). It would have kept the SPA transition, and it goes
   green against the same test — but `refresh()` also starts its own re-fetch
@@ -1592,7 +1599,8 @@ wystawia je wszystkie publicznie, a raz rozesłanych URL-i się nie cofa.
   **Left in place deliberately** — deleting it is an Auth-data change and
   needs the owner's go (not given). **Still in place after DCS 1a.25**, which
   asked about it explicitly and was told to leave it (owner's decision,
-  2026-09-17); 1a.25 needed no Auth write to cover the `pending` path. The residual risk, if it stays: should
+  2026-09-17); 1a.25 needed no Auth write to cover the `pending` path.
+  The residual risk, if it stays: should
   this account ever be made a DC or admin again, `/mfa` opens in `pending`
   mode ("You already started setting up…") for a secret nobody recorded, and
   the presenter must click **Start over**. Trap worth naming for anyone
@@ -1665,19 +1673,36 @@ wystawia je wszystkie publicznie, a raz rozesłanych URL-i się nie cofa.
 
 ## nn) Follow-ups noted during DCS 1a.25 (`/mfa` verify navigation)
 
-- **`apps/timesheet/app/mfa/page.tsx` has the identical bug, character for
-  character, and was deliberately NOT fixed.** Line 113 there is the same
-  `router.push(next)` / `router.refresh()` pair that froze DCS's demo step 1,
-  reached through the same aal2 gate in `apps/timesheet/proxy.ts`. Timesheet
-  is production and this task's scope excluded it "in any form", so the
-  tempting one-line symmetric fix was left on the floor. Whether it bites
-  there depends on whether a Timesheet admin reaches `/mfa` by a client-side
-  sidebar click (poisoned cache entry, hang) or by a full page load (works) —
-  **not established, and not guessed at here.** Two things for whoever picks
-  this up: establish that first with the measurement in (mm)'s table rather
-  than assuming DCS's result transfers, and note that `mfa-factor-state.ts`
-  is already duplicated per app, so a shared `mfa-navigation` leaf export on
-  `@scl/db` may be the cheaper landing than a second copy of the fix.
+- **`apps/timesheet/app/mfa/page.tsx` carries BOTH of 1a.25's defects,
+  character for character, and was deliberately NOT touched.**
+  `apps/timesheet` is **the production app**. Its fix needs **its own PR and
+  the repo owner's review before merge** (owner's decision, 2026-09-17) — not
+  a symmetric one-liner smuggled into a DCS PR, however tempting the diff
+  looked. Both defects:
+
+  1. **The frozen navigation.** Line 113 is the same `router.push(next)` /
+     `router.refresh()` pair that froze DCS's demo step 1, reached through the
+     same aal2 gate in `apps/timesheet/proxy.ts`. Whether it actually bites
+     there depends on whether a Timesheet admin reaches `/mfa` by a
+     client-side click (poisoned cache entry, hang) or by a full page load
+     (works) — **not established, and not guessed at here.** Establish it with
+     the measurement in (mm)'s table rather than assuming DCS's result
+     transfers.
+  2. **`next` is not validated before it is navigated to.** Same
+     `searchParams.get('next') ?? '/'` straight into a navigation, and
+     `/mfa` is excluded from that proxy's checks too, so the same open
+     redirect and the same `javascript:` / `data:` vector exist there. See
+     `safeNextPath()` in `apps/dcs/lib/mfa-navigation.ts` and the thirteen
+     rejection cases in its test for the shape of the fix and for the
+     normalisation traps (`\` folded to `/`, tab/LF/CR and leading
+     whitespace stripped by the URL parser) that a naive
+     `startsWith('/')` check walks straight into.
+
+  Note when sizing that PR: `mfa-factor-state.ts` is already duplicated per
+  app, so a shared `mfa-navigation` leaf export on `@scl/db` may be a cheaper
+  landing than a third copy of the same two decisions. Also that Timesheet is
+  on prod — the aal2 gate there guards real admin screens, so the redirect
+  question is a live security matter, not only a demo polish one.
 
 - **There is no test for `proxy.ts` anywhere in this repo — in either app.**
   1a.25's brief named "the most recent existing tests for `proxy.ts` and the
