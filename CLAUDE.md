@@ -57,6 +57,36 @@ Supabase, prod ref `tfbzivfsqsgebegcvfah`.
   tabeli. Dziura zrobiona ręcznie na scl-dev jest odnotowana
   w `docs/deferred-tasks.md` (gg), żeby nie czytać jej jako awarii triggera.
 
+### Deploy i produkcja
+
+- Merging to `main` deploys to production. `dcs` serves https://dcs.seaclouds.eu
+  against the production Supabase project (`tfbzivfsqsgebegcvfah`). Treat every
+  merge to main as a production deploy: STOP before merging and get explicit
+  approval. A PR that is already merged is closed; commits pushed to its branch
+  afterwards trigger no CI and never reach main. Always check
+  `gh pr view <n> --json state` before pushing to an existing branch.
+- **Timesheet deploys the same way.** Projekt Vercel
+  `seaclouds-management-system` (root `apps/timesheet`) ma ten sam production
+  branch `main` i serwuje https://app.seaclouds.eu przeciwko **temu samemu**
+  projektowi produkcyjnemu Supabase (`tfbzivfsqsgebegcvfah`). Merge do `main`
+  ruszający `apps/timesheet` (albo wspólne `packages/`) idzie prosto na
+  produkcję Timesheeta — aplikacji, której klient używa na co dzień.
+- Oba projekty startują przy każdym pushu i każdym merge'u. Vercel bywa, że
+  **auto-pomija** build (stan `CANCELED`), gdy pod root directory projektu nic
+  się nie zmieniło od **ostatniego deploymentu tego projektu** — ale z samej
+  treści commita tego nie przewidzisz. Bazą porównania jest ostatni deployment,
+  nie commit-rodzic (`d1d1470`, tylko `docs/`, zbudował się, bo poprzedni
+  deployment `dcs` był sprzed `3a08da3`; dwa kolejne commity tylko-`docs/` już
+  nie), a **nowa gałąź buduje się zawsze** — PR #58, wyłącznie `docs/`,
+  zbudował oba projekty. Nigdy nie zakładaj „to tylko docs, więc nic się nie
+  wdroży". To domyślne zachowanie Vercela, nie `ignoreCommand` w repo — nic
+  w repo tego nie pilnuje i nikt nie dostanie alertu.
+- Różnica w ochronie, istotna przy podawaniu URL-i: `dcs` ma
+  `ssoProtection = all_except_custom_domains`, więc Preview **i** produkcyjny
+  `*.vercel.app` stoją za logowaniem Vercela, a publiczny jest wyłącznie
+  `dcs.seaclouds.eu`. `seaclouds-management-system` nie ma ochrony w ogóle
+  (`ssoProtection = null`) — tam publiczne są także Preview.
+
 ### Schemat i RLS
 - Każda tabela `dcs.*` z danymi projektowymi niesie kolumnę `project_id`;
   tabela globalna lub słownikowa (bez `project_id`) wymaga jawnego wpisu
