@@ -7,9 +7,10 @@
 // (code only). Employees never reach this route (proxy.ts only redirects
 // admin/DC paths).
 import { Suspense, useEffect, useRef, useState } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { resolveMfaFactorState } from '@/lib/mfa-factor-state'
+import { navigateAfterMfaVerify } from '@/lib/mfa-navigation'
 
 export default function MfaPage() {
   return (
@@ -28,7 +29,6 @@ export default function MfaPage() {
 // useSearchParams() opts the page out of static generation unless wrapped in
 // its own Suspense boundary (Next.js requirement for the production build).
 function MfaPageInner() {
-  const router = useRouter()
   const searchParams = useSearchParams()
   const next = searchParams.get('next') ?? '/'
 
@@ -105,8 +105,9 @@ function MfaPageInner() {
       return
     }
 
-    router.push(next)
-    router.refresh()
+    // Deliberately a full document load, not router.push — see
+    // lib/mfa-navigation.ts for why a client-side push cannot leave this page.
+    navigateAfterMfaVerify({ assign: (href) => window.location.assign(href) }, next)
   }
 
   // Discarding a stale, unfinished enrolment is a deliberate user choice, not
