@@ -15,6 +15,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { resolveMfaFactorState } from '@/lib/mfa-factor-state'
+import { safeNextPath } from '@/lib/mfa-navigation'
 
 export default function MfaPage() {
   return (
@@ -110,7 +111,10 @@ function MfaPageInner() {
       return
     }
 
-    router.push(next)
+    // `next` is attacker-controllable: /mfa is excluded from the aal2 gate's
+    // own check, so anyone signed in can be sent to /mfa?next=<anything>.
+    // See lib/mfa-navigation.ts — DCS 1a.26 / deferred-tasks (nn).
+    router.push(safeNextPath(next))
     router.refresh()
   }
 
