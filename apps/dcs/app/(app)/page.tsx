@@ -1,5 +1,10 @@
 import Link from 'next/link'
+import { Plus } from 'lucide-react'
 import { createClient } from '@scl/db/server'
+import NavLinkStatus from '@/components/NavLinkStatus'
+import { Badge } from '@/components/ui/badge'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Callout, EmptyState, PageBody, PageHeader, ScrollableTable } from '@/components/page-chrome'
 import { isAdminOrProjectDc, type ProjectRole } from '@/lib/auth-helpers'
 import { resolveProjectListFilter } from '@/lib/project-list'
 
@@ -83,100 +88,123 @@ export default async function ProjectsPage() {
 
   const settingsByProject = new Map(mdrSettings.map((row) => [row.project_id, row]))
 
+  // DCS 1a.24: presentation only below this line. Which rows appear, who gets
+  // a Team link and what the two degraded messages say are unchanged — the
+  // decisions still come from resolveProjectListFilter() and
+  // isAdminOrProjectDc(), and app/(app)/nav.test.ts pins the Team links.
   return (
-    <div className="mx-auto max-w-3xl">
-      <div className="mb-1 flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Projects</h1>
-        {isAdmin && (
-          <Link
-            href="/admin/projects/new"
-            className="rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-blue-700"
-          >
-            New project MDR
-          </Link>
-        )}
-      </div>
-      <p className="mb-4 text-xs text-gray-500">
-        {filter.kind === 'all'
-          ? 'Every project — you are an admin.'
-          : 'Projects where you hold a DCS role.'}
-      </p>
+    <PageBody>
+      <PageHeader
+        title="Projects"
+        description={
+          filter.kind === 'all' ? 'Every project — you are an admin.' : 'Projects where you hold a DCS role.'
+        }
+        actions={
+          isAdmin ? (
+            <Link
+              href="/admin/projects/new"
+              className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+            >
+              <Plus className="h-4 w-4" />
+              New project MDR
+              <NavLinkStatus />
+            </Link>
+          ) : null
+        }
+      />
 
       {filter.kind === 'degraded' && (
-        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+        <Callout tone="error">
           Couldn&apos;t load your project roles right now — showing no projects. Try refreshing; if this
           persists, contact an admin.
-        </div>
-      )}
-      {filter.kind === 'ids' && filter.ids.length === 0 && (
-        <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-600">
-          You have no DCS project roles yet — ask a Document Controller or admin to add you to a project.
-        </div>
+        </Callout>
       )}
 
-      {projects.length === 0 ? null : (
-        <table className="w-full border-collapse overflow-hidden rounded-lg border border-gray-200 bg-white text-sm">
-          <thead>
-            <tr className="border-b border-gray-200 bg-gray-100 text-left">
-              <th className="px-4 py-2 font-medium">Code</th>
-              <th className="px-4 py-2 font-medium">Name</th>
-              <th className="px-4 py-2 font-medium">Cycle</th>
-              <th className="px-4 py-2 font-medium">Team</th>
-              <th className="px-4 py-2 font-medium">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {projects.map((project) => (
-              <tr key={project.id} className="border-b border-gray-100 last:border-0">
-                <td className="px-4 py-2 font-mono">{project.project_code ?? '—'}</td>
-                <td className="px-4 py-2">
-                  <Link href={`/admin/projects/${project.id}`} className="text-blue-700 hover:underline">
-                    {project.name}
-                  </Link>
-                  {project.description ? (
-                    <span className="block text-xs text-gray-500">{project.description}</span>
-                  ) : null}
-                </td>
-                <td className="px-4 py-2 text-gray-600">
-                  {(() => {
-                    const settings = settingsByProject.get(project.id)
-                    return settings
-                      ? `${settings.cycle_idc_to_ifr}/${settings.cycle_ifr_to_retcom}/${settings.cycle_retcom_to_ifc}`
-                      : '—'
-                  })()}
-                </td>
-                <td className="px-4 py-2 text-gray-600">
-                  {teamSizeByProject.get(project.id) ?? 0}
-                  {/* DCS 1a.21a: an editor's entry point, not an access
-                      decision — shown only to whoever may change this
-                      project's team (admin, or its own DC), mirroring
-                      requireAdminOrDc. The project name beside it already
-                      links to the same page for every reader. */}
-                  {isAdminOrProjectDc(isAdmin, rolesByProject, project.id) && (
-                    <Link
-                      href={`/admin/projects/${project.id}`}
-                      className="ml-2 text-xs font-medium text-blue-700 hover:underline"
-                    >
-                      Team
-                    </Link>
-                  )}
-                </td>
-                <td className="px-4 py-2">
-                  <span
-                    className={
-                      project.is_active
-                        ? 'rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-800'
-                        : 'rounded-full bg-gray-200 px-2 py-0.5 text-xs text-gray-600'
-                    }
-                  >
-                    {project.is_active ? 'active' : 'inactive'}
-                  </span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      {filter.kind === 'ids' && filter.ids.length === 0 ? (
+        <EmptyState title="No projects yet">
+          You have no DCS project roles yet — ask a Document Controller or admin to add you to a project.
+        </EmptyState>
+      ) : projects.length === 0 ? (
+        filter.kind === 'degraded' ? null : <EmptyState title="No projects to show" />
+      ) : (
+        <ScrollableTable>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-[7.5rem]">Code</TableHead>
+                <TableHead>Name</TableHead>
+                <TableHead className="w-[7rem]">Cycle</TableHead>
+                <TableHead className="w-[7rem]">Team</TableHead>
+                <TableHead className="w-[6rem]">Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {projects.map((project) => {
+                const settings = settingsByProject.get(project.id)
+                return (
+                  <TableRow key={project.id}>
+                    <TableCell className="font-mono text-xs">{project.project_code ?? '—'}</TableCell>
+                    <TableCell>
+                      <Link
+                        href={`/admin/projects/${project.id}`}
+                        className="inline-flex items-center gap-2 font-medium underline-offset-4 hover:underline"
+                      >
+                        {project.name}
+                        <NavLinkStatus />
+                      </Link>
+                      {project.description ? (
+                        <span className="mt-0.5 block text-xs text-muted-foreground">{project.description}</span>
+                      ) : null}
+                    </TableCell>
+                    <TableCell className="tabular-nums text-muted-foreground">
+                      {settings
+                        ? `${settings.cycle_idc_to_ifr}/${settings.cycle_ifr_to_retcom}/${settings.cycle_retcom_to_ifc}`
+                        : '—'}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      <span className="tabular-nums">{teamSizeByProject.get(project.id) ?? 0}</span>
+                      {/* DCS 1a.21a: an editor's entry point, not an access
+                          decision — shown only to whoever may change this
+                          project's team (admin, or its own DC), mirroring
+                          requireAdminOrDc. The project name beside it already
+                          links to the same page for every reader. */}
+                      {isAdminOrProjectDc(isAdmin, rolesByProject, project.id) && (
+                        <Link
+                          href={`/admin/projects/${project.id}`}
+                          className="ml-2 text-xs font-medium text-foreground underline-offset-4 hover:underline"
+                        >
+                          {/* No <NavLinkStatus/> here, unlike every other
+                              link on this screen, and not an oversight:
+                              app/(app)/nav.test.ts asserts this link's
+                              children are exactly the string 'Team', so a
+                              sibling indicator inside it would fail a test
+                              1a.24 must not edit — and useLinkStatus() only
+                              works from inside its own <Link>. The click is
+                              still acknowledged immediately: it lands on
+                              /admin/projects/[projectId], whose loading.tsx
+                              skeleton paints on the first frame. */}
+                          Team
+                        </Link>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {project.is_active ? (
+                        <Badge className="border-transparent bg-success-bg text-success hover:bg-success-bg">
+                          active
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-muted-foreground">
+                          inactive
+                        </Badge>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
+            </TableBody>
+          </Table>
+        </ScrollableTable>
       )}
-    </div>
+    </PageBody>
   )
 }

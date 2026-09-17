@@ -32,7 +32,7 @@
 // parseUpdateProjectMdrInput drops one from a raw payload); the database
 // still allows the UPDATE, exactly the gap 1a.15b closed for dictionaries.
 import { useState, type ReactNode } from 'react'
-import { useRouter } from 'next/navigation'
+import { Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -45,6 +45,8 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { SELECT_CLASS } from '@/components/AddMemberForm'
+import { SKIPPED, usePendingAction } from '@/hooks/use-pending-action'
 import { updateProjectMdr } from '@/app/data/actions/project-mdr'
 import {
   MDR_STATUSES,
@@ -68,9 +70,10 @@ type Props = {
 }
 
 export default function EditProjectDialog({ project, settings, clients, trigger }: Props) {
-  const router = useRouter()
+  // DCS 1a.24: pending holds through router.refresh(), so the dialog does not
+  // close onto a summary that still shows the old cycle.
+  const { run, refresh, pending } = usePendingAction()
   const [open, setOpen] = useState(false)
-  const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const [name, setName] = useState(project.name)
@@ -101,7 +104,6 @@ export default function EditProjectDialog({ project, settings, clients, trigger 
   const internal = processType !== '' && skipsClientStep(processType)
 
   const handleSubmit = async () => {
-    setSaving(true)
     setError(null)
 
     // Every field is sent on every save; updateProjectMdr compares each one
@@ -109,7 +111,8 @@ export default function EditProjectDialog({ project, settings, clients, trigger 
     // form is what makes "the user cleared this field" (null) distinguishable
     // from "the form never carried it" (undefined) — and the diff is what
     // keeps audit_log down to the columns that actually changed.
-    const result = await updateProjectMdr({
+    const result = await run(() =>
+      updateProjectMdr({
       projectId: project.id,
       name,
       clientId: internal || clientId === '' ? null : clientId,
@@ -128,21 +131,23 @@ export default function EditProjectDialog({ project, settings, clients, trigger 
             status,
           }
         : {}),
-    })
+      }),
+    )
 
-    setSaving(false)
+    if (result === SKIPPED) return
     if (!result.ok) {
       setError(result.message ? `${result.error}: ${result.message}` : result.error)
       return
     }
     setOpen(false)
-    router.refresh()
+    refresh()
   }
 
   return (
     <Dialog
       open={open}
       onOpenChange={(next) => {
+        if (!next && pending) return
         setOpen(next)
         if (next) reset()
       }}
@@ -167,7 +172,7 @@ export default function EditProjectDialog({ project, settings, clients, trigger 
           <div className="space-y-1">
             <Label htmlFor="edit-project-code">Project code</Label>
             <Input id="edit-project-code" value={project.project_code} readOnly disabled />
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-muted-foreground">
               The first segment of every document number in this project — it cannot be changed once issued.
             </p>
           </div>
@@ -177,7 +182,7 @@ export default function EditProjectDialog({ project, settings, clients, trigger 
               <Label htmlFor="edit-process-type">Process type</Label>
               <select
                 id="edit-process-type"
-                className="w-full rounded border border-gray-300 px-2 py-2 text-sm"
+                className={`w-full ${SELECT_CLASS}`}
                 value={processType}
                 onChange={(e) => setProcessType(e.target.value as ProcessType | '')}
               >
@@ -199,7 +204,7 @@ export default function EditProjectDialog({ project, settings, clients, trigger 
             <Label htmlFor="edit-client">Client</Label>
             <select
               id="edit-client"
-              className="w-full rounded border border-gray-300 px-2 py-2 text-sm"
+              className={`w-full ${SELECT_CLASS}`}
               value={internal ? '' : clientId}
               disabled={internal}
               onChange={(e) => setClientId(e.target.value)}
@@ -211,15 +216,15 @@ export default function EditProjectDialog({ project, settings, clients, trigger 
                 </option>
               ))}
             </select>
-            {internal && <p className="text-xs text-gray-500">An internal project has no client.</p>}
+            {internal && <p className="text-xs text-muted-foreground">An internal project has no client.</p>}
           </div>
 
           {settings && (
             <>
-              <label className="flex items-center gap-2 text-sm text-gray-700">
+              <label className="flex items-center gap-2 text-sm">
                 <input
                   type="checkbox"
-                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-600"
+                  className="h-4 w-4 rounded border-input accent-[hsl(var(--primary))] focus-visible:ring-2 focus-visible:ring-ring"
                   checked={internal ? false : cpyNumbering}
                   disabled={internal}
                   onChange={(e) => setCpyNumbering(e.target.checked)}
@@ -241,7 +246,7 @@ export default function EditProjectDialog({ project, settings, clients, trigger 
                   <Input id="edit-cycle-retcom" inputMode="numeric" value={cycleRetcomToIfc} onChange={(e) => setCycleRetcomToIfc(e.target.value)} />
                 </div>
               </div>
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-muted-foreground">
                 Changing a cycle does not move dates on documents that already exist — that is Phase 2.
               </p>
 
@@ -260,7 +265,7 @@ export default function EditProjectDialog({ project, settings, clients, trigger 
                   <Label htmlFor="edit-status">MDR status</Label>
                   <select
                     id="edit-status"
-                    className="w-full rounded border border-gray-300 px-2 py-2 text-sm"
+                    className={`w-full ${SELECT_CLASS}`}
                     value={status}
                     onChange={(e) => setStatus(e.target.value as MdrStatus)}
                   >
@@ -270,21 +275,22 @@ export default function EditProjectDialog({ project, settings, clients, trigger 
                       </option>
                     ))}
                   </select>
-                  <p className="text-xs text-gray-500">Documentation open or closed — not the same as Timesheet&apos;s active flag.</p>
+                  <p className="text-xs text-muted-foreground">Documentation open or closed — not the same as Timesheet&apos;s active flag.</p>
                 </div>
               </div>
             </>
           )}
 
-          {error && <p className="text-xs text-red-600">Error: {error}</p>}
+          {error && <p className="text-xs text-destructive">Error: {error}</p>}
         </div>
 
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={saving}>
+          <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={pending}>
             Cancel
           </Button>
-          <Button type="button" onClick={handleSubmit} disabled={saving || name.trim() === ''}>
-            {saving ? 'Saving…' : 'Save'}
+          <Button type="button" onClick={handleSubmit} disabled={pending || name.trim() === ''}>
+            {pending && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
+            {pending ? 'Saving…' : 'Save'}
           </Button>
         </DialogFooter>
       </DialogContent>

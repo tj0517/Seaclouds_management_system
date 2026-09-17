@@ -5,7 +5,7 @@
 // itself never accepting a `code` key (lib/clients-admin.ts:
 // UpdateClientInput has no such field). Mirrors DictionaryEntryDialog (1a.15).
 import { useState, type ReactNode } from 'react'
-import { useRouter } from 'next/navigation'
+import { Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -19,6 +19,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { SKIPPED, usePendingAction } from '@/hooks/use-pending-action'
 import { createClient, updateClient } from '@/app/data/actions/clients'
 import type { ClientRow } from '@/lib/clients-admin'
 
@@ -28,14 +29,15 @@ type Props = {
 }
 
 export default function ClientDialog({ entry, trigger }: Props) {
-  const router = useRouter()
+  // DCS 1a.24: pending holds through router.refresh() — see
+  // hooks/use-pending-action.ts.
+  const { run, refresh, pending } = usePendingAction()
   const isEdit = entry !== undefined
   const [open, setOpen] = useState(false)
   const [name, setName] = useState(entry?.name ?? '')
   const [code, setCode] = useState(entry?.code ?? '')
   const [contactEmail, setContactEmail] = useState(entry?.contact_email ?? '')
   const [notes, setNotes] = useState(entry?.notes ?? '')
-  const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const reset = () => {
@@ -47,36 +49,38 @@ export default function ClientDialog({ entry, trigger }: Props) {
   }
 
   const handleSubmit = async () => {
-    setSaving(true)
     setError(null)
 
-    const result = isEdit
-      ? await updateClient({
-          id: entry.id,
-          name,
-          contactEmail: contactEmail.trim() === '' ? null : contactEmail,
-          notes: notes.trim() === '' ? null : notes,
-        })
-      : await createClient({
-          name,
-          code,
-          contactEmail: contactEmail.trim() === '' ? null : contactEmail,
-          notes: notes.trim() === '' ? null : notes,
-        })
+    const result = await run(() =>
+      isEdit
+        ? updateClient({
+            id: entry.id,
+            name,
+            contactEmail: contactEmail.trim() === '' ? null : contactEmail,
+            notes: notes.trim() === '' ? null : notes,
+          })
+        : createClient({
+            name,
+            code,
+            contactEmail: contactEmail.trim() === '' ? null : contactEmail,
+            notes: notes.trim() === '' ? null : notes,
+          }),
+    )
 
-    setSaving(false)
+    if (result === SKIPPED) return
     if (!result.ok) {
       setError(result.message ?? result.error)
       return
     }
     setOpen(false)
-    router.refresh()
+    refresh()
   }
 
   return (
     <Dialog
       open={open}
       onOpenChange={(next) => {
+        if (!next && pending) return
         setOpen(next)
         if (next) reset()
       }}
@@ -107,11 +111,11 @@ export default function ClientDialog({ entry, trigger }: Props) {
               placeholder="e.g. ACME"
             />
             {isEdit ? (
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-muted-foreground">
                 Code is part of the document number and cannot be changed once created.
               </p>
             ) : (
-              <p className="text-xs text-gray-500">2-10 characters, uppercase letters and digits only.</p>
+              <p className="text-xs text-muted-foreground">2-10 characters, uppercase letters and digits only.</p>
             )}
           </div>
 
@@ -130,15 +134,16 @@ export default function ClientDialog({ entry, trigger }: Props) {
             <Textarea id="client-notes" value={notes ?? ''} onChange={(e) => setNotes(e.target.value)} rows={2} />
           </div>
 
-          {error && <p className="text-xs text-red-600">Error: {error}</p>}
+          {error && <p className="text-xs text-destructive">Error: {error}</p>}
         </div>
 
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={saving}>
+          <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={pending}>
             Cancel
           </Button>
-          <Button type="button" onClick={handleSubmit} disabled={saving || !name.trim() || !code.trim()}>
-            {saving ? 'Saving…' : 'Save'}
+          <Button type="button" onClick={handleSubmit} disabled={pending || !name.trim() || !code.trim()}>
+            {pending && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
+            {pending ? 'Saving…' : 'Save'}
           </Button>
         </DialogFooter>
       </DialogContent>

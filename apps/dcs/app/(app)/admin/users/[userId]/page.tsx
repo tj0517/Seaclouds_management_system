@@ -6,6 +6,8 @@
 import { notFound, redirect } from 'next/navigation'
 import { createClient } from '@scl/db/server'
 import RoleCheckboxGroup from '@/components/RoleCheckboxGroup'
+import { Badge } from '@/components/ui/badge'
+import { EmptyState, PageBody, PageHeader } from '@/components/page-chrome'
 import { PROJECT_ROLES, type ProjectRole } from '@/lib/project-roles'
 
 export default async function UserRolesPage({ params }: { params: Promise<{ userId: string }> }) {
@@ -46,31 +48,32 @@ export default async function UserRolesPage({ params }: { params: Promise<{ user
   }
 
   return (
-    <div className="mx-auto max-w-4xl">
-      <h1 className="mb-1 text-2xl font-bold">DCS roles</h1>
-      <p className="mb-6 text-sm text-gray-500">
-        {targetProfile.full_name ?? targetProfile.id}
-        {targetProfile.employee_id ? ` · ${targetProfile.employee_id}` : ''}
-      </p>
+    <PageBody className="max-w-4xl">
+      <PageHeader
+        title="DCS roles"
+        description={`${targetProfile.full_name ?? targetProfile.id}${
+          targetProfile.employee_id ? ` · ${targetProfile.employee_id}` : ''
+        }`}
+      />
 
       {(projects ?? []).length === 0 ? (
-        <p className="text-sm text-gray-500">No projects in the system.</p>
+        <EmptyState title="No projects in the system" />
       ) : (
         <div className="space-y-3">
           {(projects ?? []).map((project) => (
-            <div key={project.id} className="rounded-lg border border-gray-200 bg-white p-4">
-              <div className="mb-2 flex items-center justify-between">
-                <div>
-                  <span className="font-medium text-sm">{project.name}</span>
-                  <span className="ml-2 text-xs text-gray-500">{project.project_code}</span>
-                  {!project.is_active && (
-                    <span className="ml-2 rounded-full bg-gray-200 px-2 py-0.5 text-xs text-gray-600">inactive</span>
-                  )}
-                </div>
+            <div key={project.id} className="rounded-lg border bg-card p-4">
+              <div className="mb-3 flex flex-wrap items-center gap-2">
+                <span className="text-sm font-medium">{project.name}</span>
+                <span className="font-mono text-xs text-muted-foreground">{project.project_code}</span>
+                {!project.is_active && (
+                  <Badge variant="outline" className="text-muted-foreground">
+                    inactive
+                  </Badge>
+                )}
                 {!projectsWithDc.has(project.id) && (
-                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800">
+                  <Badge className="ml-auto border-transparent bg-warning-bg text-warning hover:bg-warning-bg">
                     No Document Controller assigned
-                  </span>
+                  </Badge>
                 )}
               </div>
               <RoleCheckboxGroup
@@ -83,7 +86,7 @@ export default async function UserRolesPage({ params }: { params: Promise<{ user
         </div>
       )}
 
-      <p className="mt-6 text-xs text-gray-400">Roles: {PROJECT_ROLES.join(', ')}</p>
-    </div>
+      <p className="mt-6 text-xs text-muted-foreground">Roles: {PROJECT_ROLES.join(', ')}</p>
+    </PageBody>
   )
 }

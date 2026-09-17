@@ -6,14 +6,16 @@
 // inactive" is on — the row is never actually gone (dcs.dictionaries never
 // deletes; is_active = false only).
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { Loader2, Plus } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import DictionaryEntryDialog from '@/components/DictionaryEntryDialog'
+import { SKIPPED, usePendingAction } from '@/hooks/use-pending-action'
 import { setDictionaryEntryActive } from '@/app/data/actions/dictionaries'
 import { readBudgetHours } from '@/lib/dictionaries-admin'
+import { EmptyState, ScrollableTable } from '@/components/page-chrome'
 import { DICT_TYPE_LABELS, type DictionaryRow, type DictType } from '@/lib/dictionaries'
 
 type Props = {
@@ -23,7 +25,11 @@ type Props = {
 }
 
 export default function DictionaryTypeTable({ dictType, rows, canEdit }: Props) {
-  const router = useRouter()
+  // DCS 1a.24: pendingId still names WHICH row is busy (two rows must not
+  // both show a spinner), but whether anything is busy at all now comes from
+  // usePendingAction — so the row stays pending through router.refresh(),
+  // which is when the table actually changes.
+  const { run, refresh, pending } = usePendingAction()
   const [showInactive, setShowInactive] = useState(false)
   const [pendingId, setPendingId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -32,39 +38,46 @@ export default function DictionaryTypeTable({ dictType, rows, canEdit }: Props) 
   const showBudgetHours = dictType === 'doc_type'
 
   const handleToggleActive = async (row: DictionaryRow) => {
-    setPendingId(row.id)
     setError(null)
-    const result = await setDictionaryEntryActive({ id: row.id, isActive: !row.is_active })
-    setPendingId(null)
+    setPendingId(row.id)
+    const result = await run(() => setDictionaryEntryActive({ id: row.id, isActive: !row.is_active }))
+    if (result === SKIPPED) return
     if (!result.ok) {
+      setPendingId(null)
       setError(result.message ?? result.error)
       return
     }
-    router.refresh()
+    refresh()
   }
 
   return (
     <div>
       <div className="mb-3 flex items-center justify-between">
-        <label className="flex items-center gap-2 text-sm text-gray-700">
+        <label className="flex items-center gap-2 text-sm">
           <Switch checked={showInactive} onCheckedChange={setShowInactive} />
           Show inactive
         </label>
         {canEdit && (
           <DictionaryEntryDialog
             dictType={dictType}
-            trigger={<Button size="sm">Add {DICT_TYPE_LABELS[dictType]}</Button>}
+            trigger={
+              <Button size="sm">
+                <Plus className="mr-1.5 h-4 w-4" />
+                Add {DICT_TYPE_LABELS[dictType]}
+              </Button>
+            }
           />
         )}
       </div>
 
-      {error && <p className="mb-2 text-xs text-red-600">Error: {error}</p>}
+      {error && <p className="mb-2 text-xs text-destructive">Error: {error}</p>}
 
       {visibleRows.length === 0 ? (
-        <p className="text-sm text-gray-500">
-          {rows.length === 0 ? 'No entries yet.' : 'No active entries — toggle "Show inactive" to see the rest.'}
-        </p>
+        <EmptyState title={rows.length === 0 ? 'No entries yet' : 'No active entries'}>
+          {rows.length === 0 ? null : 'Toggle “Show inactive” to see the rest — nothing here is ever deleted.'}
+        </EmptyState>
       ) : (
+        <ScrollableTable>
         <Table>
           <TableHeader>
             <TableRow>
@@ -79,17 +92,19 @@ export default function DictionaryTypeTable({ dictType, rows, canEdit }: Props) 
           </TableHeader>
           <TableBody>
             {visibleRows.map((row) => (
-              <TableRow key={row.id} className={row.is_active ? undefined : 'opacity-50'}>
-                <TableCell className="font-mono">{row.code}</TableCell>
-                <TableCell>{row.label}</TableCell>
-                <TableCell className="text-gray-500">{row.description}</TableCell>
+              <TableRow key={row.id} className={row.is_active ? undefined : 'opacity-60'}>
+                <TableCell className="font-mono text-xs">{row.code}</TableCell>
+                <TableCell className="font-medium">{row.label}</TableCell>
+                <TableCell className="text-muted-foreground">{row.description}</TableCell>
                 {showBudgetHours && <TableCell>{readBudgetHours(row.meta) ?? '—'}</TableCell>}
                 <TableCell>{row.sort_order}</TableCell>
                 <TableCell>
                   {row.is_active ? (
-                    <Badge variant="secondary">Active</Badge>
+                    <Badge className="border-transparent bg-success-bg text-success hover:bg-success-bg">Active</Badge>
                   ) : (
-                    <Badge variant="outline">Inactive</Badge>
+                    <Badge variant="outline" className="text-muted-foreground">
+                      Inactive
+                    </Badge>
                   )}
                 </TableCell>
                 {canEdit && (
@@ -107,10 +122,13 @@ export default function DictionaryTypeTable({ dictType, rows, canEdit }: Props) 
                       <Button
                         size="sm"
                         variant="ghost"
-                        disabled={pendingId === row.id}
+                        disabled={pending}
                         onClick={() => handleToggleActive(row)}
                       >
-                        {pendingId === row.id ? '…' : row.is_active ? 'Deactivate' : 'Reactivate'}
+                        {pending && pendingId === row.id && (
+                          <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                        )}
+                        {row.is_active ? 'Deactivate' : 'Reactivate'}
                       </Button>
                     </div>
                   </TableCell>
@@ -119,6 +137,7 @@ export default function DictionaryTypeTable({ dictType, rows, canEdit }: Props) 
             ))}
           </TableBody>
         </Table>
+        </ScrollableTable>
       )}
     </div>
   )

@@ -17,6 +17,8 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@scl/db/server'
 import CreateProjectWizard from '@/components/CreateProjectWizard'
+import NavLinkStatus from '@/components/NavLinkStatus'
+import { Callout, PageBody, PageHeader } from '@/components/page-chrome'
 import { getActiveClients } from '@/lib/clients-admin'
 import { getProfileDirectory } from '@/lib/profile-directory'
 
@@ -33,16 +35,20 @@ export default async function NewProjectMdrPage() {
 
   if (!isAdmin) {
     return (
-      <div className="mx-auto max-w-3xl">
-        <h1 className="mb-1 text-2xl font-bold">New project MDR</h1>
-        <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-600">
+      <PageBody className="max-w-3xl">
+        <PageHeader title="New project MDR" />
+        <Callout>
           Only an admin can create a project. A Document Controller is assigned to a project once it exists —
           ask an admin to create it and to add you as DC.
-        </div>
-        <Link href="/" className="mt-4 inline-block text-sm text-blue-700 hover:underline">
+        </Callout>
+        <Link
+          href="/"
+          className="inline-flex items-center gap-2 text-sm font-medium underline-offset-4 hover:underline"
+        >
           ← Back to projects
+          <NavLinkStatus />
         </Link>
-      </div>
+      </PageBody>
     )
   }
 
@@ -56,28 +62,31 @@ export default async function NewProjectMdrPage() {
     .sort((a, b) => a.label.localeCompare(b.label))
 
   return (
-    <div className="mx-auto max-w-3xl">
-      <div className="mb-1 flex items-center justify-between">
-        <h1 className="text-2xl font-bold">New project MDR</h1>
-        <Link href="/" className="text-sm text-blue-700 hover:underline">
-          ← Back to projects
-        </Link>
-      </div>
-      <p className="mb-6 text-sm text-gray-500">
-        Everything below is written in a single database transaction — the project, its MDR settings, its team
-        and its CTR codes are created together or not at all.
-      </p>
+    <PageBody className="max-w-3xl">
+      <PageHeader
+        title="New project MDR"
+        description="Everything below is written in a single database transaction — the project, its MDR settings, its team and its CTR codes are created together or not at all."
+        actions={
+          <Link
+            href="/"
+            className="inline-flex items-center gap-2 text-sm font-medium underline-offset-4 hover:underline"
+          >
+            ← Back to projects
+            <NavLinkStatus />
+          </Link>
+        }
+      />
 
       {directory.degraded && (
-        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+        <Callout tone="error">
           Couldn&apos;t load the name directory right now — the team step shows ids instead of names.
-        </div>
+        </Callout>
       )}
 
       <CreateProjectWizard
         clients={clients.map((client) => ({ id: client.id, name: client.name, code: client.code }))}
         candidates={candidates}
       />
-    </div>
+    </PageBody>
   )
 }

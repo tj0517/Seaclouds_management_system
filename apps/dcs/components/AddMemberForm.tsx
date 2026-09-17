@@ -5,8 +5,13 @@
 // public.dcs_profile_directory() (1a.14b) minus the current team — for an
 // admin or any DC that's the whole directory; renders whatever candidate
 // list it's given either way.
+//
+// DCS 1a.24: same pending/double-submit treatment as RoleCheckboxGroup, and
+// the bare <select>/<button> are now themed like the rest of the app.
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { Loader2, UserPlus } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { SKIPPED, usePendingAction } from '@/hooks/use-pending-action'
 import { setProjectRoles } from '@/app/data/actions/project-roles'
 import { PROJECT_ROLES, ROLE_LABELS, type ProjectRole } from '@/lib/project-roles'
 
@@ -17,11 +22,13 @@ type Props = {
   candidates: Candidate[]
 }
 
+export const SELECT_CLASS =
+  'h-9 rounded-md border border-input bg-card px-2 text-sm focus-visible:ring-2 focus-visible:ring-ring'
+
 export default function AddMemberForm({ projectId, candidates }: Props) {
-  const router = useRouter()
+  const { run, refresh, pending } = usePendingAction()
   const [userId, setUserId] = useState('')
   const [roles, setRoles] = useState<ProjectRole[]>([])
-  const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const toggle = (role: ProjectRole) => {
@@ -30,28 +37,29 @@ export default function AddMemberForm({ projectId, candidates }: Props) {
 
   const handleAdd = async () => {
     if (!userId || roles.length === 0) return
-    setSaving(true)
     setError(null)
-    const result = await setProjectRoles({ projectId, userId, roles })
-    setSaving(false)
+    const result = await run(() => setProjectRoles({ projectId, userId, roles }))
+    if (result === SKIPPED) return
     if (!result.ok) {
       setError(result.message ?? result.error)
       return
     }
     setUserId('')
     setRoles([])
-    router.refresh()
+    refresh()
   }
 
   if (candidates.length === 0) {
-    return <p className="text-xs text-gray-500">No other profiles readable from this session to add.</p>
+    return <p className="text-xs text-muted-foreground">No other profiles readable from this session to add.</p>
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-3 rounded-lg border border-dashed border-gray-300 p-4">
+    <div className="flex flex-wrap items-center gap-3 rounded-lg border border-dashed bg-card p-4">
       <select
-        className="rounded border border-gray-300 px-2 py-1 text-sm"
+        aria-label="Add a member"
+        className={SELECT_CLASS}
         value={userId}
+        disabled={pending}
         onChange={(e) => setUserId(e.target.value)}
       >
         <option value="">Add a member…</option>
@@ -62,25 +70,28 @@ export default function AddMemberForm({ projectId, candidates }: Props) {
         ))}
       </select>
       {PROJECT_ROLES.map((role) => (
-        <label key={role} className="flex items-center gap-1.5 text-sm text-gray-700">
+        <label key={role} className="flex items-center gap-1.5 text-sm">
           <input
             type="checkbox"
-            className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-600"
+            className="h-4 w-4 rounded border-input accent-[hsl(var(--primary))] focus-visible:ring-2 focus-visible:ring-ring"
             checked={roles.includes(role)}
+            disabled={pending}
             onChange={() => toggle(role)}
           />
           {ROLE_LABELS[role]}
         </label>
       ))}
-      <button
+      <Button
         type="button"
+        size="sm"
         onClick={handleAdd}
-        disabled={!userId || roles.length === 0 || saving}
-        className="rounded bg-blue-600 px-3 py-1 text-xs font-medium text-white transition disabled:cursor-not-allowed disabled:bg-gray-300"
+        disabled={!userId || roles.length === 0 || pending}
+        className="ml-auto"
       >
-        {saving ? 'Adding…' : 'Add'}
-      </button>
-      {error && <span className="text-xs text-red-600">Error: {error}</span>}
+        {pending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <UserPlus className="mr-1.5 h-3.5 w-3.5" />}
+        {pending ? 'Adding…' : 'Add'}
+      </Button>
+      {error && <span className="text-xs text-destructive">Error: {error}</span>}
     </div>
   )
 }

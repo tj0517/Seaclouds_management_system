@@ -7,6 +7,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@scl/db/server'
 import { canOpenAdminScreens } from '@/lib/auth-helpers'
 import { fetchMyModuleAccess } from '@/lib/module-permissions'
+import AppShell from '@/components/AppShell'
 import DcsSidebar from '@/components/DcsSidebar'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -33,15 +34,19 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // its own: canOpenAdminScreens() is called again inside each page.
   const canSeeAdminLinks = await canOpenAdminScreens(supabase, user.id, profile?.role === 'admin')
 
+  // DCS 1a.24: the chrome moved into AppShell (drawer below 768px, fixed
+  // sidebar above it). The sidebar is still rendered here, on the server,
+  // and passed down as an element — AppShell is a client component and must
+  // not do any of the reads above.
   return (
-    <div className="flex min-h-screen bg-gray-100">
+    <AppShell>
       <DcsSidebar
         email={user.email ?? ''}
         fullName={profile?.full_name ?? null}
         hasTesAccess={hasTesAccess}
         canSeeAdminLinks={canSeeAdminLinks}
       />
-      <main className="flex-1 overflow-auto p-8">{children}</main>
-    </div>
+      {children}
+    </AppShell>
   )
 }

@@ -51,7 +51,31 @@ const config = {
         },
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',
-        ring: 'hsl(var(--ring))'
+        ring: 'hsl(var(--ring))',
+        // DCS 1a.24: brand signal + the two status tints the admin screens
+        // use, so no screen hardcodes a raw Tailwind palette colour again.
+        brand: {
+          DEFAULT: 'hsl(var(--brand))',
+          strong: 'hsl(var(--brand-strong))'
+        },
+        success: {
+          DEFAULT: 'hsl(var(--success))',
+          bg: 'hsl(var(--success-bg))'
+        },
+        warning: {
+          DEFAULT: 'hsl(var(--warning))',
+          bg: 'hsl(var(--warning-bg))'
+        }
+      },
+      keyframes: {
+        // The indeterminate bar shown while a navigation is in flight.
+        'nav-progress': {
+          '0%': { transform: 'translateX(-100%)' },
+          '100%': { transform: 'translateX(100%)' }
+        }
+      },
+      animation: {
+        'nav-progress': 'nav-progress 1.1s ease-in-out infinite'
       }
     }
   },

@@ -6,7 +6,7 @@
 // with the update action itself never accepting a `code` key
 // (lib/dictionaries-admin.ts: UpdateDictionaryEntryInput has no such field).
 import { useState, type ReactNode } from 'react'
-import { useRouter } from 'next/navigation'
+import { Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -20,6 +20,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { SKIPPED, usePendingAction } from '@/hooks/use-pending-action'
 import { createDictionaryEntry, updateDictionaryEntry } from '@/app/data/actions/dictionaries'
 import { readBudgetHours } from '@/lib/dictionaries-admin'
 import { DICT_TYPE_LABELS, type DictionaryRow, type DictType } from '@/lib/dictionaries'
@@ -31,7 +32,10 @@ type Props = {
 }
 
 export default function DictionaryEntryDialog({ dictType, entry, trigger }: Props) {
-  const router = useRouter()
+  // DCS 1a.24: `saving` is gone. The dialog now stays open and pending until
+  // the refreshed table is on screen — closing it the instant the action
+  // returned was what made a save look like it had done nothing.
+  const { run, refresh, pending } = usePendingAction()
   const isEdit = entry !== undefined
   const [open, setOpen] = useState(false)
   const [code, setCode] = useState(entry?.code ?? '')
@@ -42,7 +46,6 @@ export default function DictionaryEntryDialog({ dictType, entry, trigger }: Prop
     const current = entry ? readBudgetHours(entry.meta) : null
     return current === null ? '' : String(current)
   })
-  const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const showBudgetHours = dictType === 'doc_type'
@@ -58,42 +61,45 @@ export default function DictionaryEntryDialog({ dictType, entry, trigger }: Prop
   }
 
   const handleSubmit = async () => {
-    setSaving(true)
     setError(null)
 
     const parsedSortOrder = sortOrder.trim() === '' ? 0 : Number(sortOrder)
     const parsedBudgetHours = showBudgetHours && budgetHours.trim() !== '' ? Number(budgetHours) : null
 
-    const result = isEdit
-      ? await updateDictionaryEntry({
-          id: entry.id,
-          label,
-          description: description.trim() === '' ? null : description,
-          sortOrder: parsedSortOrder,
-          budgetHours: showBudgetHours ? parsedBudgetHours : undefined,
-        })
-      : await createDictionaryEntry({
-          dictType,
-          code,
-          label,
-          description: description.trim() === '' ? null : description,
-          sortOrder: parsedSortOrder,
-          budgetHours: showBudgetHours ? parsedBudgetHours : undefined,
-        })
+    const result = await run(() =>
+      isEdit
+        ? updateDictionaryEntry({
+            id: entry.id,
+            label,
+            description: description.trim() === '' ? null : description,
+            sortOrder: parsedSortOrder,
+            budgetHours: showBudgetHours ? parsedBudgetHours : undefined,
+          })
+        : createDictionaryEntry({
+            dictType,
+            code,
+            label,
+            description: description.trim() === '' ? null : description,
+            sortOrder: parsedSortOrder,
+            budgetHours: showBudgetHours ? parsedBudgetHours : undefined,
+          }),
+    )
 
-    setSaving(false)
+    if (result === SKIPPED) return
     if (!result.ok) {
       setError(result.message ?? result.error)
       return
     }
     setOpen(false)
-    router.refresh()
+    refresh()
   }
 
   return (
     <Dialog
       open={open}
       onOpenChange={(next) => {
+        // A save in flight must not be dismissed by an outside click or Esc.
+        if (!next && pending) return
         setOpen(next)
         if (next) reset()
       }}
@@ -117,7 +123,7 @@ export default function DictionaryEntryDialog({ dictType, entry, trigger }: Prop
               placeholder="e.g. RA"
             />
             {isEdit && (
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-muted-foreground">
                 Code is part of the document number and cannot be changed once created.
               </p>
             )}
@@ -163,15 +169,16 @@ export default function DictionaryEntryDialog({ dictType, entry, trigger }: Prop
             </div>
           )}
 
-          {error && <p className="text-xs text-red-600">Error: {error}</p>}
+          {error && <p className="text-xs text-destructive">Error: {error}</p>}
         </div>
 
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={saving}>
+          <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={pending}>
             Cancel
           </Button>
-          <Button type="button" onClick={handleSubmit} disabled={saving || !code.trim() || !label.trim()}>
-            {saving ? 'Saving…' : 'Save'}
+          <Button type="button" onClick={handleSubmit} disabled={pending || !code.trim() || !label.trim()}>
+            {pending && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
+            {pending ? 'Saving…' : 'Save'}
           </Button>
         </DialogFooter>
       </DialogContent>

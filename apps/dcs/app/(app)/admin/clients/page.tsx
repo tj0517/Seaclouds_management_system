@@ -15,6 +15,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@scl/db/server'
 import ClientsTable from '@/components/ClientsTable'
+import { Callout, PageBody, PageHeader } from '@/components/page-chrome'
 import { canOpenAdminScreens } from '@/lib/auth-helpers'
 
 export default async function ClientsPage() {
@@ -44,17 +45,15 @@ export default async function ClientsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl">
-      <h1 className="mb-1 text-2xl font-bold">Clients</h1>
-      <p className="mb-6 text-sm text-gray-500">
-        Clients drive CPY document numbering. Clients are never deleted — deactivate instead.
-      </p>
-      {!isAdmin && (
-        <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-600">
-          Read-only — only an admin can add or edit clients here.
-        </div>
-      )}
+    <PageBody>
+      <PageHeader
+        title="Clients"
+        description="Clients drive CPY document numbering. Clients are never deleted — deactivate instead."
+      />
+      {/* Wording unchanged: docs/demo/1a21-demo-script.md's presenter smoke
+          check reads this sentence back verbatim as the DC-vs-admin contrast. */}
+      {!isAdmin && <Callout>Read-only — only an admin can add or edit clients here.</Callout>}
       <ClientsTable clients={clients ?? []} projectCounts={projectCounts} canEdit={isAdmin} />
-    </div>
+    </PageBody>
   )
 }

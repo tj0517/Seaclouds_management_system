@@ -16,6 +16,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@scl/db/server'
 import DictionariesClient from '@/components/DictionariesClient'
+import { PageBody, PageHeader } from '@/components/page-chrome'
 import { canOpenAdminScreens } from '@/lib/auth-helpers'
 import { DICT_TYPES, type DictionaryRow, type DictType } from '@/lib/dictionaries'
 
@@ -54,12 +55,12 @@ export default async function DictionariesPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl">
-      <h1 className="mb-1 text-2xl font-bold">Dictionaries</h1>
-      <p className="mb-6 text-sm text-gray-500">
-        Company-wide code lists used across every DCS project. Entries are never deleted — deactivate instead.
-      </p>
+    <PageBody>
+      <PageHeader
+        title="Dictionaries"
+        description="Company-wide code lists used across every DCS project. Entries are never deleted — deactivate instead."
+      />
       <DictionariesClient rowsByType={rowsByType} canEdit={canEdit} />
-    </div>
+    </PageBody>
   )
 }
