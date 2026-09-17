@@ -40,8 +40,8 @@ select matches(
 select is(
   (select count(*) from pg_trigger t
     where t.tgfoid = 'public.audit_trigger()'::regprocedure and not t.tgisinternal),
-  7::bigint,
-  'audit_trigger() is attached to exactly seven tables (six before 1a.17b + dcs.mdr_settings)');
+  10::bigint,
+  'audit_trigger() is attached to exactly ten tables (six before 1a.17b + dcs.mdr_settings, then dcs.documents/revisions/files in 1b.01)');
 select is(
   (select count(*) from pg_trigger t
     where t.tgfoid = 'public.audit_trigger()'::regprocedure

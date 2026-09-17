@@ -48,6 +48,180 @@ export type Database = {
         }
         Relationships: []
       }
+      documents: {
+        Row: {
+          approver_id: string | null
+          area_dict_type: string | null
+          area_id: string
+          budget_hours: number | null
+          checker_id: string | null
+          cpy_doc_number: string | null
+          created_at: string
+          ctr_code: string | null
+          current_revision_id: string | null
+          discipline_dict_type: string | null
+          discipline_id: string
+          doc_type_dict_type: string | null
+          doc_type_id: string
+          id: string
+          language_dict_type: string | null
+          language_id: string
+          originator_id: string | null
+          project_id: string
+          scl_doc_number: string
+          title: string
+          updated_at: string
+          workflow_status_dict_type: string | null
+          workflow_status_id: string
+        }
+        Insert: {
+          approver_id?: string | null
+          area_dict_type?: string | null
+          area_id: string
+          budget_hours?: number | null
+          checker_id?: string | null
+          cpy_doc_number?: string | null
+          created_at?: string
+          ctr_code?: string | null
+          current_revision_id?: string | null
+          discipline_dict_type?: string | null
+          discipline_id: string
+          doc_type_dict_type?: string | null
+          doc_type_id: string
+          id?: string
+          language_dict_type?: string | null
+          language_id: string
+          originator_id?: string | null
+          project_id: string
+          scl_doc_number: string
+          title: string
+          updated_at?: string
+          workflow_status_dict_type?: string | null
+          workflow_status_id: string
+        }
+        Update: {
+          approver_id?: string | null
+          area_dict_type?: string | null
+          area_id?: string
+          budget_hours?: number | null
+          checker_id?: string | null
+          cpy_doc_number?: string | null
+          created_at?: string
+          ctr_code?: string | null
+          current_revision_id?: string | null
+          discipline_dict_type?: string | null
+          discipline_id?: string
+          doc_type_dict_type?: string | null
+          doc_type_id?: string
+          id?: string
+          language_dict_type?: string | null
+          language_id?: string
+          originator_id?: string | null
+          project_id?: string
+          scl_doc_number?: string
+          title?: string
+          updated_at?: string
+          workflow_status_dict_type?: string | null
+          workflow_status_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "documents_area_id_fkey"
+            columns: ["area_id", "area_dict_type"]
+            isOneToOne: false
+            referencedRelation: "dictionaries"
+            referencedColumns: ["id", "dict_type"]
+          },
+          {
+            foreignKeyName: "documents_current_revision_id_fkey"
+            columns: ["id", "current_revision_id"]
+            isOneToOne: false
+            referencedRelation: "revisions"
+            referencedColumns: ["document_id", "id"]
+          },
+          {
+            foreignKeyName: "documents_discipline_id_fkey"
+            columns: ["discipline_id", "discipline_dict_type"]
+            isOneToOne: false
+            referencedRelation: "dictionaries"
+            referencedColumns: ["id", "dict_type"]
+          },
+          {
+            foreignKeyName: "documents_doc_type_id_fkey"
+            columns: ["doc_type_id", "doc_type_dict_type"]
+            isOneToOne: false
+            referencedRelation: "dictionaries"
+            referencedColumns: ["id", "dict_type"]
+          },
+          {
+            foreignKeyName: "documents_language_id_fkey"
+            columns: ["language_id", "language_dict_type"]
+            isOneToOne: false
+            referencedRelation: "dictionaries"
+            referencedColumns: ["id", "dict_type"]
+          },
+          {
+            foreignKeyName: "documents_workflow_status_id_fkey"
+            columns: ["workflow_status_id", "workflow_status_dict_type"]
+            isOneToOne: false
+            referencedRelation: "dictionaries"
+            referencedColumns: ["id", "dict_type"]
+          },
+        ]
+      }
+      files: {
+        Row: {
+          file_kind: string
+          file_name: string | null
+          id: string
+          mime_type: string | null
+          original_name: string | null
+          project_id: string
+          revision_id: string
+          size_bytes: number | null
+          sort_order: number
+          storage_path: string | null
+          uploaded_at: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          file_kind: string
+          file_name?: string | null
+          id?: string
+          mime_type?: string | null
+          original_name?: string | null
+          project_id: string
+          revision_id: string
+          size_bytes?: number | null
+          sort_order?: number
+          storage_path?: string | null
+          uploaded_at?: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          file_kind?: string
+          file_name?: string | null
+          id?: string
+          mime_type?: string | null
+          original_name?: string | null
+          project_id?: string
+          revision_id?: string
+          size_bytes?: number | null
+          sort_order?: number
+          storage_path?: string | null
+          uploaded_at?: string
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "files_revision_id_project_id_fkey"
+            columns: ["revision_id", "project_id"]
+            isOneToOne: false
+            referencedRelation: "revisions"
+            referencedColumns: ["id", "project_id"]
+          },
+        ]
+      }
       mdr_settings: {
         Row: {
           budget_hours: number | null
@@ -110,6 +284,92 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      revisions: {
+        Row: {
+          acceptance_code_dict_type: string | null
+          acceptance_code_id: string | null
+          cpy_revision: string | null
+          created_at: string
+          created_by: string | null
+          document_id: string
+          id: string
+          project_id: string
+          reason_for_issue: string | null
+          revision_date: string | null
+          scl_revision: string
+          status_dict_type: string | null
+          status_id: string
+          step_dict_type: string | null
+          step_id: string
+          updated_at: string
+        }
+        Insert: {
+          acceptance_code_dict_type?: string | null
+          acceptance_code_id?: string | null
+          cpy_revision?: string | null
+          created_at?: string
+          created_by?: string | null
+          document_id: string
+          id?: string
+          project_id: string
+          reason_for_issue?: string | null
+          revision_date?: string | null
+          scl_revision: string
+          status_dict_type?: string | null
+          status_id: string
+          step_dict_type?: string | null
+          step_id: string
+          updated_at?: string
+        }
+        Update: {
+          acceptance_code_dict_type?: string | null
+          acceptance_code_id?: string | null
+          cpy_revision?: string | null
+          created_at?: string
+          created_by?: string | null
+          document_id?: string
+          id?: string
+          project_id?: string
+          reason_for_issue?: string | null
+          revision_date?: string | null
+          scl_revision?: string
+          status_dict_type?: string | null
+          status_id?: string
+          step_dict_type?: string | null
+          step_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "revisions_acceptance_code_id_fkey"
+            columns: ["acceptance_code_id", "acceptance_code_dict_type"]
+            isOneToOne: false
+            referencedRelation: "dictionaries"
+            referencedColumns: ["id", "dict_type"]
+          },
+          {
+            foreignKeyName: "revisions_document_id_project_id_fkey"
+            columns: ["document_id", "project_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
+            referencedColumns: ["id", "project_id"]
+          },
+          {
+            foreignKeyName: "revisions_status_id_fkey"
+            columns: ["status_id", "status_dict_type"]
+            isOneToOne: false
+            referencedRelation: "dictionaries"
+            referencedColumns: ["id", "dict_type"]
+          },
+          {
+            foreignKeyName: "revisions_step_id_fkey"
+            columns: ["step_id", "step_dict_type"]
+            isOneToOne: false
+            referencedRelation: "dictionaries"
+            referencedColumns: ["id", "dict_type"]
+          },
+        ]
       }
     }
     Views: {
