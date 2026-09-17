@@ -17,8 +17,8 @@ of the shared screen at that point.
 
 | | |
 |---|---|
-| **URL** | **PENDING — re-pinned once CI is green on the final `apps/` commit of `feat/dcs-1a24-ui-polish` (DCS 1a.24)** |
-| Previous pin (1a gate, commit `87712ee`) | https://dcs-kqpda9tl4-tymon-jezionek.vercel.app — pre-1a.24 styling |
+| **URL** | **https://dcs-6tc9va3es-tymon-jezionek.vercel.app** |
+| Previous pin (1a gate, commit `87712ee`) | https://dcs-kqpda9tl4-tymon-jezionek.vercel.app — pre-1a.24 styling, kept only for comparison |
 | **Backup URL** | none. If Preview is down, the demo does not move to prod. |
 | **Vercel login** | Log in to Vercel **before** joining the call. Preview deployments on the `dcs` project sit behind Vercel Authentication (`ssoProtection = all_except_custom_domains`). Because you present by screen share, the client never sees that wall — but you must clear it first, in the same browser profile you will demo from. |
 | **Accounts** | `dcs1a14-admin@example.com` (admin, TOTP enrolled) · `dcs1a14-dc@example.com` (DC, TOTP enrolled) · `dcs1a14-member@example.com` (plain employee, **no** TOTP) |
@@ -34,10 +34,21 @@ of the shared screen at that point.
 > Every commit after `87712ee` on that branch changed **documentation only**,
 > so that URL served the app as demonstrated at the 1a gate.
 >
-> **Superseded by DCS 1a.24** (`feat/dcs-1a24-ui-polish`), which restyles
-> every screen in `apps/dcs`, adds loading skeletons and a mobile drawer. The
-> URL above is therefore **no longer the build this script describes** — the
-> pin below is.
+> **Superseded by DCS 1a.24** (`feat/dcs-1a24-ui-polish`, PR #55), which
+> restyles every screen in `apps/dcs` and adds loading skeletons and a mobile
+> drawer.
+>
+> **The URL above is the immutable deployment of commit `d1d1470`**, built
+> green on 2026-09-17 (CI, CodeRabbit and both Vercel builds). It is pinned
+> to that commit, not to the branch — pushing more commits does not move it.
+> `d1d1470` is a documentation-only commit on top of `3a08da3`, the last
+> commit on this branch that touches `apps/`; their `apps/` trees are
+> identical, so this URL serves exactly the code described below.
+>
+> **If a later commit touches anything under `apps/`, `packages/` or
+> `supabase/`, this line is wrong** — take the new commit's deployment URL
+> from `vercel ls dcs --meta githubCommitSha=<sha>` and replace it here
+> before the demo.
 
 **State this script assumes on scl-dev** (created during the 1a.21a data prep,
 see `docs/deferred-tasks.md`):
