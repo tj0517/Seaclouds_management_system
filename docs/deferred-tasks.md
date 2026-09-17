@@ -1472,9 +1472,15 @@ wystawia je wszystkie publicznie, a raz rozesłanych URL-i się nie cofa.
 
 ## mm) Follow-ups noted during DCS 1a.24 (UI overhaul of `apps/dcs`)
 
-- **Demo step 1 freezes on "Verifying…" — the second factor SUCCEEDS, only
-  the redirect after it is lost.** Reproducible 3/3 on a local production
-  build against scl-dev, as the presenter performs it: fresh login, click
+- ~~**Demo step 1 freezes on "Verifying…" — the second factor SUCCEEDS, only
+  the redirect after it is lost.**~~ — **CLOSED 2026-09-17 (DCS 1a.25,
+  `fix/mfa-verify-navigation`).** The diagnosis below was right and is now
+  confirmed at the source, not inferred; the fix is at the bottom of this
+  bullet. Original text kept, because the measurements in it are the reason
+  the fix could be aimed at the right layer.
+
+  Reproducible 3/3 on a local production build against scl-dev, as the
+  presenter performs it: fresh login, click
   **Dictionaries** in the sidebar, type the code, press Verify once. The
   button sits on "Verifying…" for ever and no error is shown.
 
@@ -1518,6 +1524,44 @@ wystawia je wszystkie publicznie, a raz rozesłanych URL-i się nie cofa.
   `/mfa`, which has no aal guard; that was a bad inference from a bad test,
   not a finding).
 
+  **Confirmed in 1a.25, out of `next@16.1.1`'s own source — three lines, and
+  together they are the whole bug:**
+
+  - `client/components/segment-cache/navigation.js`, `navigate()`: looks the
+    requested href up in the route cache and, on a fulfilled entry, navigates
+    to **that entry's `canonicalUrl`** without asking the server. For the
+    entry the sidebar click created, that canonicalUrl *is* `/mfa?next=…`.
+  - `client/components/segment-cache/cache.js`, `getStaleTimeMs()`:
+    `Math.max(staleTimeSeconds, 30) * 1000` — **a 30-second floor on every
+    entry, which no `staleTimes` config can lower.** This is why the entry is
+    still fresh when the presenter finishes typing, and it kills the tempting
+    "dynamic staleTime is 0, so it can't be a cache" reading.
+  - `router-reducer/reducers/refresh-reducer.js`, `refreshReducer()`: calls
+    `revalidateEntireCache()` — *"all refreshes purge the prefetch cache"*.
+    So `refresh()` was the cure all along; it was simply called one line too
+    late.
+
+  **Fix: `window.location.assign(next)`** — the navigation moved into
+  `apps/dcs/lib/mfa-navigation.ts` (`navigateAfterMfaVerify`), which
+  `app/mfa/page.tsx` now calls instead of `router.push` + `router.refresh`.
+  Covered by `lib/mfa-navigation.test.ts`, which walks the presenter's path
+  in one context against a model of the gate and of the three cache rules
+  above, for all three ways of entering `/mfa` (verified / enrolment /
+  pending). Shown red on the old two lines first.
+
+  **Refresh-before-push was the other candidate and was rejected** (owner's
+  decision, 2026-09-17). It would have kept the SPA transition, and it goes
+  green against the same test — but `refresh()` also starts its own re-fetch
+  of the *current* route (`/mfa`) and nothing orders that against the push,
+  so a green there proves less than it appears to. The AAL of the session
+  has just changed, which changes the answer every server-side guard gives;
+  a full document load is what that deserves. Cost, stated plainly: the
+  presenter sees one page reload at that beat instead of an instant
+  transition.
+
+  **The aal2 gate itself was not touched** — `proxy.ts` is byte-identical,
+  and `app/(app)/admin/guards.test.ts` passes unedited.
+
 - **1a.24's demo walk did not actually cover step 1's verify leg, and said
   32/32 anyway.** The walk clicked **Dictionaries**, asserted the redirect to
   `/mfa` — which is what step 1 claims — then closed that browser context and
@@ -1546,7 +1590,9 @@ wystawia je wszystkie publicznie, a raz rozesłanych URL-i się nie cofa.
   factor existed at 08:36:39Z, and step 7 passed in full.
 
   **Left in place deliberately** — deleting it is an Auth-data change and
-  needs the owner's go (not given). The residual risk, if it stays: should
+  needs the owner's go (not given). **Still in place after DCS 1a.25**, which
+  asked about it explicitly and was told to leave it (owner's decision,
+  2026-09-17); 1a.25 needed no Auth write to cover the `pending` path. The residual risk, if it stays: should
   this account ever be made a DC or admin again, `/mfa` opens in `pending`
   mode ("You already started setting up…") for a secret nobody recorded, and
   the presenter must click **Start over**. Trap worth naming for anyone
@@ -1616,3 +1662,46 @@ wystawia je wszystkie publicznie, a raz rozesłanych URL-i się nie cofa.
   nothing guards and no test covers.** The 1a.24 walk now checks the persona
   expectations directly, so the next drift of this kind fails loudly instead
   of surfacing on the call.
+
+## nn) Follow-ups noted during DCS 1a.25 (`/mfa` verify navigation)
+
+- **`apps/timesheet/app/mfa/page.tsx` has the identical bug, character for
+  character, and was deliberately NOT fixed.** Line 113 there is the same
+  `router.push(next)` / `router.refresh()` pair that froze DCS's demo step 1,
+  reached through the same aal2 gate in `apps/timesheet/proxy.ts`. Timesheet
+  is production and this task's scope excluded it "in any form", so the
+  tempting one-line symmetric fix was left on the floor. Whether it bites
+  there depends on whether a Timesheet admin reaches `/mfa` by a client-side
+  sidebar click (poisoned cache entry, hang) or by a full page load (works) —
+  **not established, and not guessed at here.** Two things for whoever picks
+  this up: establish that first with the measurement in (mm)'s table rather
+  than assuming DCS's result transfers, and note that `mfa-factor-state.ts`
+  is already duplicated per app, so a shared `mfa-navigation` leaf export on
+  `@scl/db` may be the cheaper landing than a second copy of the fix.
+
+- **There is no test for `proxy.ts` anywhere in this repo — in either app.**
+  1a.25's brief named "the most recent existing tests for `proxy.ts` and the
+  route guards" as the pattern to follow; the guard tests exist
+  (`app/(app)/admin/guards.test.ts`), the proxy ones never did. `find . -name
+  '*.test.ts'` returns fourteen files and none of them loads `proxy.ts`. What
+  actually covers the gate today is that guard test (route level, one layer
+  above) plus the aal2 conjunct in the `dcs.dictionaries` RLS policies
+  (`20260904160000_dictionaries_dc_aal2.sql`), which is the guarantee that
+  survives a direct API call. 1a.25 transcribed the gate's redirect rule into
+  its own test model rather than importing `proxy()` — a middleware function
+  wants a `NextRequest`, `@supabase/ssr` and env vars, which is a bigger
+  harness than that task's minimal diff allowed. **Worth a task of its own**,
+  and if one is written, the transcribed rule in
+  `apps/dcs/lib/mfa-navigation.test.ts` should be deleted in favour of the
+  real thing.
+
+- **The demo script's pinned Preview URL is stale again the moment this
+  merges.** `docs/demo/1a21-demo-script.md` pins an immutable deployment of
+  commit `d1d1470` and carries its own rule: *"If a later commit touches
+  anything under `apps/`, `packages/` or `supabase/`, this line is wrong."*
+  1a.25 touches `apps/dcs/`, so it is wrong. It was not updated in that PR
+  because the replacement URL does not exist until Vercel has built the merge
+  commit — take it from `vercel ls dcs --meta githubCommitSha=<sha>` and
+  re-pin, the way 1a.24 did in its own follow-up commit. **Do this before the
+  1a gate demo**: presenting from the `d1d1470` deployment means presenting
+  the frozen button this task exists to remove.
