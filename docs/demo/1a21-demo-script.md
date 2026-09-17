@@ -17,7 +17,8 @@ of the shared screen at that point.
 
 | | |
 |---|---|
-| **URL** | **https://dcs-kqpda9tl4-tymon-jezionek.vercel.app** |
+| **URL** | **https://dcs-6tc9va3es-tymon-jezionek.vercel.app** |
+| Previous pin (1a gate, commit `87712ee`) | https://dcs-kqpda9tl4-tymon-jezionek.vercel.app — pre-1a.24 styling, kept only for comparison |
 | **Backup URL** | none. If Preview is down, the demo does not move to prod. |
 | **Vercel login** | Log in to Vercel **before** joining the call. Preview deployments on the `dcs` project sit behind Vercel Authentication (`ssoProtection = all_except_custom_domains`). Because you present by screen share, the client never sees that wall — but you must clear it first, in the same browser profile you will demo from. |
 | **Accounts** | `dcs1a14-admin@example.com` (admin, TOTP enrolled) · `dcs1a14-dc@example.com` (DC, TOTP enrolled) · `dcs1a14-member@example.com` (plain employee, **no** TOTP) |
@@ -30,11 +31,24 @@ of the shared screen at that point.
 > commit, not to the branch — pushing more commits does not change where it
 > points, and it will keep serving that exact build.
 >
-> Every commit after `87712ee` on this branch changes **documentation only**
-> (this file included), so the app behind that URL is the app being
-> demonstrated. **If a later commit touches anything under `apps/`,
-> `packages/` or `supabase/`, this line is wrong** — take the new commit's
-> deployment URL from `vercel` and replace it here before the demo.
+> Every commit after `87712ee` on that branch changed **documentation only**,
+> so that URL served the app as demonstrated at the 1a gate.
+>
+> **Superseded by DCS 1a.24** (`feat/dcs-1a24-ui-polish`, PR #55), which
+> restyles every screen in `apps/dcs` and adds loading skeletons and a mobile
+> drawer.
+>
+> **The URL above is the immutable deployment of commit `d1d1470`**, built
+> green on 2026-09-17 (CI, CodeRabbit and both Vercel builds). It is pinned
+> to that commit, not to the branch — pushing more commits does not move it.
+> `d1d1470` is a documentation-only commit on top of `3a08da3`, the last
+> commit on this branch that touches `apps/`; their `apps/` trees are
+> identical, so this URL serves exactly the code described below.
+>
+> **If a later commit touches anything under `apps/`, `packages/` or
+> `supabase/`, this line is wrong** — take the new commit's deployment URL
+> from `vercel ls dcs --meta githubCommitSha=<sha>` and replace it here
+> before the demo.
 
 **State this script assumes on scl-dev** (created during the 1a.21a data prep,
 see `docs/deferred-tasks.md`):
@@ -55,6 +69,15 @@ see `docs/deferred-tasks.md`):
   break the rule that scl-dev changes go through the app. Its `project_code`
   stayed `SC2690` — that column is immutable (1a.17c), and the Edit dialog
   shows the field disabled for exactly that reason;
+- `dcs1a14-member` holds **no `dc` role on any project**. It briefly did: a
+  Document Controller role on SC2699 was granted to it on 2026-09-17 at
+  07:11Z by the `ADMIN` account (`audit_log` id `10069ff9`), which made step 7
+  wrong — that account would have seen **Dictionaries** and **Clients** and
+  been sent to the 2FA gate, where, having no TOTP factor, it would have hit
+  *enrolment* live on the call. Revoked through the app during DCS 1a.24 with
+  the owner's agreement; the revocation has its own `audit_log` row. Its
+  `orig` role on SC2699 and its SC2602 roles were not touched. **If step 7
+  ever shows Dictionaries/Clients again, check this first.**
 - doc_type **`ZZT · "1a.21a rehearsal"`** exists but is **inactive** — the
   rehearsal's entry, retired rather than deleted, so it is hidden from the
   Document Type list unless **Show inactive** is on, and is not offered
@@ -108,8 +131,11 @@ on that URL**.
 
 1. Open the URL. The DCS login page appears.
 2. Enter the email and password, submit. **You land straight on the project
-   list — no second-factor prompt yet.** The sidebar reads **SCL DCS**, your
-   name, then **Projects · Dictionaries · Clients**, and **Sign out**.
+   list — no second-factor prompt yet.** The sidebar reads **SCL DCS** at the
+   top, then the module switcher, then **Projects · Dictionaries · Clients**;
+   your name, your email and **Sign out** sit at the **bottom** of the
+   sidebar. (The name moved down there in DCS 1a.24 — it used to sit directly
+   under "SCL DCS".)
 3. Now click **Dictionaries** in the sidebar. *This* is where the app asks for
    the 6-digit TOTP code. Enter it; you arrive on the dictionaries screen.
 4. Click **Projects** to go back. No second prompt — the session is now aal2
@@ -169,8 +195,10 @@ switcher in the sidebar; the grant is what matters, not the trip.
 4. Repeat for `DCS1a14 Test Member-of-PEJ` → tick **Originator**.
 5. Repeat for `DCS1a14 Test Admin` → tick **Checker** and **Approver**.
 
-**Expected:** the team table grows to three rows. Each row has the six role
-checkboxes with a **Save** button; the ticks you made are already saved.
+**Expected:** the team list grows to three entries under a **Team** heading —
+one bordered card each, not table rows (restyled in DCS 1a.24). Each card has
+the six role checkboxes with a **Save** button on the right; the ticks you
+made are already saved.
 
 **Say:** "Six roles, and they are per project, not per person — the same
 engineer can be Originator on one project and Checker on another. **ORIG**
@@ -239,7 +267,10 @@ later in the script depends on which code it was. `SC2690` is *not* a reserve
      **Reactivate**. Nothing was deleted.
    - Leave the switch on for a moment so they can see both states at once.
 
-**Expected:** both changes appear immediately, without a page reload.
+**Expected:** both changes appear immediately, without a page reload. Since
+DCS 1a.24 the **Save** button also shows a spinner and reads *Saving…* until
+the refreshed table is actually on screen — if you are used to the old build,
+that pause is now visible rather than silent.
 
 **Say (at the moment the row vanishes):** "It has not been deleted — it has
 been retired. New documents will not be offered it; every document that

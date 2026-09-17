@@ -571,7 +571,18 @@ PR (one topic per PR). Each item names its owner task or trigger:
   1a.17 (Create Project MDR wizard — creates one project, doesn't list
   them) and 1a.14 (role matrix screen — reached by clicking into a project
   from a list, doesn't own the list itself).
-- **No mobile drawer/hamburger on `apps/dcs/components/DcsSidebar.tsx`**,
+- ~~**No mobile drawer/hamburger on `apps/dcs/components/DcsSidebar.tsx`**~~ —
+  **CLOSED 2026-09-17 (DCS 1a.24, `feat/dcs-1a24-ui-polish`).** The drawer
+  lives in `apps/dcs/components/AppShell.tsx` (shadcn `Sheet` over
+  `@radix-ui/react-dialog`, already a dependency since 1a.15 — no new
+  package), opened from a header button below 768px, and it renders the
+  **same** `DcsSidebar`, not a phone-shaped copy of it. Tapping an entry
+  dismisses it. Verified at 375px: drawer 272px wide, offering exactly
+  Projects · Dictionaries · Clients. Closed together with the icon half
+  below, in one pass, as that entry asked. Original text follows.
+
+- **[original]** No mobile drawer/hamburger on
+  `apps/dcs/components/DcsSidebar.tsx`,
   unlike Timesheet's `AdminSidebar` (which has one). Trigger was **1a.14**
   ("the first task that adds a second nav entry") — 1a.14 came and went
   without one. **Update (DCS 1a.21a, 2026-09-16): the premise "DCS has
@@ -580,7 +591,11 @@ PR (one topic per PR). Each item names its owner task or trigger:
   on has actually fired. Still not done: 1a.21a's scope was the links, and a
   drawer is a layout change with its own review. No new trigger invented —
   whoever next touches `DcsSidebar` owns it.
-- ~~**`DcsSidebar` nav uses plain text, no icon library**~~ — the dependency
+- ~~**`DcsSidebar` nav uses plain text, no icon library**~~ — **CLOSED
+  2026-09-17 (DCS 1a.24).** Every entry now carries a lucide icon
+  (`FolderKanban` / `BookMarked` / `Building2`, plus `LogOut` on sign out),
+  done in one pass so no second style was introduced, exactly as this entry
+  required. The original note, already half-stale, follows: the dependency
   half is **obsolete**: `apps/dcs/package.json` has carried `lucide-react`
   since 1a.15 brought in shadcn/ui, so "DCS has no icon dependency" is simply
   stale (verified 2026-09-16). What remains is a choice, not a blocker: the
@@ -601,6 +616,27 @@ PR (one topic per PR). Each item names its owner task or trigger:
   none of it (the read is skipped when `profiles.role = 'admin'`). Trigger:
   a measured problem, or a third non-admin caller on the same request. Not
   before — untestable-but-faster is the wrong direction for this file.
+
+  **MEASURED 2026-09-17 (DCS 1a.24) — not significant, still not fixed.**
+  The trigger above says "a measured problem", so it was measured, against
+  scl-dev, on a local production build. An admin and a DC differ by exactly
+  these reads, so the gap between them is the cost. Five samples each,
+  median:
+
+  | Route | admin | `dcs1a14-dc` | delta |
+  |---|---|---|---|
+  | `/admin/dictionaries` | 416 ms | 422 ms | **+6 ms** |
+  | `/admin/clients` | 394 ms | 425 ms | **+31 ms** |
+
+  Within-session spread was 30–35 ms, so `/admin/dictionaries` shows nothing
+  at all and `/admin/clients` shows a delta no larger than the noise. Two
+  caveats, so nobody reads more into this than it holds: the two sessions do
+  not render identical row counts (`clients`' RLS narrows the list for a DC,
+  which if anything makes the DC's page *cheaper*), and every one of these
+  routes costs 400 ms regardless — the duplicate read is not where the time
+  goes. **Conclusion: the trigger has NOT fired.** Deduping remains the wrong
+  trade against the testability argument above. Do not revisit without a
+  third non-admin caller.
 
 ## y) Follow-ups noted during DCS 1a.23 (portal tiles + shared-domain SSO)
 
@@ -1433,3 +1469,150 @@ wystawia je wszystkie publicznie, a raz rozesłanych URL-i się nie cofa.
   że w ogóle przepuszcza po podaniu kodu. **Nic nie zmieniono**: `proxy.ts`
   był poza zakresem 1a.21a, a `request.nextUrl` zamiast `request.url` to
   zmiana warta własnego PR-a i własnego dowodu, nie dopisku przy demie.
+
+## mm) Follow-ups noted during DCS 1a.24 (UI overhaul of `apps/dcs`)
+
+- **Demo step 1 freezes on "Verifying…" — the second factor SUCCEEDS, only
+  the redirect after it is lost.** Reproducible 3/3 on a local production
+  build against scl-dev, as the presenter performs it: fresh login, click
+  **Dictionaries** in the sidebar, type the code, press Verify once. The
+  button sits on "Verifying…" for ever and no error is shown.
+
+  What actually happens, measured rather than inferred — the same run on both
+  paths:
+
+  | | client-side nav (the presenter's) | full page load |
+  |---|---|---|
+  | `POST /auth/v1/factors/…/verify` | **200** | 200 |
+  | auth cookie after | **aal2** (2959 → 2998 b) | aal2 (2958 → 2999 b) |
+  | ends up on | **`/mfa`, stuck** | `/admin/dictionaries` |
+
+  So `challengeAndVerify()` settles, GoTrue issues the aal2 session and
+  `@supabase/ssr` writes it to the cookie. Only `router.push(next)` fails to
+  move. The session behind the frozen button is fully aal2: typing
+  `/admin/dictionaries` renders it, and clicking **Clients** in the sidebar
+  goes straight there with no second prompt. **The presenter is not blocked**
+  — any click continues — but they stare at a dead button during the exact
+  beat step 1 exists to make.
+
+  Likely cause, untested and left for whoever takes the fix: the Next.js
+  client router cached the RSC entry for `/admin/dictionaries` on the first
+  click, when it resolved to the `/mfa` redirect; `router.push(next)` re-uses
+  that cached entry and resolves back to `/mfa`. A full load has no such
+  cache. `router.refresh()` is called *after* `push`, so it never clears it
+  in time. Candidate fixes are a one-liner either way — refresh before push,
+  or `window.location.assign(next)` — but they are auth-flow changes and
+  1a.24 was UI-only, so they were deliberately NOT made here.
+
+  **Pre-existing, not caused by 1a.24** — nothing under `app/mfa/` or
+  `proxy.ts` changed, and it reproduces the same on both sides of the change.
+  **Owner: a separate task, to land BEFORE the 1a gate demo** (owner's
+  decision, 2026-09-17). The demo script was deliberately left describing the
+  intended behaviour rather than a workaround, so if that task slips, step 1
+  shows a frozen button — check this entry first.
+
+  Two corrections to the first version of this entry, both mine, kept
+  because the wrong version would send the next reader to the wrong layer:
+  it claimed `challengeAndVerify()` "never settles" (it does — 200) and that
+  "the only way out is a reload" (a reload of `/mfa` naturally stays on
+  `/mfa`, which has no aal guard; that was a bad inference from a bad test,
+  not a finding).
+
+- **1a.24's demo walk did not actually cover step 1's verify leg, and said
+  32/32 anyway.** The walk clicked **Dictionaries**, asserted the redirect to
+  `/mfa` — which is what step 1 claims — then closed that browser context and
+  took its aal2 session in a fresh one via a full page load. That is exactly
+  the path that works, so the hang above survived a "green" walk. Rule for
+  the next walk of this script: a step is only walked if it is walked
+  end to end, in one context, the way the presenter does it.
+
+- **`dcs1a14-member` carries an UNVERIFIED TOTP factor on scl-dev, created by
+  1a.24's own verification walk.** Factor
+  `8abe5128-44d9-438d-9d4c-ce2a997789e5`, `status = unverified`,
+  `friendly_name = "totp-1789634199280"`, created 2026-09-17T08:36:39.471Z.
+  The friendly name is `Date.now()` from `app/mfa/page.tsx`'s auto-enrolment,
+  and it decodes to 08:36:39.280Z — 191 ms before the row, so that line
+  minted it. Mechanism: while the account still held the stray `dc` role (see
+  the SC2699 entry below), the walk's step 7 opened `/admin/dictionaries`,
+  `proxy.ts` sent it to `/mfa`, and `MfaPage`'s mount effect enrolled a
+  factor because none existed. Only one exists despite several runs, because
+  `resolveMfaFactorState` returns `pending` for an existing unverified factor
+  and reuses it instead of enrolling again.
+
+  **It changes nothing at step 7**: an unverified factor does not raise AAL
+  (that session is `aal1`, `amr` password-only, zero verified factors), and
+  the `proxy.ts` gate only fires for an admin or a DC, which this account is
+  no longer. Proven directly — the passing walk ran at 08:55:18Z, after the
+  factor existed at 08:36:39Z, and step 7 passed in full.
+
+  **Left in place deliberately** — deleting it is an Auth-data change and
+  needs the owner's go (not given). The residual risk, if it stays: should
+  this account ever be made a DC or admin again, `/mfa` opens in `pending`
+  mode ("You already started setting up…") for a secret nobody recorded, and
+  the presenter must click **Start over**. Trap worth naming for anyone
+  scripting against `/admin` as a non-enrolled DC: merely *visiting* the gate
+  enrols a factor as a side effect.
+
+- **The per-row "Team" link is the one link in the app with no in-flight
+  indicator, and a test pins it that way.**
+  `apps/dcs/app/(app)/nav.test.ts` asserts that link's children are exactly
+  the string `'Team'`, and `useLinkStatus()` only reports from *inside* its
+  own `<Link>` — so any sibling indicator there fails a test 1a.24 was
+  required not to edit. The click is still acknowledged: it lands on
+  `/admin/projects/[projectId]`, whose `loading.tsx` skeleton paints on the
+  first frame. Whoever next touches that test can give the link the same
+  treatment as the others by matching on the href instead of the children.
+
+- **`AppShell` takes its sidebar as the FIRST CHILD, not as a prop**, for the
+  same reason: `nav.test.ts` finds `DcsSidebar` by walking `props.children`
+  from the layout's returned tree and never looks at other props, so
+  `sidebar={<DcsSidebar/>}` would hide it from that test. Positional children
+  is a weak API and exists only to satisfy it. Same story for `SidebarNav`,
+  which takes the `<Link>` elements as children and clones them to add the
+  active styling rather than rendering them from a list of hrefs. Both are
+  worth revisiting together with the point above, in one task that is allowed
+  to touch the test.
+
+- **A double submit is stopped by a latch, not by `disabled` — checked, not
+  assumed.** Measured on the real build: dispatching five clicks in ONE
+  JavaScript task leaves the button reading "Save" with `disabled === false`
+  through all five, because React does not commit the re-render between them.
+  Without `lib/single-flight.ts` that is five server-action POSTs; with it,
+  one. Two traps for whoever writes the next such test: (1) Next.js
+  **serialises** server-action requests, so holding the first POST open keeps
+  every later one queued in the client and invisible to a request counter —
+  the test then passes with the guard removed; answer the request instead of
+  holding it. (2) Restoring the source is not enough between a red and a
+  green run — `next start` serves the old bundle until you rebuild, which
+  silently produced three "green" results from a broken build during this
+  task.
+
+- **`isNavItemActive`'s special case for `"/"` was dead code, and only the
+  red-proof run showed it.** The first draft branched on `href === '/'`
+  before the generic subtree test. Removing that branch changed no test
+  result at all, because the generic test appends the separator (`"//"`),
+  which is not a prefix of any real path. The branch is gone. Worth
+  remembering as a method note: a red proof is not only for confirming a test
+  bites — it is also how you find a guard that never did anything.
+
+- **`docs/deferred-tasks.md` (z) held.** The scl-dev timing, the screenshots
+  and the demo walk all needed a real signed-in session, which the agent
+  cannot obtain on its own. It asked rather than improvising, and the owner
+  authorised reading the backups file for this task only. Nothing from it
+  reached the repo, the PR or the report. The entry's advice stands: budget
+  the human step, or authorise it explicitly up front.
+
+- **A role grant on scl-dev silently broke demo step 7, and it was not this
+  task.** `dcs1a14-member` was granted **Document Controller on SC2699** on
+  2026-09-17 at 07:11:14Z by the `ADMIN` account (`public.audit_log` id
+  `10069ff9-5fb4-4a26-916d-01b3a4a5352a`, IP `44.193.196.105`) — 24 minutes
+  before this branch existed. The effect: the "plain employee" of step 7 saw
+  **Dictionaries** and **Clients**, was sent to the aal2 gate, and — having
+  no TOTP factor — would have landed on 2FA *enrolment* in front of the
+  client. Revoked through the app during 1a.24 with the owner's agreement
+  (its own `audit_log` row); the account's `orig` role on SC2699 and its
+  SC2602 roles were left alone. The general lesson, which is the reason this
+  is written down: **the demo's correctness depends on scl-dev rows that
+  nothing guards and no test covers.** The 1a.24 walk now checks the persona
+  expectations directly, so the next drift of this kind fails loudly instead
+  of surfacing on the call.

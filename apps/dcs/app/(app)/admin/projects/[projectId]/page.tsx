@@ -22,7 +22,9 @@ import { createClient } from '@scl/db/server'
 import AddMemberForm from '@/components/AddMemberForm'
 import EditProjectDialog from '@/components/EditProjectDialog'
 import RoleCheckboxGroup from '@/components/RoleCheckboxGroup'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Callout, EmptyState, PageBody, PageHeader } from '@/components/page-chrome'
 import { getActiveClients } from '@/lib/clients-admin'
 import { excludeIds, getProfileDirectory } from '@/lib/profile-directory'
 import { MDR_STATUS_LABELS, PROCESS_TYPE_LABELS, getProjectMdr } from '@/lib/project-mdr'
@@ -91,87 +93,88 @@ export default async function ProjectTeamPage({ params }: { params: Promise<{ pr
   }
 
   return (
-    <div className="mx-auto max-w-4xl">
-      <div className="mb-1 flex items-center gap-2">
-        <h1 className="text-2xl font-bold">{project.name}</h1>
-        {!project.is_active && (
-          <span className="rounded-full bg-gray-200 px-2 py-0.5 text-xs text-gray-600">inactive</span>
-        )}
-        {isAdmin && (
-          <div className="ml-auto">
+    <PageBody className="max-w-4xl">
+      <PageHeader
+        title={
+          <span className="flex flex-wrap items-center gap-2">
+            {project.name}
+            {!project.is_active && (
+              <Badge variant="outline" className="text-muted-foreground">
+                inactive
+              </Badge>
+            )}
+          </span>
+        }
+        description={<span className="font-mono">{project.project_code}</span>}
+        actions={
+          isAdmin ? (
             <EditProjectDialog
               project={project}
               settings={settings}
               clients={clients.map((client) => ({ id: client.id, name: client.name, code: client.code }))}
-              trigger={
-                <Button size="sm" variant="outline">
-                  Edit
-                </Button>
-              }
+              trigger={<Button size="sm" variant="outline">Edit</Button>}
             />
-          </div>
-        )}
-      </div>
-      <p className="mb-6 text-sm text-gray-500">{project.project_code}</p>
+          ) : null
+        }
+      />
 
       {settings ? (
-        <dl className="mb-6 grid grid-cols-2 gap-x-6 gap-y-1 rounded-lg border border-gray-200 bg-white p-4 text-sm sm:grid-cols-4">
+        <dl className="mb-6 grid grid-cols-2 gap-x-6 gap-y-4 rounded-lg border bg-card p-4 text-sm sm:grid-cols-3 lg:grid-cols-6">
           <div>
-            <dt className="text-xs text-gray-500">Process type</dt>
-            <dd>{project.process_type ? PROCESS_TYPE_LABELS[project.process_type] : 'not classified'}</dd>
+            <dt className="text-xs text-muted-foreground">Process type</dt>
+            <dd className="mt-0.5 font-medium">
+              {project.process_type ? PROCESS_TYPE_LABELS[project.process_type] : 'not classified'}
+            </dd>
           </div>
           <div>
-            <dt className="text-xs text-gray-500">Year</dt>
-            <dd>{project.year ?? '—'}</dd>
+            <dt className="text-xs text-muted-foreground">Year</dt>
+            <dd className="mt-0.5 font-medium tabular-nums">{project.year ?? '—'}</dd>
           </div>
           <div>
-            <dt className="text-xs text-gray-500">Review cycle</dt>
-            <dd>
+            <dt className="text-xs text-muted-foreground">Review cycle</dt>
+            <dd className="mt-0.5 font-medium tabular-nums">
               {settings.cycle_idc_to_ifr}/{settings.cycle_ifr_to_retcom}/{settings.cycle_retcom_to_ifc} days
             </dd>
           </div>
           <div>
-            <dt className="text-xs text-gray-500">MDR status</dt>
-            <dd>{MDR_STATUS_LABELS[settings.status]}</dd>
+            <dt className="text-xs text-muted-foreground">MDR status</dt>
+            <dd className="mt-0.5 font-medium">{MDR_STATUS_LABELS[settings.status]}</dd>
           </div>
           <div>
-            <dt className="text-xs text-gray-500">Budget</dt>
-            <dd>{settings.budget_hours === null ? 'no budget' : `${settings.budget_hours} h`}</dd>
+            <dt className="text-xs text-muted-foreground">Budget</dt>
+            <dd className="mt-0.5 font-medium tabular-nums">
+              {settings.budget_hours === null ? 'no budget' : `${settings.budget_hours} h`}
+            </dd>
           </div>
           <div>
-            <dt className="text-xs text-gray-500">CPY numbering</dt>
-            <dd>{settings.cpy_numbering ? 'yes' : 'no'}</dd>
+            <dt className="text-xs text-muted-foreground">CPY numbering</dt>
+            <dd className="mt-0.5 font-medium">{settings.cpy_numbering ? 'yes' : 'no'}</dd>
           </div>
         </dl>
       ) : (
-        <div className="mb-6 rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-600">
-          DCS does not run this project — it has no MDR settings row (docs/02-data-model.md).
-        </div>
+        <Callout>DCS does not run this project — it has no MDR settings row (docs/02-data-model.md).</Callout>
       )}
 
-      {!hasDc && (
-        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-          No Document Controller assigned to this project.
-        </div>
-      )}
+      {!hasDc && <Callout tone="warning">No Document Controller assigned to this project.</Callout>}
       {!canEdit && (
-        <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-600">
+        <Callout>
           Read-only — only an admin or this project&apos;s Document Controller can change roles here.
-        </div>
+        </Callout>
       )}
       {directory.degraded && (
-        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+        <Callout tone="error">
           Couldn&apos;t load teammate names right now — showing ids instead where a name is missing.
-        </div>
+        </Callout>
       )}
 
+      <h2 className="mb-2 mt-6 text-sm font-semibold">Team</h2>
       <div className="space-y-3">
         {memberIds.length === 0 ? (
-          <p className="text-sm text-gray-500">No team members visible.</p>
+          <EmptyState title="No team members visible" />
         ) : (
           memberIds.map((memberId) => (
-            <div key={memberId} className="rounded-lg border border-gray-200 bg-white p-4">
-              <div className="mb-2 font-medium text-sm">{displayName(memberId)}</div>
+            <div key={memberId} className="rounded-lg border bg-card p-4">
+              <div className="mb-3 text-sm font-medium">{displayName(memberId)}</div>
               <RoleCheckboxGroup
                 projectId={projectId}
                 userId={memberId}
@@ -188,6 +191,6 @@ export default async function ProjectTeamPage({ params }: { params: Promise<{ pr
           <AddMemberForm projectId={projectId} candidates={candidates} />
         </div>
       )}
-    </div>
+    </PageBody>
   )
 }

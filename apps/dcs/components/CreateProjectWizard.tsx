@@ -17,9 +17,12 @@
 // convention components/IfRole.tsx set in 1a.12).
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { Check, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { SELECT_CLASS } from '@/components/AddMemberForm'
+import { SKIPPED, usePendingAction } from '@/hooks/use-pending-action'
 import { createProjectMdr } from '@/app/data/actions/project-mdr'
 import {
   DEFAULT_CYCLE,
@@ -83,6 +86,11 @@ const ERROR_COPY: Record<ProjectMdrError, { message: string; step: number | null
 
 export default function CreateProjectWizard({ clients, candidates }: Props) {
   const router = useRouter()
+  // DCS 1a.24: "Create project" stays pending across BOTH halves of the
+  // finish — the transaction and the push to the new project's page. The old
+  // code cleared it before router.push(), so the last thing the user saw
+  // after the slowest action in the app was an idle button.
+  const { run, pending: submitting } = usePendingAction()
   const [step, setStep] = useState(0)
 
   // Step 1 — identification
@@ -112,7 +120,6 @@ export default function CreateProjectWizard({ clients, candidates }: Props) {
   // Step 6 — budget
   const [budgetHours, setBudgetHours] = useState('')
 
-  const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
 
   const internal = skipsClientStep(processType)
@@ -203,10 +210,10 @@ export default function CreateProjectWizard({ clients, candidates }: Props) {
   }
 
   const handleSubmit = async () => {
-    setSubmitting(true)
     setSubmitError(null)
 
-    const result = await createProjectMdr({
+    const result = await run(() =>
+      createProjectMdr({
       projectCode: projectCode.trim(),
       name: name.trim(),
       processType,
@@ -220,9 +227,10 @@ export default function CreateProjectWizard({ clients, candidates }: Props) {
       budgetHours: budgetNumber,
       roles,
       ctrCodes,
-    })
+      }),
+    )
 
-    setSubmitting(false)
+    if (result === SKIPPED) return
     if (!result.ok) {
       const copy = ERROR_COPY[result.error]
       // The database's own message is appended, not replaced: an off-format
@@ -233,6 +241,9 @@ export default function CreateProjectWizard({ clients, candidates }: Props) {
       return
     }
 
+    // Not wrapped in the hook's refresh(): this navigates away rather than
+    // re-reading the current page, and `submitting` must stay true until the
+    // new page replaces this one.
     router.push(`/admin/projects/${result.data}`)
     router.refresh()
   }
@@ -240,23 +251,31 @@ export default function CreateProjectWizard({ clients, candidates }: Props) {
   const unassigned = candidates.filter((candidate) => !team.some((member) => member.userId === candidate.id))
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-5">
+    <div className="rounded-lg border bg-card p-5">
       {/* Stepper header */}
-      <ol className="mb-6 flex flex-wrap gap-x-4 gap-y-1 text-xs">
-        {visibleSteps.map(({ title, index }, i) => (
-          <li
-            key={title}
-            className={
-              index === step
-                ? 'font-semibold text-blue-700'
-                : i < position
-                  ? 'text-gray-500'
-                  : 'text-gray-400'
-            }
-          >
-            {i + 1}. {title}
-          </li>
-        ))}
+      <ol className="mb-6 flex flex-wrap items-center gap-x-2 gap-y-2 text-xs">
+        {visibleSteps.map(({ title, index }, i) => {
+          const done = i < position
+          const current = index === step
+          return (
+            <li key={title} className="flex items-center gap-2">
+              <span
+                className={
+                  'flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold ' +
+                  (current
+                    ? 'bg-primary text-primary-foreground'
+                    : done
+                      ? 'bg-success-bg text-success'
+                      : 'bg-secondary text-muted-foreground')
+                }
+              >
+                {done ? <Check className="h-3 w-3" /> : i + 1}
+              </span>
+              <span className={current ? 'font-semibold' : 'text-muted-foreground'}>{title}</span>
+              {i < visibleSteps.length - 1 && <span aria-hidden="true" className="ml-1 h-px w-4 bg-border" />}
+            </li>
+          )
+        })}
       </ol>
 
       {/* ---------------- Step 1: identification ---------------- */}
@@ -271,11 +290,11 @@ export default function CreateProjectWizard({ clients, candidates }: Props) {
               placeholder="SC2601"
             />
             {projectCode.trim() !== '' && !isValidProjectCode(projectCode.trim()) ? (
-              <p className="text-xs text-red-600">
+              <p className="text-xs text-destructive">
                 Must be SCYYNN (SC2601) or start with SCMS — the same rule the database enforces.
               </p>
             ) : (
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-muted-foreground">
                 First segment of every document number in this project (SC2601-SCL-RA-0012-EN).
               </p>
             )}
@@ -291,7 +310,7 @@ export default function CreateProjectWizard({ clients, candidates }: Props) {
               <Label htmlFor="process-type">Process type</Label>
               <select
                 id="process-type"
-                className="w-full rounded border border-gray-300 px-2 py-2 text-sm"
+                className={`w-full ${SELECT_CLASS}`}
                 value={processType}
                 onChange={(e) => setProcessType(e.target.value as ProcessType)}
               >
@@ -301,7 +320,7 @@ export default function CreateProjectWizard({ clients, candidates }: Props) {
                   </option>
                 ))}
               </select>
-              {internal && <p className="text-xs text-gray-500">Internal projects skip the client step.</p>}
+              {internal && <p className="text-xs text-muted-foreground">Internal projects skip the client step.</p>}
             </div>
             <div className="space-y-1">
               <Label htmlFor="project-year">Year</Label>
@@ -311,7 +330,7 @@ export default function CreateProjectWizard({ clients, candidates }: Props) {
                 value={year}
                 onChange={(e) => setYear(e.target.value)}
               />
-              {!yearValid && year.trim() !== '' && <p className="text-xs text-red-600">Year must be a whole number.</p>}
+              {!yearValid && year.trim() !== '' && <p className="text-xs text-destructive">Year must be a whole number.</p>}
             </div>
           </div>
         </div>
@@ -324,7 +343,7 @@ export default function CreateProjectWizard({ clients, candidates }: Props) {
             <Label htmlFor="client">Client</Label>
             <select
               id="client"
-              className="w-full rounded border border-gray-300 px-2 py-2 text-sm"
+              className={`w-full ${SELECT_CLASS}`}
               value={clientId}
               onChange={(e) => setClientId(e.target.value)}
             >
@@ -336,16 +355,16 @@ export default function CreateProjectWizard({ clients, candidates }: Props) {
               ))}
             </select>
             {clients.length === 0 && (
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-muted-foreground">
                 No active clients — add one on the Clients screen first, or leave this empty for now.
               </p>
             )}
           </div>
 
-          <label className="flex items-start gap-2 text-sm text-gray-700">
+          <label className="flex items-start gap-2 text-sm">
             <input
               type="checkbox"
-              className="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-600"
+              className="mt-0.5 h-4 w-4 rounded border-input accent-[hsl(var(--primary))] focus-visible:ring-2 focus-visible:ring-ring"
               checked={cpyNumbering}
               onChange={(e) => setCpyNumbering(e.target.checked)}
             />
@@ -362,7 +381,7 @@ export default function CreateProjectWizard({ clients, candidates }: Props) {
       {/* ---------------- Step 3: review cycle ---------------- */}
       {step === 2 && (
         <div className="space-y-4">
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-muted-foreground">
             Calendar days between stages. Documents in this project inherit these; the default 7/10/7 totals 24
             days.
           </p>
@@ -381,7 +400,7 @@ export default function CreateProjectWizard({ clients, candidates }: Props) {
             </div>
           </div>
           {!cyclesValid && (
-            <p className="text-xs text-red-600">Each cycle length is a whole number of days, greater than zero.</p>
+            <p className="text-xs text-destructive">Each cycle length is a whole number of days, greater than zero.</p>
           )}
         </div>
       )}
@@ -390,25 +409,25 @@ export default function CreateProjectWizard({ clients, candidates }: Props) {
       {step === 3 && (
         <div className="space-y-4">
           {!hasDocController(roles) && (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+            <div className="rounded-lg border border-warning/25 bg-warning-bg p-3 text-sm text-warning">
               No Document Controller assigned. You can still create the project — but the DC is the only role
               that issues numbers and closes the review cycle, and is who will see this project on /dcs.
             </div>
           )}
 
           {team.length === 0 ? (
-            <p className="text-sm text-gray-500">No one assigned yet.</p>
+            <p className="text-sm text-muted-foreground">No one assigned yet.</p>
           ) : (
             <div className="space-y-3">
               {team.map((member) => (
-                <div key={member.userId} className="rounded-lg border border-gray-200 p-3">
+                <div key={member.userId} className="rounded-lg border p-3">
                   <div className="mb-2 flex items-center justify-between">
                     <span className="text-sm font-medium">
                       {nameById.get(member.userId) ?? `${member.userId.slice(0, 8)}…`}
                     </span>
                     <button
                       type="button"
-                      className="text-xs text-red-600 hover:underline"
+                      className="text-xs text-destructive hover:underline"
                       onClick={() => setTeam((prev) => prev.filter((m) => m.userId !== member.userId))}
                     >
                       Remove
@@ -416,10 +435,10 @@ export default function CreateProjectWizard({ clients, candidates }: Props) {
                   </div>
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
                     {PROJECT_ROLES.map((role) => (
-                      <label key={role} className="flex items-center gap-1.5 text-sm text-gray-700">
+                      <label key={role} className="flex items-center gap-1.5 text-sm">
                         <input
                           type="checkbox"
-                          className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-600"
+                          className="h-4 w-4 rounded border-input accent-[hsl(var(--primary))] focus-visible:ring-2 focus-visible:ring-ring"
                           checked={member.roles.includes(role)}
                           onChange={() => toggleRole(member.userId, role)}
                         />
@@ -428,7 +447,7 @@ export default function CreateProjectWizard({ clients, candidates }: Props) {
                     ))}
                   </div>
                   {member.roles.length === 0 && (
-                    <p className="mt-1 text-xs text-gray-500">
+                    <p className="mt-1 text-xs text-muted-foreground">
                       No role ticked — this person will not be added to the project.
                     </p>
                   )}
@@ -438,9 +457,9 @@ export default function CreateProjectWizard({ clients, candidates }: Props) {
           )}
 
           {unassigned.length > 0 && (
-            <div className="flex flex-wrap items-center gap-3 rounded-lg border border-dashed border-gray-300 p-3">
+            <div className="flex flex-wrap items-center gap-3 rounded-lg border border-dashed p-3">
               <select
-                className="rounded border border-gray-300 px-2 py-1 text-sm"
+                className={SELECT_CLASS}
                 value={pickedUser}
                 onChange={(e) => setPickedUser(e.target.value)}
               >
@@ -462,28 +481,28 @@ export default function CreateProjectWizard({ clients, candidates }: Props) {
       {/* ---------------- Step 5: CTR codes ---------------- */}
       {step === 4 && (
         <div className="space-y-4">
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-muted-foreground">
             CTR codes (public.sub_projects) are per project, so this project has none yet — add them here.
             Documents and Timesheet hours are both booked against them.
           </p>
 
           {ctrCodes.length > 0 && (
-            <ul className="divide-y divide-gray-100 rounded-lg border border-gray-200">
+            <ul className="divide-y rounded-lg border">
               {ctrCodes.map((entry, index) => (
                 <li key={`${entry.code}-${index}`} className="flex items-center justify-between px-3 py-2 text-sm">
                   <span>
                     <span
                       className={
-                        ctrDuplicates.includes(entry.code) ? 'font-mono text-red-600' : 'font-mono'
+                        ctrDuplicates.includes(entry.code) ? 'font-mono text-destructive' : 'font-mono'
                       }
                     >
                       {entry.code}
                     </span>
-                    {entry.description && <span className="ml-2 text-gray-500">{entry.description}</span>}
+                    {entry.description && <span className="ml-2 text-muted-foreground">{entry.description}</span>}
                   </span>
                   <button
                     type="button"
-                    className="text-xs text-red-600 hover:underline"
+                    className="text-xs text-destructive hover:underline"
                     onClick={() => setCtrCodes((prev) => prev.filter((_, i) => i !== index))}
                   >
                     Remove
@@ -494,13 +513,13 @@ export default function CreateProjectWizard({ clients, candidates }: Props) {
           )}
 
           {ctrDuplicates.length > 0 && (
-            <p className="text-xs text-red-600">
+            <p className="text-xs text-destructive">
               Repeated CTR code(s): {ctrDuplicates.join(', ')}. Codes are unique within a project, and are
               compared exactly — CTR100 and ctr100 would be two different codes.
             </p>
           )}
 
-          <div className="flex flex-wrap items-end gap-3 rounded-lg border border-dashed border-gray-300 p-3">
+          <div className="flex flex-wrap items-end gap-3 rounded-lg border border-dashed p-3">
             <div className="space-y-1">
               <Label htmlFor="ctr-code">Code</Label>
               <Input
@@ -541,25 +560,25 @@ export default function CreateProjectWizard({ clients, candidates }: Props) {
               placeholder="optional"
             />
             {budgetValid ? (
-              <p className="text-xs text-gray-500">Leave empty for no budget.</p>
+              <p className="text-xs text-muted-foreground">Leave empty for no budget.</p>
             ) : (
-              <p className="text-xs text-red-600">Budget hours must be zero or more.</p>
+              <p className="text-xs text-destructive">Budget hours must be zero or more.</p>
             )}
           </div>
 
-          <dl className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm">
+          <dl className="rounded-lg border bg-muted p-3 text-sm">
             <div className="flex justify-between py-0.5">
-              <dt className="text-gray-500">Project</dt>
+              <dt className="text-muted-foreground">Project</dt>
               <dd className="font-mono">{projectCode || '—'}</dd>
             </div>
             <div className="flex justify-between py-0.5">
-              <dt className="text-gray-500">Process type</dt>
+              <dt className="text-muted-foreground">Process type</dt>
               <dd>
                 {PROCESS_TYPE_LABELS[processType]} · {year || '—'}
               </dd>
             </div>
             <div className="flex justify-between py-0.5">
-              <dt className="text-gray-500">Client</dt>
+              <dt className="text-muted-foreground">Client</dt>
               <dd>
                 {internal
                   ? 'none (internal)'
@@ -568,30 +587,30 @@ export default function CreateProjectWizard({ clients, candidates }: Props) {
               </dd>
             </div>
             <div className="flex justify-between py-0.5">
-              <dt className="text-gray-500">Review cycle</dt>
+              <dt className="text-muted-foreground">Review cycle</dt>
               <dd>
                 {cycleIdcToIfr}/{cycleIfrToRetcom}/{cycleRetcomToIfc} days
               </dd>
             </div>
             <div className="flex justify-between py-0.5">
-              <dt className="text-gray-500">Team</dt>
+              <dt className="text-muted-foreground">Team</dt>
               <dd>
                 {roles.length} role{roles.length === 1 ? '' : 's'}
                 {hasDocController(roles) ? '' : ' · no DC'}
               </dd>
             </div>
             <div className="flex justify-between py-0.5">
-              <dt className="text-gray-500">CTR codes</dt>
+              <dt className="text-muted-foreground">CTR codes</dt>
               <dd>{ctrCodes.length}</dd>
             </div>
           </dl>
         </div>
       )}
 
-      {submitError && <p className="mt-4 text-sm text-red-600">Error: {submitError}</p>}
+      {submitError && <p className="mt-4 text-sm text-destructive">Error: {submitError}</p>}
 
       {/* ---------------- Navigation ---------------- */}
-      <div className="mt-6 flex items-center justify-between border-t border-gray-100 pt-4">
+      <div className="mt-6 flex items-center justify-between border-t pt-4">
         <Button type="button" variant="outline" onClick={goBack} disabled={position <= 0 || submitting}>
           Back
         </Button>
@@ -601,6 +620,7 @@ export default function CreateProjectWizard({ clients, candidates }: Props) {
             onClick={handleSubmit}
             disabled={submitting || !visibleSteps.every(({ index }) => stepValid(index))}
           >
+            {submitting && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
             {submitting ? 'Creating…' : 'Create project'}
           </Button>
         ) : (

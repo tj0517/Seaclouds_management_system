@@ -2,54 +2,94 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  @apply bg-gray-50 text-gray-900;
-}
-
-/* shadcn/ui theme tokens — same palette as apps/timesheet (CLAUDE.md: Timesheet
-   is the pattern for DCS), so components/ui/* copied from there render as-is. */
+/* DCS 1a.24 — one place for the theme.
+ *
+ * Sea Clouds brand, taken from apps/timesheet/public/logo.png (the only brand
+ * asset in the repo) by sampling the file, not from a style guide — there
+ * isn't one:
+ *   ink  #231F20  = hsl(345 6% 13%)   the cloud body and the wordmark
+ *   cyan #5BE4FE  = hsl(190 99% 68%)  the wave
+ *
+ * Palette "Deep Teal", chosen by the owner 2026-09-17 from three candidates
+ * rendered on the project list. The canvas is a cool neutral; the brand cyan
+ * appears twice, in two different jobs:
+ *
+ *   --primary      a DARKENED cyan (191 91% 27%, ~5.5:1 on white) for solid
+ *                  controls, because the brand cyan itself sits at about
+ *                  1.5:1 on white and fails WCAG AA badly.
+ *   --brand        the undarkened brand cyan, used only as a MARK — the
+ *                  active nav item's edge, the navigation-in-flight bar.
+ *                  Never as a text or a background colour behind text.
+ *
+ * Light theme only, by this task's scope. The .dark block that came with the
+ * 1a.15 shadcn scaffold is kept so components/ui/* stay copy-compatible with
+ * apps/timesheet, but nothing in DCS ever sets that class.
+ */
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 0 0% 3.9%;
+    --background: 213 22% 96%;
+    --foreground: 215 25% 15%;
     --card: 0 0% 100%;
-    --card-foreground: 0 0% 3.9%;
+    --card-foreground: 215 25% 15%;
     --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 3.9%;
-    --primary: 0 0% 9%;
-    --primary-foreground: 0 0% 98%;
-    --secondary: 0 0% 96.1%;
-    --secondary-foreground: 0 0% 9%;
-    --muted: 0 0% 96.1%;
-    --muted-foreground: 0 0% 45.1%;
-    --accent: 0 0% 96.1%;
-    --accent-foreground: 0 0% 9%;
-    --destructive: 0 84.2% 60.2%;
+    --popover-foreground: 215 25% 15%;
+    --primary: 191 91% 27%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 210 16% 95%;
+    --secondary-foreground: 215 25% 15%;
+    --muted: 210 16% 96%;
+    --muted-foreground: 215 12% 45%;
+    --accent: 210 16% 95%;
+    --accent-foreground: 215 25% 15%;
+    --destructive: 0 72% 46%;
     --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 89.8%;
-    --input: 0 0% 89.8%;
-    --ring: 0 0% 3.9%;
+    --border: 214 15% 89%;
+    --input: 214 15% 86%;
+    --ring: 191 91% 35%;
     --radius: 0.5rem;
+
+    /* Brand signal + the two status tints the admin screens use, so no screen
+       hardcodes a raw Tailwind palette colour again. */
+    --brand: 190 99% 68%;
+    --brand-strong: 191 91% 27%;
+    --success: 158 58% 26%;
+    --success-bg: 158 40% 94%;
+    --warning: 32 75% 32%;
+    --warning-bg: 40 80% 94%;
   }
+
   .dark {
-    --background: 0 0% 3.9%;
+    --background: 215 25% 10%;
     --foreground: 0 0% 98%;
-    --card: 0 0% 3.9%;
+    --card: 215 24% 12%;
     --card-foreground: 0 0% 98%;
-    --popover: 0 0% 3.9%;
+    --popover: 215 24% 12%;
     --popover-foreground: 0 0% 98%;
-    --primary: 0 0% 98%;
-    --primary-foreground: 0 0% 9%;
-    --secondary: 0 0% 14.9%;
+    --primary: 190 90% 60%;
+    --primary-foreground: 215 25% 10%;
+    --secondary: 215 20% 18%;
     --secondary-foreground: 0 0% 98%;
-    --muted: 0 0% 14.9%;
-    --muted-foreground: 0 0% 63.9%;
-    --accent: 0 0% 14.9%;
+    --muted: 215 20% 18%;
+    --muted-foreground: 215 14% 64%;
+    --accent: 215 20% 18%;
     --accent-foreground: 0 0% 98%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 14.9%;
-    --input: 0 0% 14.9%;
-    --ring: 0 0% 83.1%;
+    --border: 215 18% 20%;
+    --input: 215 18% 20%;
+    --ring: 190 80% 55%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+
+  /* One focus treatment everywhere, on the brand ring. */
+  :focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
   }
 }
