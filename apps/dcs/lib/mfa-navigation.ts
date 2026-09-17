@@ -32,11 +32,55 @@
 // a verified second factor raises the session's AAL, which changes the answer
 // every server-side guard gives from here on.
 
+const FALLBACK = '/'
+
+// A base that cannot be anyone's real origin, so "resolved to the base's
+// origin" means "the value brought no origin of its own".
+const PROBE_ORIGIN = 'https://scl.invalid'
+
+/**
+ * Narrows `next` to somewhere inside this app, or gives up and returns '/'.
+ *
+ * `next` comes off the query string. proxy.ts only ever writes an internal
+ * pathname into it, but proxy.ts is not the only way onto /mfa: that route is
+ * excluded from the module-access check, so any signed-in user can open
+ * /mfa?next=<anything> — or be sent a link to one. Whatever arrives is handed
+ * to window.location.assign immediately after a genuine second factor on the
+ * genuine domain, which is the moment a redirect is most likely to be
+ * trusted, so it is the wrong place to take the query string at its word.
+ *
+ * Two classes of value have to go: another origin (an open redirect, landing
+ * a freshly-2FA'd user on a page primed to ask them to "re-authenticate"),
+ * and a javascript:/data: URL, which location.assign() executes in this
+ * page's own origin.
+ *
+ * The parse is the authority rather than string matching, because the URL
+ * parser normalises before it resolves — it folds "\" to "/" for http(s) and
+ * strips tab, LF, CR and leading whitespace anywhere in the input. So
+ * "/\evil.example", " //evil.example" and "/\n/evil.example" all reach the
+ * network as another host while passing a naive startsWith('/') check.
+ */
+export function safeNextPath(next: unknown): string {
+  if (typeof next !== 'string' || next === '') return FALLBACK
+  // Cheap, readable first pass: a scheme or a leading space never survives.
+  if (!next.startsWith('/')) return FALLBACK
+  let url: URL
+  try {
+    url = new URL(next, PROBE_ORIGIN)
+  } catch {
+    return FALLBACK
+  }
+  if (url.origin !== PROBE_ORIGIN) return FALLBACK
+  // Return what was PARSED, not what arrived, so the value that was judged is
+  // the value that gets navigated to.
+  return url.pathname + url.search + url.hash
+}
+
 export type PostVerifyNavigation = {
   /** window.location.assign — a full document load, no client cache involved. */
   assign: (href: string) => void
 }
 
 export function navigateAfterMfaVerify(nav: PostVerifyNavigation, next: string): void {
-  nav.assign(next)
+  nav.assign(safeNextPath(next))
 }

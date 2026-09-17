@@ -184,3 +184,58 @@ describe.each([
     expect(ctx.location).toBe('/admin/dictionaries')
   })
 })
+
+// --- what may be handed to a full document load ----------------------------
+//
+// `next` arrives from the query string. proxy.ts only ever writes an internal
+// pathname into it, but proxy.ts is not the only way onto this page: /mfa is
+// excluded from the module-access check (proxy.ts), so any signed-in user can
+// open /mfa?next=<anything> directly, and a link to one can be sent to them.
+// Whatever ends up here is then handed to window.location.assign AFTER a
+// genuine second factor on the genuine domain — which is exactly the moment a
+// redirect is most likely to be trusted.
+describe('the destination a successful verify is allowed to go to', () => {
+  /** What navigateAfterMfaVerify actually asks the browser to load. */
+  function destinationFor(next: unknown): string {
+    let assigned: string | null = null
+    navigateAfterMfaVerify({ assign: (href) => (assigned = href) }, next as string)
+    return assigned ?? '<never navigated>'
+  }
+
+  describe.each([
+    ['an absolute http(s) URL', 'https://evil.example/login'],
+    ['a scheme-relative URL', '//evil.example/login'],
+    // The URL parser folds "\" to "/" for http(s), so these are the same
+    // attack wearing a different hat — and they survive a naive
+    // startsWith('/') check, which is why they are here.
+    ['a backslash-smuggled host', '/\\evil.example/login'],
+    ['a mixed slash/backslash host', '/\\/evil.example/login'],
+    // location.assign() runs a javascript: URL in the page's own origin.
+    ['a javascript: URL', 'javascript:alert(document.cookie)'],
+    ['a data: URL', 'data:text/html,<script>alert(1)</script>'],
+    // The URL parser strips leading whitespace, so this becomes //evil.example.
+    ['a space-prefixed scheme-relative URL', ' //evil.example/login'],
+    // ...and strips tab/LF/CR from anywhere, so this becomes //evil.example.
+    ['a newline-smuggled host', '/\n/evil.example/login'],
+    ['an empty string', ''],
+    ['null', null],
+    ['undefined', undefined],
+    ['a number', 42],
+    ['an object', { toString: () => 'https://evil.example' }],
+  ])('refuses %s', (_label, hostile) => {
+    it('and goes to / instead', () => {
+      expect(destinationFor(hostile)).toBe('/')
+    })
+  })
+
+  describe.each([
+    ['the path the gate actually writes', '/admin/dictionaries'],
+    ['the app root', '/'],
+    ['a path with a query and a hash', '/admin/projects/p-1?tab=roles#members'],
+    ['a path that merely mentions a scheme', '/admin/clients?note=https://example.com'],
+  ])('allows %s', (_label, benign) => {
+    it('and goes there unchanged', () => {
+      expect(destinationFor(benign)).toBe(benign)
+    })
+  })
+})
