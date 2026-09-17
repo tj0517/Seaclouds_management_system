@@ -17,7 +17,8 @@ of the shared screen at that point.
 
 | | |
 |---|---|
-| **URL** | **https://dcs-6tc9va3es-tymon-jezionek.vercel.app** |
+| **URL** | **https://dcs-5b9hwj7v2-tymon-jezionek.vercel.app** |
+| Previous pin (1a.24 styling, commit `d1d1470`) | https://dcs-6tc9va3es-tymon-jezionek.vercel.app — same screens, but step 1 stalls on *Verifying…*; kept only for comparison |
 | Previous pin (1a gate, commit `87712ee`) | https://dcs-kqpda9tl4-tymon-jezionek.vercel.app — pre-1a.24 styling, kept only for comparison |
 | **Backup URL** | none. If Preview is down, the demo does not move to prod. |
 | **Vercel login** | Log in to Vercel **before** joining the call. Preview deployments on the `dcs` project sit behind Vercel Authentication (`ssoProtection = all_except_custom_domains`). Because you present by screen share, the client never sees that wall — but you must clear it first, in the same browser profile you will demo from. |
@@ -26,24 +27,35 @@ of the shared screen at that point.
 | **Second browser** | Use a private/incognito window for step 7 so the admin session in step 1–6 stays live. |
 | **Supabase dashboard** | Open the **scl-dev** project's SQL editor in another tab, with the step-6 query already pasted but not run. |
 
-> **That URL is the immutable deployment of commit `87712ee`** (PR #54,
-> `chore/dcs-1a21a-demo-prep`), built green on 2026-09-16. It is pinned to that
-> commit, not to the branch — pushing more commits does not change where it
-> points, and it will keep serving that exact build.
+> **The URL above is the immutable deployment of commit `4b5739a`** (PR #57,
+> `fix/mfa-next-validation`), built green on 2026-09-17 — CI, CodeRabbit and
+> both Vercel builds. It is pinned to that commit, not to the branch, so
+> pushing more commits does not move it.
 >
-> Every commit after `87712ee` on that branch changed **documentation only**,
-> so that URL served the app as demonstrated at the 1a gate.
+> **It is the main build, on scl-dev.** `4b5739a` was merged to `main` as
+> `c4a921c`, and nothing landed on `main` in between that touches the app:
+> `git rev-parse 4b5739a:apps` and `git rev-parse c4a921c:apps` both return
+> tree `2ee966b`, the same object. So this Preview serves byte-for-byte the
+> code now running in production, while still talking to **scl-dev** — which
+> is what this script requires and what the accounts and seeded data below
+> exist on. `docs/03-conventions.md` ("Środowiska i deploymenty") is the rule
+> behind that split: Preview → scl-dev, Production → prod.
 >
-> **Superseded by DCS 1a.24** (`feat/dcs-1a24-ui-polish`, PR #55), which
-> restyles every screen in `apps/dcs` and adds loading skeletons and a mobile
-> drawer.
+> **Do not swap this for `https://dcs.seaclouds.eu`.** That host serves the
+> same code but against the **production** Supabase project
+> (`tfbzivfsqsgebegcvfah`). The `dcs1a14-*` accounts were created on scl-dev
+> and nobody has checked prod for them — prod was deliberately not read while
+> writing this. Whether they exist there or not, steps 4–6 would write
+> dictionary, client and `audit_log` rows into production, and CLAUDE.md
+> forbids ever deleting an `audit_log` row on prod.
 >
-> **The URL above is the immutable deployment of commit `d1d1470`**, built
-> green on 2026-09-17 (CI, CodeRabbit and both Vercel builds). It is pinned
-> to that commit, not to the branch — pushing more commits does not move it.
-> `d1d1470` is a documentation-only commit on top of `3a08da3`, the last
-> commit on this branch that touches `apps/`; their `apps/` trees are
-> identical, so this URL serves exactly the code described below.
+> **What changed since the previous pin (`d1d1470`):** DCS 1a.25 only. Step 1
+> used to stall on *Verifying…* after a correct TOTP code — the client-side
+> `router.push` could not leave `/mfa`, because the route it was pushing to
+> was still in Next's client cache with the pre-aal2 redirect. It is now a
+> full document load, and `next` is validated as an internal path before the
+> redirect. Nothing else in `apps/` moved, so every screen below reads exactly
+> as it did at the 1a.24 walkthrough.
 >
 > **If a later commit touches anything under `apps/`, `packages/` or
 > `supabase/`, this line is wrong** — take the new commit's deployment URL

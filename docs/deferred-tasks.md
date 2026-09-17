@@ -1592,12 +1592,12 @@ wystawia je wszystkie publicznie, a raz rozesłanych URL-i się nie cofa.
   **Left in place deliberately** — deleting it is an Auth-data change and
   needs the owner's go (not given). **Still in place after DCS 1a.25**, which
   asked about it explicitly and was told to leave it (owner's decision,
-  2026-09-17); 1a.25 needed no Auth write to cover the `pending` path. The residual risk, if it stays: should
-  this account ever be made a DC or admin again, `/mfa` opens in `pending`
-  mode ("You already started setting up…") for a secret nobody recorded, and
-  the presenter must click **Start over**. Trap worth naming for anyone
-  scripting against `/admin` as a non-enrolled DC: merely *visiting* the gate
-  enrols a factor as a side effect.
+  2026-09-17); 1a.25 needed no Auth write to cover the `pending` path. The
+  residual risk, if it stays: should this account ever be made a DC or admin
+  again, `/mfa` opens in `pending` mode ("You already started setting up…")
+  for a secret nobody recorded, and the presenter must click **Start over**.
+  Trap worth naming for anyone scripting against `/admin` as a non-enrolled
+  DC: merely *visiting* the gate enrols a factor as a side effect.
 
 - **The per-row "Team" link is the one link in the app with no in-flight
   indicator, and a test pins it that way.**
