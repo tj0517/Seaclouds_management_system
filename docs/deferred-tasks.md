@@ -1665,12 +1665,13 @@ wystawia je wszystkie publicznie, a raz rozesłanych URL-i się nie cofa.
 
 ## nn) Follow-ups noted during DCS 1a.25 (`/mfa` verify navigation)
 
-- **`apps/timesheet/app/mfa/page.tsx` carries BOTH of 1a.25's defects,
-  character for character, and was deliberately NOT touched.**
-  `apps/timesheet` is **the production app**. Its fix needs **its own PR and
+- **`apps/timesheet/app/mfa/page.tsx` carried BOTH of 1a.25's defects,
+  character for character, and was deliberately NOT touched in 1a.25.**
+  `apps/timesheet` is **the production app**. Its fix needed **its own PR and
   the repo owner's review before merge** (owner's decision, 2026-09-17) — not
   a symmetric one-liner smuggled into a DCS PR, however tempting the diff
-  looked. Both defects:
+  looked. That PR is DCS 1a.26 (#59), and it closes **defect 2 only**; defect
+  1 is still open below. Both defects:
 
   1. **The frozen navigation.** Line 113 is the same `router.push(next)` /
      `router.refresh()` pair that froze DCS's demo step 1, reached through the
@@ -1680,15 +1681,29 @@ wystawia je wszystkie publicznie, a raz rozesłanych URL-i się nie cofa.
      (works) — **not established, and not guessed at here.** Establish it with
      the measurement in (mm)'s table rather than assuming DCS's result
      transfers.
-  2. **`next` is not validated before it is navigated to.** Same
-     `searchParams.get('next') ?? '/'` straight into a navigation, and
-     `/mfa` is excluded from that proxy's checks too, so the same open
-     redirect and the same `javascript:` / `data:` vector exist there. See
-     `safeNextPath()` in `apps/dcs/lib/mfa-navigation.ts` and the thirteen
-     rejection cases in its test for the shape of the fix and for the
-     normalisation traps (`\` folded to `/`, tab/LF/CR and leading
-     whitespace stripped by the URL parser) that a naive
-     `startsWith('/')` check walks straight into.
+  2. ~~**`next` is not validated before it is navigated to.**~~ —
+     **closed 2026-09-17 by DCS 1a.26 (#59).** `safeNextPath()` was copied
+     to `apps/timesheet/lib/mfa-navigation.ts` (copy, not a `@scl/db` leaf —
+     owner's decision, 2026-09-17; see the sizing note below for the option
+     that was weighed and declined) and wired in front of the `router.push()`
+     on what was line 113. All thirteen rejection cases from #57 are
+     transcribed into `apps/timesheet/lib/mfa-navigation.test.ts`, including
+     the normalisation traps (`\` folded to `/`, tab/LF/CR and leading
+     whitespace stripped by the URL parser) that a naive `startsWith('/')`
+     check walks straight into.
+
+     **Settled while closing it, since (nn) left it open:** the
+     `javascript:` / `data:` vector *is* reachable through `router.push()`,
+     not only through DCS's `window.location.assign()`. Read out of the
+     installed `next@16.1.1`, four steps: `app-router-instance.js`
+     `dispatchNavigateAction()` parses the href against `location.href`;
+     `app-router-utils.js` `isExternalURL()` is just `url.origin !==
+     window.location.origin`, and an opaque origin is "external";
+     `navigate-reducer.js` hands anything external to `handleExternalUrl()`,
+     which sets `canonicalUrl = url.toString()` and `mpaNavigation = true`;
+     `app-router.js:207` then calls `location.assign(canonicalUrl)`. Same
+     sink as DCS, different route to it — so the push/assign difference in
+     defect 1 never protected defect 2.
 
   Note when sizing that PR: `mfa-factor-state.ts` is already duplicated per
   app, so a shared `mfa-navigation` leaf export on `@scl/db` may be a cheaper
