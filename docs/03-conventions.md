@@ -55,15 +55,23 @@ Baseline advisora security: **zero** lintów `function_search_path_mutable`
 
 Poniższe ostrzeżenia advisora są akceptowane **świadomie** — nie wykonuj ich
 rekomendacji, bo odebranie uprawnień roli `authenticated` wyłączy TES.
-**Przyjęty baseline (scl-dev, odczyt 2026-09-15, stan po DCS 1a.17c):
-19 × 0027 + 12 × 0029**, nic innego — 0029 urosło z 10 o
-`public.is_any_doc_controller()` (1a.09b) i `public.dcs_profile_directory()`
-(1a.14b); zgłoszone jako `docs/deferred-tasks.md` (cc). 19. lint 0027 to `public.module_permissions`
+**Przyjęty baseline (scl-dev, odczyt 2026-09-17, stan po DCS 1b.01):
+22 × 0027 + 12 × 0029**, nic innego. Poprzedni baseline — 19 × 0027 +
+12 × 0029 (odczyt 2026-09-15, stan po DCS 1a.17c) — urósł o trzy 0027:
+`dcs.documents`, `dcs.revisions` i `dcs.files` (DCS 1b.01, migracja
+`20260917130035`). 0029 **nie** urosło: wszystkie cztery funkcje triggerowe
+tej migracji są SECURITY INVOKER i żadna rola API nie ma na nie `EXECUTE`
+(sprawdzane przy `CREATE TRIGGER`, nie przy wykonaniu). Historia liczby 12:
+0029 urosło z 10 o `public.is_any_doc_controller()` (1a.09b) i
+`public.dcs_profile_directory()` (1a.14b); zgłoszone jako
+`docs/deferred-tasks.md` (cc). 19. lint 0027 to `public.module_permissions`
 (1a.22): każdy użytkownik czyta własne wiersze (polityka "Users read own
 module permissions"), więc `SELECT` dla `authenticated` jest zamierzony i
 nie wolno go odbierać, żeby uciszyć ostrzeżenie — dokładnie ten sam wzorzec
-co `dcs.dictionaries` w 1a.07. Każde zadanie porównuje odczyt advisora z tą
-liczbą; zmiana = nowa tabela czytana przez `authenticated` (+1 × 0027) lub
+co `dcs.dictionaries` w 1a.07; trzy ostatnie (20–22) to tabele rejestru
+dokumentów z 1b.01, czytane przez każdego członka projektu. Każde zadanie
+porównuje odczyt advisora z tą liczbą; zmiana = nowa tabela czytana przez
+`authenticated` (+1 × 0027) lub
 nowa funkcja SECURITY DEFINER wołana z polityk (+1 × 0029) i musi być
 nazwana w PR, a baseline tutaj zaktualizowany. Uwaga: 1a.22 dodaje też
 `public.grant_default_module_access()` (SECURITY DEFINER), ale jak
@@ -72,9 +80,10 @@ API (EXECUTE jest sprawdzane przy `CREATE TRIGGER`, nie przy wykonaniu) —
 nie liczy się do 0029.
 
 - **0027 `pg_graphql_authenticated_table_exposed`** (po jednym na każdą
-  tabelę `public`/`dcs` z `SELECT` dla `authenticated`; 19 = 14 tabel TES/core
+  tabelę `public`/`dcs` z `SELECT` dla `authenticated`; 22 = 14 tabel TES/core
   + `dcs.mdr_settings`, `dcs.project_roles`, `public.audit_log`,
-  `dcs.dictionaries`, `public.module_permissions`) — PostgREST
+  `dcs.dictionaries`, `public.module_permissions`, `dcs.documents`,
+  `dcs.revisions`, `dcs.files`) — PostgREST
   obsługuje zalogowanych użytkowników właśnie jako rolę `authenticated`; bez
   jej `SELECT` żadne zapytanie aplikacji nie zwróci danych. Widoczność
   wierszy ogranicza RLS, nie granty.
@@ -100,6 +109,37 @@ nie liczy się do 0029.
   skrypt do Management API. Funkcja dostępna, bo organizacja jest na planie
   Pro. **Warunek wygaśnięcia wyjątku:** przenieść ustawienie do `config.toml`,
   gdy CLI zacznie obsługiwać ten klucz — patrz `docs/deferred-tasks.md` (h).
+
+### Advisor performance — baseline i dlaczego rośnie
+
+Advisor wydajnościowy nie miał tu dotąd baseline'u; DCS 1b.01 go zakłada,
+bo trzy nowe tabele podniosły dwa linty o przewidywalną, nieuniknioną liczbę.
+**Odczyt scl-dev 2026-09-17 przed 1b.01:** `multiple_permissive_policies`
+169 × WARN, `auth_rls_initplan` 29 × WARN, `unindexed_foreign_keys`
+10 × INFO, `unused_index` 5 × INFO, `auth_db_connections_absolute` 1 × INFO.
+
+- **`multiple_permissive_policies`** zgłasza się raz na każdą kombinację
+  (tabela, rola, akcja) obsłużoną przez więcej niż jedną politykę permissive —
+  przy sześciu rolach Postgresa daje to 18–24 wpisy na tabelę (dziś:
+  `dictionaries` 18, `mdr_settings` 24, `project_roles` 24). Każda tabela
+  `dcs.*` zbudowana we wzorcu „polityka admina `FOR ALL` + polityki ról"
+  dokłada kolejne. 1b.01 dokłada **+54** (3 × 18) i baseline staje się **223**.
+  Odrzucona alternatywa: jedna polityka na akcję z `is_admin() or …` w środku —
+  zeruje lint, ale łamie wzorzec wszystkich istniejących tabel i odbiera
+  możliwość `alter policy` na pojedynczej komendzie, na której oparło
+  się 1a.11.
+- **`unused_index`** rośnie o każdy indeks, którego scl-dev jeszcze nie użył —
+  a reguła „indeks pod każdym FK" (lint `unindexed_foreign_keys`) wymusza ich
+  20 w 1b.01. To dwa linty ciągnące w przeciwne strony; wygrywa
+  `unindexed_foreign_keys`, bo mówi o zapytaniach na produkcji,
+  a `unused_index`
+  tylko o tym, że baza deweloperska nic jeszcze nie przeczytała.
+- **`auth_rls_initplan`** ma **nie** urosnąć. Warunek `aal2` w 1b.01 jest
+  zapisany jako `((select auth.jwt()) ->> 'aal')` — wywołanie funkcji wprost
+  w podzapytaniu — a nie `(select auth.jwt() ->> 'aal')` jak w 1a.11, która
+  mimo podzapytania wisi w advisorze (2 z 29 wpisów to właśnie polityki DC na
+  `dcs.dictionaries`). Jeśli kiedyś przepiszemy tamte dwie, liczba
+  spadnie do 27.
 
 Uzasadnienie 0027/0029 zweryfikowano odczytem na prod (2026-08-31):
 `pg_policy` (wyrażenia polityk wołające te funkcje) oraz

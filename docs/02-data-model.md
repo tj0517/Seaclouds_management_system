@@ -357,8 +357,8 @@ Reguła nienegocjowalna: każda tabela `dcs.*` ma `project_id` + RLS + polityki
 jest kluczem naturalnym (np. `files`), jest denormalizowany właśnie pod RLS.
 Tabele bez danych projektowych (słownikowe/globalne) nie mają `project_id`
 i muszą być tu jawnie opisane — dziś: `dcs.dictionaries`. Poza
-`mdr_settings`, `project_roles` i `dictionaries` całość poniżej to
-📐 PROJEKT.
+`mdr_settings`, `project_roles`, `dictionaries`, `documents`, `revisions`
+i `files` całość poniżej to 📐 PROJEKT.
 
 ### ✅ `dcs.mdr_settings` (1:1 z `projects`)
 `project_id (PK/FK → projects, ON DELETE CASCADE)`, `cpy_numbering bool
@@ -568,45 +568,158 @@ anon/pracownik/outsider/DC/admin, wpisy w `audit_log`) oraz
 triggera, odmowa dla postgres/admina/DC przy aal2, edycja `label` przechodzi
 z jednym wpisem w `audit_log`).
 
-### `dcs.documents`
-`id`, `project_id (FK, RLS)`, `scl_doc_number (unique globalnie, generowany,
-niezmienny)`, `cpy_doc_number (nullable, unique per projekt, edytuje tylko
-DC)`, `title`, `doc_type (FK słownik)`, `discipline (FK)`, `area (FK)`,
-`language (EN|PL)`, `originator_id`, `checker_id`, `approver_id`
-(FK profiles), `ctr_code (FK sub_projects)`, `budget_hours` (default z typu
-dokumentu, załącznik A briefu), `workflow_status (not_started|started|idc|ifr|
-retcom|ifc|ifi|ifb|void)`, `current_revision_id (FK revisions)`.
+### ✅ `dcs.documents`
+Migracja `20260917130035_create_dcs_document_register` (DCS 1b.01) — razem
+z `revisions` i `files` w jednej migracji, bo są wzajemnie zależne
+(cykl `documents.current_revision_id` ↔ `revisions.document_id`).
+
+`id`, `project_id (FK → projects, ON DELETE CASCADE)`,
+`scl_doc_number text NOT NULL UNIQUE globalnie`, `cpy_doc_number text NULL`
+z `UNIQUE (project_id, cpy_doc_number)`, `title NOT NULL`,
+`doc_type_id / discipline_id / area_id / language_id / workflow_status_id`
+(wszystkie **NOT NULL**, FK → `dcs.dictionaries`), `originator_id /
+checker_id / approver_id` (FK → `public.profiles`, nullable),
+`ctr_code` (FK → `public.sub_projects`, nullable), `budget_hours numeric`
+(CHECK ≥ 0), `current_revision_id` (FK → `revisions`, nullable),
+`created_at`, `updated_at`.
+
 `originator_id/checker_id/approver_id` to **domyślna obsada dokumentu**
 (z MDR), nie źródło prawdy dla obiegu — przy tworzeniu rewizji kopiowana
 do `approval_tasks` (patrz tam); zmiana na dokumencie działa tylko na
-przyszłe rewizje. Każda z tych osób musi mieć odpowiednią rolę
-w `project_roles` dla tego projektu (walidacja w bazie).
+przyszłe rewizje. **Wymaganie „każda z tych osób musi mieć odpowiednią rolę
+w `project_roles`" NIE jest egzekwowane w bazie** — 1b.01 świadomie tego nie
+dodało (potrzebny trigger, a ustawia je ekran 1b.04);
+`docs/deferred-tasks.md` (oo).
+
 Numer SCL: `PROJEKT-ORIG-TYPE-SEQ-LANG` (np. `SC2601-SCL-RA-0012-EN`);
-SEQ atomowo per PROJEKT+TYPE, luki niewypełniane, ręczny wpis niemożliwy.
-RLS: odczyt członkowie projektu; insert/update wg roli (ORIG tworzy, DC
-zmienia numery i status).
+SEQ atomowo per PROJEKT+TYPE, luki niewypełniane, ręczny wpis niemożliwy —
+**generator to 1b.02**, w 1b.01 numer podaje wołający (i nie ma jeszcze
+żadnego wołającego).
+
+Integralność typów słownikowych jest **deklaratywna**: `dcs.dictionaries`
+dostało `UNIQUE (id, dict_type)`, a każda kolumna FK niesie stałą kolumnę
+generowaną (`doc_type_dict_type` = `'doc_type'` itd.), więc klucz obcy jest
+złożony i `discipline_id` nie może wskazać wiersza `language`. W odróżnieniu
+od triggera blokuje to również późniejszą zmianę `dict_type` samego wiersza
+słownika (który poza tym jest niepilnowany — `deferred-tasks.md` (bb)).
+Koszt: osiem kolumn tylko-do-odczytu w `packages/db/src/database.ts`.
+
+Triggery (wszystkie funkcje w `public`, SECURITY INVOKER, `search_path=''`,
+bez `EXECUTE` dla ról API):
+- `documents_scl_number_immutable` → `forbid_scl_doc_number_change()`.
+  `scl_doc_number` jest niezmienny **bezwarunkowo** — także dla admina, DC
+  i `postgres`, dokładnie jak `dictionaries.code` (1a.15b). Błędny dokument
+  dostaje Void, numer nie wraca do puli.
+- `documents_numbering_dc_only` →
+  `enforce_dc_only_numbering('cpy_doc_number')`.
+  Zmiana numeru CPY wymaga DC **tego** projektu i sesji `aal2`, inaczej
+  42501. **To nie może być polityką RLS**: `USING` widzi stary wiersz,
+  `WITH CHECK` nowy, żadna nie widzi obu, a `GRANT UPDATE(kolumna)` działa na
+  rolę, nie na projekt. Wołający bez sesji (`auth.uid() is null`: migracja,
+  seed, psql, `service_role`) przechodzi — i tak omija RLS na tej tabeli.
+  **Tylko UPDATE** — nikt nie blokuje INSERT-u z wypełnionym numerem CPY;
+  to należy do 1b.02/1b.03, `deferred-tasks.md` (oo).
+- `documents_cpy_numbering` →
+  `enforce_cpy_numbering_enabled('cpy_doc_number')`.
+  Niepusty `cpy_doc_number` jest odrzucany (23514), gdy
+  `mdr_settings.cpy_numbering = false` **albo gdy projekt nie ma wiersza
+  `mdr_settings` w ogóle** — brak wiersza znaczy „DCS nie prowadzi tego
+  projektu" (1a.05), więc numer klienta nie ma tam sensu. Na scl-dev w tym
+  stanie są dziś SC2602 i SCMS-IT.
+- `documents_ctr_code_project` → `enforce_document_ctr_code_project()`.
+  `ctr_code` musi należeć do tego samego projektu (23503). Trigger, nie
+  złożony FK, bo deklaratywna wersja wymagałaby `UNIQUE (id, project_id)` na
+  `public.sub_projects` — czyli ALTER na produkcyjnej tabeli TES, wbrew
+  ADR-0003. Luka nazwana wprost: nic nie broni przeniesienia sub-projektu do
+  innego projektu po fakcie.
+- `set_updated_at`, `audit_documents` (→ `public.audit_trigger()`).
+
+RLS — sześć polityk, wzorzec z `dcs.dictionaries`:
+`"Project members read documents"` (SELECT, `is_project_member(project_id)`),
+`"Admins manage documents"` (ALL, `is_admin()`, **bez aal2** — tak jak 1a.11
+zostawiło politykę admina na słownikach), `"Originators insert/update
+documents"` (`has_project_role(project_id, {orig})`, bez aal2) oraz
+`"Doc controllers insert/update documents"` (`is_doc_controller(project_id)`
+**AND `aal2`**). ORIG i DC mają osobne polityki właśnie dlatego, że drugi
+składnik wymagany jest tylko od DC. Brak polityki DELETE — kasowanie
+zostaje w polityce admina (odpowiedzią na błędny dokument jest Void).
+Warunek `aal2` zapisany jako `((select auth.jwt()) ->> 'aal')`, nie
+`(select auth.jwt() ->> 'aal')` jak w 1a.11 — ta druga forma wciąż wisi
+w advisorze jako `auth_rls_initplan`.
+
 ⚠️ WYMAGA DECYZJI (O-05): mapowanie kolorów z kolumny E arkusza SMDR na
 `workflow_status` — blokuje import (M14) i definicję kolorów w widoku MDR.
+⚠️ O-06 pozostaje otwarte: `ctr_code` celuje w `public.sub_projects`, które
+jest dziś per projekt. Rozstrzygnięcie „kody CTR wspólne firmowo" zmieni ten
+FK i trigger razem.
 
-### `dcs.revisions`
-`id`, `document_id (FK)`, `project_id`, `scl_revision (walidowana:
-A,B,…/00,01,…/1,2,…)`, `cpy_revision (dowolny format)`, `step (idc|ifr|
-retcom|ifc|ifi|ifb)`, `reason_for_issue`, `revision_date`,
-`acceptance_code (1–4, nullable)`, `status (draft|in_review|approved|
-rejected|superseded|void)`, `created_by`. `step` używa wspólnego enuma
-`dcs.step` — patrz `plan_dates`.
-Rewizje finalne (IFC/IFI/IFB): niemodyfikowalność plików i rekordu
-egzekwowana **triggerem w bazie**, nie we frontendzie.
-RLS: jak `documents`.
+### ✅ `dcs.revisions`
+`id`, `document_id`, `project_id`, `scl_revision NOT NULL`, `cpy_revision`,
+`step_id (FK słownik `workflow_step`, NOT NULL)`, `reason_for_issue`,
+`revision_date date`, `acceptance_code_id (FK słownik `acceptance_code`,
+nullable)`, `status_id (FK słownik `workflow_status`, NOT NULL)`,
+`created_by (FK profiles)`, `created_at`, `updated_at`.
+`UNIQUE (document_id, scl_revision)`.
 
-### `dcs.files`
-`id`, `revision_id (FK)`, `project_id`, `file_name` (generowana:
-`[SCL_DOC_NUMBER]_[REV]_[STEP]_[YYYY-MM-DD]_[NN].[ext]`), `original_name`,
-`storage_path`, `file_kind (original|rendition|attachment|comment_sheet)`,
-`sort_order`, `size_bytes`, `mime_type`, `uploaded_by`, `uploaded_at`.
-Pliki w Supabase Storage, dostęp tylko przez signed URL.
-RLS (tabela + storage policies): odczyt członkowie projektu, zapis ORIG/DC;
-blokada zapisu dla rewizji finalnych.
+**O-15 rozstrzygnięte tutaj na rzecz słownika**, nie enuma `dcs.step`:
+`step_id` jest FK do `dcs.dictionaries` typu `workflow_step` (6 kodów:
+IDC, IFR, RETCOM, IFC, IFI, IFB — bez `START`, bo start nie jest rewizją).
+Powód: od 1a.07 każda lista kodów DCS jest słownikiem, którym DC zarządza
+bez deployu. Ryzyko, które O-15 samo nazwało, **nie jest zamknięte**: nic nie
+broni DC dezaktywować kroku używanego przez maszynę stanów — to zadanie
+maszyny stanów (Faza 2), nie schematu.
+
+`project_id` jest **kolumną**, nie joinem przez `document_id`, i trzyma go
+złożony FK `(document_id, project_id) → documents (id, project_id)`.
+Powód nie jest wydajnościowy: `audit_trigger()` czyta zakres projektu
+z kolumny `project_id` wiersza, więc bez niej każdy wpis rewizji w
+`public.audit_log` miałby `project_id NULL` i wypadłby poza politykę
+„Doc controllers read own project audit log" (1a.09) — czytałby go wyłącznie
+globalny admin.
+
+`documents.current_revision_id` jest trzymany złożonym FK
+`(id, current_revision_id) → revisions (document_id, id)`, więc bieżąca
+rewizja musi należeć **do tego dokumentu**. `ON DELETE SET NULL
+(current_revision_id)` — lista kolumn jest konieczna (Postgres 15+), bez niej
+FK próbowałby wyzerować `id` dokumentu.
+
+Triggery: `revisions_numbering_dc_only` (`scl_revision`, `cpy_revision`),
+`revisions_cpy_numbering` (`cpy_revision`), `set_updated_at`,
+`audit_revisions`. RLS: sześć polityk, identycznie jak `documents`.
+
+Walidacja formatu `scl_revision` (A,B,… / 00,01,… / 1,2,…) **nie jest** w
+1b.01: która seria obowiązuje, zależy od kroku, więc reguła należy do
+generatora (1b.02), nie do CHECK-a, który by się z nim rozjechał.
+Niemodyfikowalność rewizji finalnych (IFC/IFI/IFB) egzekwowana triggerem
+w bazie — **1b.10**, nie tutaj.
+
+### ✅ `dcs.files`
+`id`, `revision_id`, `project_id`, `file_name`, `original_name`,
+`storage_path` (wszystkie trzy **nullable do 1b.09**, które jest
+właścicielem generowanej nazwy
+`[SCL_DOC_NUMBER]_[REV]_[STEP]_[YYYY-MM-DD]_[NN].[ext]`, bucketa i signed
+URL-i), `file_kind`, `sort_order int NOT NULL default 0` (CHECK ≥ 0),
+`size_bytes bigint` (CHECK ≥ 0), `mime_type`, `uploaded_by (FK profiles)`,
+`uploaded_at`. Bez `updated_at` i bez `set_updated_at` — `uploaded_at` jest
+jedynym potrzebnym znacznikiem czasu.
+
+`file_kind` to `text` + CHECK (`original`, `rendition`, `attachment`,
+`comment_sheet`), **nie enum** — z tego samego powodu co `dict_type` w 1a.07:
+poszerzenie CHECK-a to zwykła migracja, poszerzenie enuma to `ALTER TYPE`.
+O-09 (automatyczne rendition PDF) może dopisać rodzaj bez zmiany typu.
+
+`project_id` jak w `revisions`: kolumna trzymana złożonym FK
+`(revision_id, project_id) → revisions (id, project_id)`, `ON DELETE
+CASCADE`. Pliki w Supabase Storage, dostęp tylko przez signed URL —
+buckety i polityki storage to **1b.09**. Blokada zapisu dla rewizji
+finalnych — **1b.10**.
+
+RLS: sześć polityk, identycznie jak `documents`. Trigger `audit_files`.
+
+Test wszystkich trzech tabel: `supabase/tests/rls_document_register.test.sql`
+(106 asercji: kształt, indeksy pod każdym FK, cztery triggery, kaskada
+usunięcia, komplet czerwonych dowodów i RLS dla outsidera / członka TES /
+VIEW / ORIG / DC aal1 / DC aal2 / ORIG+DC aal1).
 
 ### `dcs.approval_tasks`
 Jeden silnik dla obu trybów obiegu: `id`, `revision_id (FK)`, `project_id`,

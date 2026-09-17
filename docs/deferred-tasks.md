@@ -1737,3 +1737,55 @@ wystawia je wszystkie publicznie, a raz rozesłanych URL-i się nie cofa.
   re-pin, the way 1a.24 did in its own follow-up commit. **Do this before the
   1a gate demo**: presenting from the `d1d1470` deployment means presenting
   the frozen button this task exists to remove.
+
+## oo) Follow-ups noted during DCS 1b.01 (rejestr dokumentów)
+
+Wszystkie poniższe są **świadomymi lukami**, nie przeoczeniami — każda jest
+nazwana także w komentarzu migracji
+`20260917130035_create_dcs_document_register`.
+
+- **Numeracja jest pilnowana tylko przy UPDATE.**
+  `documents_numbering_dc_only` i `revisions_numbering_dc_only` są `BEFORE
+  UPDATE`, więc nic nie broni ORIG-owi wstawić dokument z wypełnionym
+  `cpy_doc_number` albo rewizję z `cpy_revision` od razu. Zostawione tam,
+  gdzie należy: **1b.02** ma uczynić ręczny wpis `scl_doc_number`
+  niemożliwym w każdym formularzu i akcji, a **1b.03** jest właścicielem UX
+  edycji CPY. Jeśli któreś z nich zdecyduje, że reguła ma żyć w bazie,
+  trigger wystarczy przestawić na `before insert or update` i dodać gałąź
+  dla `tg_op = 'INSERT'` (wtedy porównanie „zmieniło się" znaczy „jest
+  niepuste").
+- **`originator_id` / `checker_id` / `approver_id` nie muszą mieć roli w
+  `dcs.project_roles`.** `docs/02-data-model.md` obiecuje „walidacja w
+  bazie"; 1b.01 tego nie dodało, bo wymaga triggera (FK tego nie wyrazi), a
+  pola ustawia ekran **1b.04**. Do tego czasu dokument może wskazywać jako
+  Checkera kogoś, kto nie ma roli `chk` na tym projekcie — i baza tego nie
+  zauważy.
+- **`ctr_code` można „przenieść" po fakcie.** Trigger
+  `enforce_document_ctr_code_project()` sprawdza zgodność projektu przy
+  zapisie dokumentu, ale `public.sub_projects.project_id` nie ma żadnej
+  blokady niezmienności (w przeciwieństwie do `projects.project_code` po
+  1a.17c i `dictionaries.code` po 1a.15b). Przeniesienie kodu CTR do innego
+  projektu zostawi dokumenty wskazujące kod obcego projektu. Wersja
+  deklaratywna (`UNIQUE (id, project_id)` na `sub_projects` + złożony FK)
+  rozwiązałaby to w całości, ale wymaga ALTER-a na produkcyjnej tabeli TES —
+  świadomie odrzucone w 1b.01 (ADR-0003), **do rozważenia razem z O-06**.
+- **DC może dezaktywować krok obiegu, którego wymaga maszyna stanów.** To
+  ryzyko, które O-15 nazwało przy swoim rozstrzygnięciu (patrz
+  `docs/04-open-questions.md`): `step_id` jest FK do `dcs.dictionaries`, a
+  nic nie broni ustawić `is_active = false` na `IFR`. FK nadal trzyma
+  historyczne wiersze, więc to nie jest awaria danych — to znikający krok w
+  formularzach. Należy do **Fazy 2** (maszyna stanów), nie do schematu.
+- **Polityka admina nie wymaga aal2.** Polityki `"Admins manage documents"`
+  / `revisions` / `files` to `FOR ALL` na `is_admin()` bez warunku `aal` —
+  dokładnie tak, jak 1a.11 zostawiło politykę admina na `dcs.dictionaries`
+  („out of scope for this task, not requested"). Praktyczny skutek: globalny
+  admin w sesji aal1 zapisuje te tabele, a numeracji broni już tylko trigger
+  (który admina też obowiązuje). To **ta sama luka co w 1a.11**, tylko na
+  trzech tabelach więcej — jeśli kiedyś ją zamykamy, to jednym zadaniem dla
+  wszystkich polityk admina naraz, nie po jednej tabeli.
+- **Dwie polityki DC na `dcs.dictionaries` nadal wiszą w advisorze jako
+  `auth_rls_initplan`.** 1b.01 zapisuje warunek jako `((select auth.jwt())
+  ->> 'aal')` i tym samym lintu nie dokłada; forma z 1a.11, `(select
+  auth.jwt() ->> 'aal')`, jest w advisorze mimo podzapytania. Przepisanie
+  tamtych dwóch to jeden `alter policy` × 2 i zdejmuje 2 z 29 ostrzeżeń —
+  zbyt małe, żeby wsadzać je do migracji o rejestrze dokumentów.

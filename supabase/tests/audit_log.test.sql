@@ -64,8 +64,8 @@ select has_trigger('public', 'clients', 'audit_clients', 'audit trigger on publi
 select is(
   (select count(*) from pg_trigger t
     where t.tgfoid = 'public.audit_trigger()'::regprocedure and not t.tgisinternal),
-  7::bigint,
-  'audit_trigger() is attached to exactly seven tables (four from 1a.08 + dcs.dictionaries from 1a.07 + public.module_permissions from 1a.22 + dcs.mdr_settings from 1a.17b)'
+  10::bigint,
+  'audit_trigger() is attached to exactly ten tables (four from 1a.08 + dcs.dictionaries from 1a.07 + public.module_permissions from 1a.22 + dcs.mdr_settings from 1a.17b + dcs.documents/revisions/files from 1b.01)'
 );
 select is(
   (select count(*) from pg_trigger t
