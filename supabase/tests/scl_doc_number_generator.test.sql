@@ -135,6 +135,17 @@ grant select on t_num to authenticated;
 insert into dcs.project_roles (project_id, user_id, role)
 select pej_id, orig_id, 'orig'::dcs.project_role from t_num;
 
+-- DCS 1b.04 made an mdr_settings row a precondition for creating any document
+-- (trigger documents_mdr_required). PEJ has one from supabase/seed.sql; SCMS-IT
+-- has none, and this file needs to write documents there — it is the only seed
+-- project whose code contains a hyphen, which is the whole point of the
+-- six-field assertions below. So the row is created here, in this file's own
+-- rolled-back fixtures, rather than in the seed: giving SCMS-IT a permanent
+-- mdr_settings row would take away the "project DCS does not run" fixture that
+-- rls_document_register.test.sql and dc_only_numbering_on_insert.test.sql both
+-- rely on. Nothing about the numbering rules changes with this row present.
+insert into dcs.mdr_settings (project_id) select it_id from t_num;
+
 -- The register starts empty (nothing in supabase/seed.sql writes it), which is
 -- what makes the first generated SEQ assertable as 0001.
 select is((select count(*) from dcs.documents), 0::bigint,

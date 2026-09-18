@@ -238,6 +238,12 @@ w `apps/dcs/lib/module-permissions.ts`). Admin nie jest tym dotknięty:
 - Jeden temat na PR; migracja + RLS + test pgTAP + regeneracja typów razem.
 - CI musi być zielone (guardy, pgTAP, type-drift, lint, typecheck, build
   w trybie strict env). Nowa zmienna budowa = wpis w `env` w `turbo.json`.
+- **`ci` to jedyny automatyczny check, który cokolwiek sprawdza.** CodeRabbit
+  jest podpięty, ale PR-ów w tym repo nie recenzuje — raportuje
+  `Review skipped: manual review required for this OSS repository` i od razu
+  zielone „pass" (odczyt z PR #66, 18.09). Nie czytaj tego jako przeglądu
+  kodu: zielony CodeRabbit nie znaczy, że ktokolwiek — człowiek czy bot — ten
+  diff przeczytał.
 - Merge do `main` automatycznie pcha migracje na scl-dev — nie merguj
   migracji, której nie chcesz jeszcze na scl-dev. Prod wyłącznie przez
   ręczny `workflow_dispatch` (patrz 01-architecture). Do 2026-09-01 to

@@ -135,6 +135,7 @@ export default async function ProjectsPage() {
                 <TableHead>Name</TableHead>
                 <TableHead className="w-[7rem]">Cycle</TableHead>
                 <TableHead className="w-[7rem]">Team</TableHead>
+                <TableHead className="w-[7rem]">Documents</TableHead>
                 <TableHead className="w-[6rem]">Status</TableHead>
               </TableRow>
             </TableHeader>
@@ -186,6 +187,21 @@ export default async function ProjectsPage() {
                           Team
                         </Link>
                       )}
+                    </TableCell>
+                    {/* DCS 1b.04: the way into the project's document register.
+                        Offered to every reader of this row, not only an editor
+                        — unlike "Team" above — because the list it leads to is
+                        a read for everyone who can see the project, and the
+                        page itself offers "New document" to whoever opens it.
+                        RLS decides what the list contains. */}
+                    <TableCell className="text-muted-foreground">
+                      <Link
+                        href={`/projects/${project.id}/documents`}
+                        className="inline-flex items-center gap-2 text-xs font-medium text-foreground underline-offset-4 hover:underline"
+                      >
+                        Documents
+                        <NavLinkStatus />
+                      </Link>
                     </TableCell>
                     <TableCell>
                       {project.is_active ? (

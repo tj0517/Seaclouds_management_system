@@ -74,18 +74,43 @@ Supabase, prod ref `tfbzivfsqsgebegcvfah`.
 - Oba projekty startują przy każdym pushu i każdym merge'u, ale Vercel bywa,
   że **auto-pomija** build: w checkach PR-a widać to jako
   `Skipped - Not affected`, w dashboardzie jako `CANCELED`. **Kiedy dokładnie
-  pomija — nie wiemy.** Trzy obserwacje, wszystkie z tego repo, których nie da
+  pomija — nie wiemy.** Cztery obserwacje, wszystkie z tego repo, których nie da
   się złożyć w jedną regułę:
   - **PR #58** — nowa gałąź, wyłącznie `docs/` — **zbudował oba projekty**.
   - **PR #64** — nowa gałąź, `supabase/` + `docs/`, bez `apps/`
     i bez `packages/` — **pominął oba** (`Skipped - Not affected`).
   - **PR #65** — nowa gałąź, wyłącznie ten plik (`CLAUDE.md`, nawet nie
     `docs/`) — **zbudował oba projekty** (`Deployment has completed`).
+  - **PR #66** (DCS 1b.04, 18.09) — nowa gałąź, **dwa commity, i to one są tu
+    najciekawsze**, bo PR trzeba czytać w całości, nie po pierwszym pushu:
+    - `7c6a55e` — `apps/dcs/` + `supabase/` (migracje i testy) + `docs/`,
+      **bez zmian w `packages/`** (`pnpm db:gen` nie dał diffu) →
+      `dcs` **zbudował** (`Deployment has completed`),
+      `seaclouds-management-system` **pominięty** (`Skipped - Not affected`).
+    - `1c0d558` — wyłącznie `CLAUDE.md` i `docs/03-conventions.md`, czyli
+      **ściśle mniej** niż commit wyżej (żadnego `apps/`, żadnego
+      `supabase/`) → **oba projekty zbudowały się**
+      (`Deployment has completed`).
+
+    **To najostrzejszy punkt danych z tej listy**, bo trzyma stałe wszystko,
+    co zwykle się różni — to samo repo, ta sama gałąź, ten sam PR, ta sama
+    konfiguracja — i zmienia **wyłącznie commit**. Timesheet pominął commit,
+    który ruszył `apps/dcs` i `supabase/`, a zbudował następny, który ruszył
+    tylko dokumentację. Kształt jest ten sam co #64 vs #65, tylko tym razem
+    bez żadnej różnicy między PR-ami, na którą dałoby się to zrzucić.
+
+    **Wniosek jest negatywny i taki ma zostać: z listy zmienionych plików nie
+    da się przewidzieć, które projekty się zbudują.** Żadna z hipotez
+    zapisanych w `docs/03-conventions.md` (w tym ta o członkostwie
+    w workspace) nie tłumaczy wszystkich czterech obserwacji — `1c0d558`
+    ruszył zero pakietów workspace i zbudował oba projekty. **Pytanie
+    pozostaje otwarte**; nie wstawiaj tu nowej teorii na miejsce starej,
+    dopisuj obserwacje.
 
   Sama „nowa gałąź" więc builda nie wymusza (to zdanie stało tu wcześniej jako
   reguła i jest nieprawdziwe), ale i „mniej zmienionych plików = pominięty
   build" nie działa: #64 ruszył **więcej** ścieżek niż #58 i #65, a zbudował się
-  jako jedyny z trzech **mniej**. Ustalone jest tylko tyle, że
+  jako jedyny z tamtych trzech **mniej**. Ustalone jest tylko tyle, że
   bazą porównania bywa **ostatni deployment danego projektu**, a nie
   commit-rodzic (`d1d1470`, wyłącznie `docs/`, zbudował się, bo poprzedni
   deployment `dcs` był sprzed `3a08da3`; dwa kolejne commity tylko-`docs/` już
