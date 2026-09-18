@@ -74,18 +74,34 @@ Supabase, prod ref `tfbzivfsqsgebegcvfah`.
 - Oba projekty startują przy każdym pushu i każdym merge'u, ale Vercel bywa,
   że **auto-pomija** build: w checkach PR-a widać to jako
   `Skipped - Not affected`, w dashboardzie jako `CANCELED`. **Kiedy dokładnie
-  pomija — nie wiemy.** Trzy obserwacje, wszystkie z tego repo, których nie da
+  pomija — nie wiemy.** Cztery obserwacje, wszystkie z tego repo, których nie da
   się złożyć w jedną regułę:
   - **PR #58** — nowa gałąź, wyłącznie `docs/` — **zbudował oba projekty**.
   - **PR #64** — nowa gałąź, `supabase/` + `docs/`, bez `apps/`
     i bez `packages/` — **pominął oba** (`Skipped - Not affected`).
   - **PR #65** — nowa gałąź, wyłącznie ten plik (`CLAUDE.md`, nawet nie
     `docs/`) — **zbudował oba projekty** (`Deployment has completed`).
+  - **PR #66** (DCS 1b.04, 18.09) — nowa gałąź, `apps/dcs/` + `supabase/`
+    (migracje i testy) + `docs/`, **bez zmian w `packages/`** (`pnpm db:gen`
+    nie dał diffu). **Projekty rozjechały się pierwszy raz z tych czterech:**
+    `dcs` — `Deployment has completed`, `seaclouds-management-system` —
+    `Skipped - Not affected`.
+
+    Dwie rzeczy, które to odróżnia od poprzednich trzech, obie jako
+    **obserwacja, nie wniosek**: (1) to pierwszy przypadek, w którym oba
+    projekty zachowały się **inaczej** — #58, #64 i #65 za każdym razem robiły
+    to samo po obu stronach; (2) to pierwszy przypadek, w którym wynik
+    **zgadza się** z hipotezą „Vercel pomija projekt, którego żaden pakiet
+    workspace nie został ruszony" z sekcji „Workspace (pnpm)" w
+    `docs/03-conventions.md` — Timesheet nie miał tu ruszonego ani
+    `apps/timesheet`, ani `packages/`. Jedna zgodność nie czyni z hipotezy
+    reguły i **nie unieważnia** #58/#64/#65, które nadal się w nią nie
+    składają; to czwarty punkt danych, nie rozstrzygnięcie.
 
   Sama „nowa gałąź" więc builda nie wymusza (to zdanie stało tu wcześniej jako
   reguła i jest nieprawdziwe), ale i „mniej zmienionych plików = pominięty
   build" nie działa: #64 ruszył **więcej** ścieżek niż #58 i #65, a zbudował się
-  jako jedyny z trzech **mniej**. Ustalone jest tylko tyle, że
+  jako jedyny z tamtych trzech **mniej**. Ustalone jest tylko tyle, że
   bazą porównania bywa **ostatni deployment danego projektu**, a nie
   commit-rodzic (`d1d1470`, wyłącznie `docs/`, zbudował się, bo poprzedni
   deployment `dcs` był sprzed `3a08da3`; dwa kolejne commity tylko-`docs/` już
