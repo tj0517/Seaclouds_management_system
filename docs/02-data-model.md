@@ -692,13 +692,20 @@ z 1b.02 jest SECURITY DEFINER — uzasadnienie wyżej):
   dostaje Void, numer nie wraca do puli.
 - `documents_numbering_dc_only` →
   `enforce_dc_only_numbering('cpy_doc_number')`.
-  Zmiana numeru CPY wymaga DC **tego** projektu i sesji `aal2`, inaczej
-  42501. **To nie może być polityką RLS**: `USING` widzi stary wiersz,
-  `WITH CHECK` nowy, żadna nie widzi obu, a `GRANT UPDATE(kolumna)` działa na
-  rolę, nie na projekt. Wołający bez sesji (`auth.uid() is null`: migracja,
-  seed, psql, `service_role`) przechodzi — i tak omija RLS na tej tabeli.
-  **Tylko UPDATE** — nikt nie blokuje INSERT-u z wypełnionym numerem CPY;
-  to należy do 1b.02/1b.03, `deferred-tasks.md` (oo).
+  **`BEFORE INSERT OR UPDATE` od 1b.03** (przedtem tylko UPDATE). Nadanie
+  albo zmiana numeru CPY wymaga DC **tego** projektu i sesji `aal2`, inaczej
+  42501 — przy UPDATE „zmiana" znaczy „inna niż w `OLD`", przy INSERT „jest
+  niepusta" (nie ma `OLD`, więc funkcja porównuje z `null`; gałąź wybiera
+  `TG_OP`). **To nie może być polityką RLS**: przy UPDATE `USING` widzi stary
+  wiersz, `WITH CHECK` nowy, żadna nie widzi obu; przy INSERT polityki
+  rozstrzygają, **kto** może utworzyć wiersz, a nie które kolumny może
+  wypełnić, a `GRANT UPDATE(kolumna)` działa na rolę, nie na projekt.
+  Wołający bez sesji (`auth.uid() is null`: migracja, seed, psql,
+  `service_role`) przechodzi — i tak omija RLS na tej tabeli. Przypadek, który
+  domyka 1b.03: ktoś z rolami `orig` **i** `dc` przechodzi politykę
+  `"Originators insert documents"` przy aal1, więc przed 1b.03 wpisywał numer
+  CPY bez żadnej przeszkody. Funkcja pozostaje SECURITY INVOKER bez `EXECUTE`
+  dla ról API (`REVOKE` powtórzony w migracji 1b.03).
 - `documents_cpy_numbering` →
   `enforce_cpy_numbering_enabled('cpy_doc_number')`.
   Niepusty `cpy_doc_number` jest odrzucany (23514), gdy
@@ -763,9 +770,23 @@ rewizja musi należeć **do tego dokumentu**. `ON DELETE SET NULL
 (current_revision_id)` — lista kolumn jest konieczna (Postgres 15+), bez niej
 FK próbowałby wyzerować `id` dokumentu.
 
-Triggery: `revisions_numbering_dc_only` (`scl_revision`, `cpy_revision`),
-`revisions_cpy_numbering` (`cpy_revision`), `set_updated_at`,
-`audit_revisions`. RLS: sześć polityk, identycznie jak `documents`.
+Triggery: `revisions_numbering_dc_only` (`BEFORE UPDATE`, `scl_revision`
++ `cpy_revision`), **`revisions_numbering_dc_only_insert` (`BEFORE INSERT`,
+`cpy_revision` — 1b.03)**, `revisions_cpy_numbering` (`cpy_revision`),
+`set_updated_at`, `audit_revisions`. RLS: sześć polityk, identycznie jak
+`documents`.
+
+Dwa triggery na jedną funkcję, a nie jeden `BEFORE INSERT OR UPDATE` jak na
+`documents`, bo **zestaw pilnowanych kolumn zależy tu od operacji**:
+`scl_revision` jest `NOT NULL`, więc **każdy** INSERT go podaje — objęcie go
+regułą „niepuste = zmiana" znaczyłoby, że rewizję może utworzyć wyłącznie DC
+w sesji aal2, wbrew `docs/00-glossary.md` (Originator tworzy dokumenty
+**i rewizje**) i wbrew polityce `"Originators insert revisions"`, która
+przestałaby być osiągalna. Lista argumentów jest własnością triggera, nie
+operacji, więc rozdzielenie na dwa triggery jest jedynym sposobem zapisania
+tego bez wpisywania nazwy kolumny do ciała funkcji. Nazwa sortuje się po
+`revisions_cpy_numbering`, więc wartość CPY na projekcie bez toru CPY nadal
+dostaje 23514, nie 42501.
 
 Walidacja formatu `scl_revision` (A,B,… / 00,01,… / 1,2,…) **nie jest** w
 1b.01: która seria obowiązuje, zależy od kroku, więc nie da się jej zapisać
@@ -803,7 +824,9 @@ RLS: sześć polityk, identycznie jak `documents`. Trigger `audit_files`.
 Test wszystkich trzech tabel: `supabase/tests/rls_document_register.test.sql`
 (106 asercji: kształt, indeksy pod każdym FK, cztery triggery, kaskada
 usunięcia, komplet czerwonych dowodów i RLS dla outsidera / członka TES /
-VIEW / ORIG / DC aal1 / DC aal2 / ORIG+DC aal1).
+VIEW / ORIG / DC aal1 / DC aal2 / ORIG+DC aal1). Insertowa strona reguły DC
+dla toru CPY ma własny plik: `supabase/tests/dc_only_numbering_on_insert.test.sql`
+(44 asercje — 1b.03).
 
 ### `dcs.approval_tasks`
 Jeden silnik dla obu trybów obiegu: `id`, `revision_id (FK)`, `project_id`,
