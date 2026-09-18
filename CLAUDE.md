@@ -81,22 +81,31 @@ Supabase, prod ref `tfbzivfsqsgebegcvfah`.
     i bez `packages/` — **pominął oba** (`Skipped - Not affected`).
   - **PR #65** — nowa gałąź, wyłącznie ten plik (`CLAUDE.md`, nawet nie
     `docs/`) — **zbudował oba projekty** (`Deployment has completed`).
-  - **PR #66** (DCS 1b.04, 18.09) — nowa gałąź, `apps/dcs/` + `supabase/`
-    (migracje i testy) + `docs/`, **bez zmian w `packages/`** (`pnpm db:gen`
-    nie dał diffu). **Projekty rozjechały się pierwszy raz z tych czterech:**
-    `dcs` — `Deployment has completed`, `seaclouds-management-system` —
-    `Skipped - Not affected`.
+  - **PR #66** (DCS 1b.04, 18.09) — nowa gałąź, **dwa commity, i to one są tu
+    najciekawsze**, bo PR trzeba czytać w całości, nie po pierwszym pushu:
+    - `7c6a55e` — `apps/dcs/` + `supabase/` (migracje i testy) + `docs/`,
+      **bez zmian w `packages/`** (`pnpm db:gen` nie dał diffu) →
+      `dcs` **zbudował** (`Deployment has completed`),
+      `seaclouds-management-system` **pominięty** (`Skipped - Not affected`).
+    - `1c0d558` — wyłącznie `CLAUDE.md` i `docs/03-conventions.md`, czyli
+      **ściśle mniej** niż commit wyżej (żadnego `apps/`, żadnego
+      `supabase/`) → **oba projekty zbudowały się**
+      (`Deployment has completed`).
 
-    Dwie rzeczy, które to odróżnia od poprzednich trzech, obie jako
-    **obserwacja, nie wniosek**: (1) to pierwszy przypadek, w którym oba
-    projekty zachowały się **inaczej** — #58, #64 i #65 za każdym razem robiły
-    to samo po obu stronach; (2) to pierwszy przypadek, w którym wynik
-    **zgadza się** z hipotezą „Vercel pomija projekt, którego żaden pakiet
-    workspace nie został ruszony" z sekcji „Workspace (pnpm)" w
-    `docs/03-conventions.md` — Timesheet nie miał tu ruszonego ani
-    `apps/timesheet`, ani `packages/`. Jedna zgodność nie czyni z hipotezy
-    reguły i **nie unieważnia** #58/#64/#65, które nadal się w nią nie
-    składają; to czwarty punkt danych, nie rozstrzygnięcie.
+    **To najostrzejszy punkt danych z tej listy**, bo trzyma stałe wszystko,
+    co zwykle się różni — to samo repo, ta sama gałąź, ten sam PR, ta sama
+    konfiguracja — i zmienia **wyłącznie commit**. Timesheet pominął commit,
+    który ruszył `apps/dcs` i `supabase/`, a zbudował następny, który ruszył
+    tylko dokumentację. Kształt jest ten sam co #64 vs #65, tylko tym razem
+    bez żadnej różnicy między PR-ami, na którą dałoby się to zrzucić.
+
+    **Wniosek jest negatywny i taki ma zostać: z listy zmienionych plików nie
+    da się przewidzieć, które projekty się zbudują.** Żadna z hipotez
+    zapisanych w `docs/03-conventions.md` (w tym ta o członkostwie
+    w workspace) nie tłumaczy wszystkich czterech obserwacji — `1c0d558`
+    ruszył zero pakietów workspace i zbudował oba projekty. **Pytanie
+    pozostaje otwarte**; nie wstawiaj tu nowej teorii na miejsce starej,
+    dopisuj obserwacje.
 
   Sama „nowa gałąź" więc builda nie wymusza (to zdanie stało tu wcześniej jako
   reguła i jest nieprawdziwe), ale i „mniej zmienionych plików = pominięty
