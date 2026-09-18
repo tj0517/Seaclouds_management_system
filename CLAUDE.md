@@ -74,15 +74,18 @@ Supabase, prod ref `tfbzivfsqsgebegcvfah`.
 - Oba projekty startują przy każdym pushu i każdym merge'u, ale Vercel bywa,
   że **auto-pomija** build: w checkach PR-a widać to jako
   `Skipped - Not affected`, w dashboardzie jako `CANCELED`. **Kiedy dokładnie
-  pomija — nie wiemy.** Dwie obserwacje, obie z tego repo, których nie da się
-  złożyć w jedną regułę:
+  pomija — nie wiemy.** Trzy obserwacje, wszystkie z tego repo, których nie da
+  się złożyć w jedną regułę:
   - **PR #58** — nowa gałąź, wyłącznie `docs/` — **zbudował oba projekty**.
   - **PR #64** — nowa gałąź, `supabase/` + `docs/`, bez `apps/`
     i bez `packages/` — **pominął oba** (`Skipped - Not affected`).
+  - **PR #65** — nowa gałąź, wyłącznie ten plik (`CLAUDE.md`, nawet nie
+    `docs/`) — **zbudował oba projekty** (`Deployment has completed`).
 
   Sama „nowa gałąź" więc builda nie wymusza (to zdanie stało tu wcześniej jako
-  reguła i jest nieprawdziwe), a treść commita go nie tłumaczy: #64 ruszył
-  więcej ścieżek niż #58 i zbudował się mniej. Ustalone jest tylko tyle, że
+  reguła i jest nieprawdziwe), ale i „mniej zmienionych plików = pominięty
+  build" nie działa: #64 ruszył **więcej** ścieżek niż #58 i #65, a zbudował się
+  jako jedyny z trzech **mniej**. Ustalone jest tylko tyle, że
   bazą porównania bywa **ostatni deployment danego projektu**, a nie
   commit-rodzic (`d1d1470`, wyłącznie `docs/`, zbudował się, bo poprzedni
   deployment `dcs` był sprzed `3a08da3`; dwa kolejne commity tylko-`docs/` już
