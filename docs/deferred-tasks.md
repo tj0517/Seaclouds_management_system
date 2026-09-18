@@ -1766,21 +1766,67 @@ nazwana także w komentarzu migracji
   dało `scl_doc_number`, i należy do **1b.08** — patrz (pp) niżej. Stan jest
   asercją w `supabase/tests/dc_only_numbering_on_insert.test.sql`, nie
   przemilczeniem.
-- **Dokument da się utworzyć na projekcie bez wiersza `dcs.mdr_settings`.**
-  1b.01 wskazało tu **1b.02** („refusing to create a document at all for a
-  project with no mdr_settings row… belongs with the generator"). 1b.02
-  świadomie tego **nie zrobiło**: to reguła szersza niż numeracja —
-  przesądza, co „DCS prowadzi ten projekt" znaczy dla każdej przyszłej
-  tabeli — i wykraczała poza zakres zadania. Na scl-dev w tym stanie jest
-  dziś `SCMS-IT` i jego dokumenty powstają normalnie, z poprawnym numerem.
-  Decyzja czeka; naturalne miejsce to **1b.04** (ekran tworzenia dokumentu)
-  albo osobne zadanie.
+- ~~**Dokument da się utworzyć na projekcie bez wiersza `dcs.mdr_settings`.**~~
+  **ZAMKNIĘTE w DCS 1b.04** (2026-09-18, migracja
+  `20260918134211_documents_require_mdr_settings`). 1b.01 wskazało tu 1b.02;
+  1b.02 świadomie tego nie zrobiło i zostawiło decyzję na 1b.04 — i 1b.04 ją
+  podjęło: trigger `documents_mdr_required` (`BEFORE INSERT`, funkcja
+  `public.enforce_document_needs_mdr()`) odrzuca 23514 każdy dokument na
+  projekcie bez wiersza `mdr_settings`. Test:
+  `supabase/tests/documents_require_mdr_settings.test.sql`.
+
+  Trzy rzeczy z tego rozstrzygnięcia, które trzeba znać:
+  - **Bez żadnej furtki.** Ani wyjątku `auth.uid() is null` (jak
+    `enforce_dc_only_numbering`), ani GUC-a `dcs.import_mode` (jak 1b.02).
+    Uzasadnienie: to **fakt o konfiguracji projektu**, nie reguła
+    autoryzacyjna, więc odpowiedź nie może zależeć od tego, kto pyta.
+    `postgres`, seed i `service_role` też dostają odmowę.
+  - **Konsekwencja dla importu SMDR (1b.12–1b.15): import musi najpierw
+    założyć MDR projektu, dopiero potem jego rejestr.** Dziś nic tego nie
+    przypomina, bo `dcs.documents` na scl-dev jest puste. Jeśli ta kolejność
+    okaże się dla importu niewykonalna, poprawką jest **nowa migracja**
+    dokładająca gałąź `import_mode`, nigdy edycja tamtej.
+  - **Tylko `INSERT`, nie `UPDATE`.** Admin może skasować sam wiersz
+    `mdr_settings` (polityka `"Admins manage mdr settings"`), a `ON DELETE
+    CASCADE` idzie wyłącznie od `public.projects`. Objęcie UPDATE-u
+    znaczyłoby, że dokumenty takiego projektu stają się nieedytowalne —
+    łącznie z Voidem, czyli odpowiedzią briefu na dokument, który nie
+    powinien istnieć. Reguła, która zamyka dane w pułapce, jest gorsza niż
+    luka, którą łata.
+
+  Skutek uboczny w testach, odnotowany, żeby nie czytać go jako regresji:
+  `supabase/tests/rls_document_register.test.sql` miało asercję
+  „GREEN: a NULL cpy_doc_number is fine on a project with no mdr_settings
+  row" — 1b.04 **odwróciło ją** na `throws_ok` i dopisało drugą, pokazującą,
+  że ten sam INSERT przechodzi po założeniu wiersza `mdr_settings`.
+  `scl_doc_number_generator.test.sql` zakłada teraz taki wiersz dla `SCMS-IT`
+  we własnych fixture'ach (potrzebuje tego projektu, bo jako jedyny w seedzie
+  ma myślnik w kodzie). `dc_only_numbering_on_insert.test.sql` nie wymagało
+  zmian — trigger celowo sortuje się **po** `documents_cpy_numbering`.
 - **`originator_id` / `checker_id` / `approver_id` nie muszą mieć roli w
   `dcs.project_roles`.** `docs/02-data-model.md` obiecuje „walidacja w
   bazie"; 1b.01 tego nie dodało, bo wymaga triggera (FK tego nie wyrazi), a
   pola ustawia ekran **1b.04**. Do tego czasu dokument może wskazywać jako
   Checkera kogoś, kto nie ma roli `chk` na tym projekcie — i baza tego nie
   zauważy.
+
+  **1b.04 to obejrzało i świadomie zostawiło otwarte** (decyzja z 2026-09-18).
+  Formularz oferuje w rolach ORIG/CHK/APP **wyłącznie osoby mające jakąkolwiek
+  rolę na tym projekcie**, ale to jest UX, nie egzekwowanie — bezpośredni
+  POST nadal przejdzie. Celowo **nie zawężono** listy do `chk` dla Checkera i
+  `app` dla Approvera: dropdown ostrzejszy od reguły w bazie po cichu
+  blokowałby obsadę, którą baza przyjmuje. Pytanie, na które trzeba
+  odpowiedzieć razem z triggerem, a którego 1b.04 nie miało prawa rozstrzygać
+  samo: **czy import SMDR (1b.12–1b.15) potrzebuje tu furtki** — dane
+  historyczne niosą obsadę sprzed istnienia `dcs.project_roles`.
+
+  Domknięta natomiast została **jedna** reguła obsady, ta zapisana w
+  `docs/00-glossary.md`: Originator ≠ Checker, jako CHECK
+  `documents_originator_not_checker` (DCS 1b.04, migracja
+  `20260918134210`). Obie kolumny są nullowalne, więc warunek ma jawne
+  wyjścia na NULL-e — `is distinct from` odrzucałby dokument bez obsady, a
+  takie niesie import. Pary CHK≠APP i ORIG≠APP **nie są** ograniczone: nie ma
+  ich w glosariuszu ani w briefie, a CHECK trudno wycofać, gdy dane już są.
 - **`ctr_code` można „przenieść" po fakcie.** Trigger
   `enforce_document_ctr_code_project()` sprawdza zgodność projektu przy
   zapisie dokumentu, ale `public.sub_projects.project_id` nie ma żadnej

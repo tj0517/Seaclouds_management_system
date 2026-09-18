@@ -719,7 +719,44 @@ z 1b.02 jest SECURITY DEFINER — uzasadnienie wyżej):
   `public.sub_projects` — czyli ALTER na produkcyjnej tabeli TES, wbrew
   ADR-0003. Luka nazwana wprost: nic nie broni przeniesienia sub-projektu do
   innego projektu po fakcie.
+- **`documents_mdr_required` → `enforce_document_needs_mdr()` (DCS 1b.04,
+  migracja `20260918134211`).** `BEFORE INSERT`. Dokument na projekcie **bez
+  wiersza `dcs.mdr_settings`** dostaje 23514 — brak wiersza znaczy „DCS nie
+  prowadzi tego projektu" (1a.05), a na projekcie, którego DCS nie prowadzi,
+  nie ma czego rejestrować. Domyka regułę, którą 1b.01 nazwało i odłożyło do
+  1b.02, a 1b.02 odłożyło do 1b.04 (`docs/deferred-tasks.md` oo).
+  **Bez żadnej furtki** — ani `auth.uid() is null`, ani `dcs.import_mode`:
+  to fakt o konfiguracji projektu, nie reguła autoryzacyjna, więc `postgres`
+  i `service_role` też są odrzucane. **Skutek dla importu SMDR: MDR projektu
+  musi powstać przed jego rejestrem.** Tylko `INSERT`, bo objęcie `UPDATE`
+  unieruchomiłoby dokumenty projektu, któremu admin skasował wiersz
+  `mdr_settings` — łącznie z Voidem. Ten sam SQLSTATE co
+  `enforce_cpy_numbering_enabled`, więc rozróżnia je **komunikat**; nazwa
+  sortuje się **po** `documents_cpy_numbering`, żeby INSERT z numerem CPY
+  nadal dostawał bardziej szczegółową odpowiedź tamtego triggera.
 - `set_updated_at`, `audit_documents` (→ `public.audit_trigger()`).
+
+CHECK-i: `documents_budget_hours_non_negative` (1b.01) oraz
+**`documents_originator_not_checker` (DCS 1b.04, migracja `20260918134210`)** —
+Originator nie może być Checkerem tego samego dokumentu
+(`docs/00-glossary.md`, ORIG), 23514. Warunek ma **jawne wyjścia na NULL-e**
+(`originator_id is null or checker_id is null or originator_id <> checker_id`),
+a nie `is distinct from`: obie kolumny są nullowalne, `null is distinct from
+null` jest fałszem, więc terse wersja odrzucałaby dokument bez obsady — a
+takie niesie import SMDR (1b.12–1b.15). CHECK, nie trigger, bo reguła
+porównuje dwie kolumny tego samego wiersza i nie potrzebuje niczego więcej:
+działa też na `UPDATE` (ekran 1b.07 będzie zmieniał obsadę) i nie ma jej jak
+źle ustawić w kolejności wobec pozostałych triggerów `BEFORE`. Pary CHK≠APP
+i ORIG≠APP **nie są** ograniczone — nie ma ich w glosariuszu; asercje, że są
+dozwolone, stoją w
+`supabase/tests/documents_originator_not_checker.test.sql`, więc dołożenie
+ich później będzie widoczną zmianą testu, nie cichą regresją.
+
+⚠️ Nadal otwarte (`docs/deferred-tasks.md` oo): `originator_id` / `checker_id`
+/ `approver_id` **wciąż nie muszą mieć odpowiedniej roli w
+`dcs.project_roles`** — 1b.04 ograniczyło do członków projektu **listę w
+formularzu**, ale bazy to nie pilnuje. Obietnica „walidacja w bazie" z tej
+sekcji pozostaje niespełniona w tej jednej rzeczy.
 
 RLS — sześć polityk, wzorzec z `dcs.dictionaries`:
 `"Project members read documents"` (SELECT, `is_project_member(project_id)`),

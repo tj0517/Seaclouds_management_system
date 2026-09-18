@@ -36,9 +36,16 @@
 -- Seed projects (fixed UUIDs): PEJ = 6c0909ce-… has an mdr_settings row with
 -- cpy_numbering = false; IT = 094e130b-… has no mdr_settings row at all, which
 -- is the second branch of the CPY guard.
+--
+-- DCS 1b.04 note: IT stays mdr-less only until section 4b has used it for that
+-- second branch AND for the new documents_mdr_required refusal. It is enrolled
+-- mid-file (one insert into dcs.mdr_settings), because from 1b.04 on a project
+-- with no settings row can carry no documents at all, and the RLS section below
+-- needs a second project that does. Both states of IT are therefore asserted,
+-- in that order.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(106);
+select plan(107);
 
 -- DCS 1b.02 note: every INSERT in this file supplies scl_doc_number by hand,
 -- which is exactly what 1b.02's documents_assign_scl_number trigger now
@@ -399,10 +406,39 @@ select throws_ok(
     select doc1_id, pej_id, 'C', 'CLIENT-REV', step_id, status_id from t_fixture$$,
   '23514', null,
   'RED: non-NULL cpy_revision on a project with cpy_numbering = false is rejected (23514)');
+-- DCS 1b.04 INVERTED this assertion. Until then it read:
+--
+--   GREEN: a NULL cpy_doc_number is fine on a project with no mdr_settings row
+--
+-- and it was true — 1b.01 and 1b.02 both declined, in writing, to make a
+-- missing mdr_settings row block document creation outright (it was open in
+-- docs/deferred-tasks.md (oo) the whole time). 1b.04's documents_mdr_required
+-- trigger closes it: on a project DCS does not run, no document may be
+-- created, whatever its CPY column says. Kept here rather than moved to the
+-- new file so that a reader of the 1b.01 register test sees the rule change at
+-- the exact assertion it replaced.
+--
+-- Same 23514 as the CPY guard four lines up, so the MESSAGE is what tells the
+-- two apart — and this insert carries no CPY number at all, which is what
+-- makes it reach the later trigger in the first place.
+select throws_ok(
+  $$insert into dcs.documents (project_id, scl_doc_number, cpy_doc_number, title, doc_type_id, discipline_id, area_id, language_id, workflow_status_id)
+    select it_id, 'SCMS-IT-SCL-RA-0001-EN', null, 't', doc_type_id, discipline_id, area_id, language_id, status_id from t_fixture$$,
+  '23514',
+  'dcs.documents cannot be created on project 094e130b-599b-4295-87fa-697fb71e7fc4: it has no dcs.mdr_settings row, which means DCS does not run this project. Its Document Controller must configure the project MDR first.',
+  'RED (1b.04): no document at all — not even one with a NULL CPY number — on a project with no mdr_settings row');
+
+-- Enrol IT in DCS, which is the only thing that was missing. Everything below
+-- needs a SECOND project carrying documents: the RLS section's sanity check
+-- (section 4) compares "documents everywhere" against "documents of PEJ" so
+-- that "a member sees their project's documents" is a real filter rather than
+-- a table that happens to hold one project's rows.
+insert into dcs.mdr_settings (project_id) select it_id from t_fixture;
+
 select lives_ok(
   $$insert into dcs.documents (project_id, scl_doc_number, cpy_doc_number, title, doc_type_id, discipline_id, area_id, language_id, workflow_status_id)
     select it_id, 'SCMS-IT-SCL-RA-0001-EN', null, 't', doc_type_id, discipline_id, area_id, language_id, status_id from t_fixture$$,
-  'GREEN: a NULL cpy_doc_number is fine on a project with no mdr_settings row');
+  'GREEN: the very same INSERT succeeds once the project has an mdr_settings row — the refusal above is about the missing row, not about this project');
 
 -- With CPY numbering switched on, the CPY number is accepted and is unique
 -- per project. (The switch itself is an ordinary mdr_settings update.)
