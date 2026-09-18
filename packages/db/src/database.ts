@@ -376,7 +376,15 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      next_doc_number: {
+        Args: {
+          p_doc_type_id: string
+          p_language_id: string
+          p_orig?: string
+          p_project_id: string
+        }
+        Returns: string
+      }
     }
     Enums: {
       mdr_status: "active" | "closed"

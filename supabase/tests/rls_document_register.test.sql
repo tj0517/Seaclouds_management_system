@@ -40,6 +40,16 @@ begin;
 create extension if not exists pgtap with schema extensions;
 select plan(106);
 
+-- DCS 1b.02 note: every INSERT in this file supplies scl_doc_number by hand,
+-- which is exactly what 1b.02's documents_assign_scl_number trigger now
+-- refuses (23001). This file is about 1b.01 — shape, constraints, the four
+-- guard triggers and RLS — and its assertions depend on knowing the numbers,
+-- so it opens the import escape hatch for the whole (rolled-back) transaction
+-- rather than being rewritten around a generator it does not test. The
+-- generator, the refusal and the hatch itself are covered by
+-- supabase/tests/scl_doc_number_generator.test.sql.
+set local dcs.import_mode = 'on';
+
 -- ============================================================
 -- 1. Shape (red without the migration)
 -- ============================================================

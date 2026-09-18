@@ -1744,16 +1744,27 @@ Wszystkie poniższe są **świadomymi lukami**, nie przeoczeniami — każda jes
 nazwana także w komentarzu migracji
 `20260917130035_create_dcs_document_register`.
 
-- **Numeracja jest pilnowana tylko przy UPDATE.**
-  `documents_numbering_dc_only` i `revisions_numbering_dc_only` są `BEFORE
-  UPDATE`, więc nic nie broni ORIG-owi wstawić dokument z wypełnionym
-  `cpy_doc_number` albo rewizję z `cpy_revision` od razu. Zostawione tam,
-  gdzie należy: **1b.02** ma uczynić ręczny wpis `scl_doc_number`
-  niemożliwym w każdym formularzu i akcji, a **1b.03** jest właścicielem UX
-  edycji CPY. Jeśli któreś z nich zdecyduje, że reguła ma żyć w bazie,
-  trigger wystarczy przestawić na `before insert or update` i dodać gałąź
-  dla `tg_op = 'INSERT'` (wtedy porównanie „zmieniło się" znaczy „jest
-  niepuste").
+- **Numeracja jest pilnowana tylko przy UPDATE.** ~~`scl_doc_number`~~ →
+  **zamknięte dla `scl_doc_number` w 1b.02** (migracja
+  `20260918085125_scl_doc_number_generator`): `documents_assign_scl_number`
+  jest `BEFORE INSERT` i odrzuca podany numer (`23001`), więc reguła żyje
+  w bazie, nie w formularzu. **Zostaje otwarte dla toru CPY:**
+  `documents_numbering_dc_only` i `revisions_numbering_dc_only` nadal są
+  `BEFORE UPDATE`, więc nic nie broni ORIG-owi wstawić dokument z wypełnionym
+  `cpy_doc_number` albo rewizję z `cpy_revision` od razu — **1b.03** jest
+  właścicielem UX edycji CPY i tej decyzji. Wzorzec do skopiowania jest już
+  w repo, gdyby reguła miała żyć w bazie: przestawić trigger na `before
+  insert or update` i dodać gałąź dla `tg_op = 'INSERT'` (wtedy porównanie
+  „zmieniło się" znaczy „jest niepuste").
+- **Dokument da się utworzyć na projekcie bez wiersza `dcs.mdr_settings`.**
+  1b.01 wskazało tu **1b.02** („refusing to create a document at all for a
+  project with no mdr_settings row… belongs with the generator"). 1b.02
+  świadomie tego **nie zrobiło**: to reguła szersza niż numeracja —
+  przesądza, co „DCS prowadzi ten projekt" znaczy dla każdej przyszłej
+  tabeli — i wykraczała poza zakres zadania. Na scl-dev w tym stanie jest
+  dziś `SCMS-IT` i jego dokumenty powstają normalnie, z poprawnym numerem.
+  Decyzja czeka; naturalne miejsce to **1b.04** (ekran tworzenia dokumentu)
+  albo osobne zadanie.
 - **`originator_id` / `checker_id` / `approver_id` nie muszą mieć roli w
   `dcs.project_roles`.** `docs/02-data-model.md` obiecuje „walidacja w
   bazie"; 1b.01 tego nie dodało, bo wymaga triggera (FK tego nie wyrazi), a
