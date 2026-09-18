@@ -1744,18 +1744,28 @@ Wszystkie poniższe są **świadomymi lukami**, nie przeoczeniami — każda jes
 nazwana także w komentarzu migracji
 `20260917130035_create_dcs_document_register`.
 
-- **Numeracja jest pilnowana tylko przy UPDATE.** ~~`scl_doc_number`~~ →
-  **zamknięte dla `scl_doc_number` w 1b.02** (migracja
+- ~~**Numeracja jest pilnowana tylko przy UPDATE.**~~ **Zamknięte w całości.**
+  Tor SCL zamknęło **1b.02** (migracja
   `20260918085125_scl_doc_number_generator`): `documents_assign_scl_number`
   jest `BEFORE INSERT` i odrzuca podany numer (`23001`), więc reguła żyje
-  w bazie, nie w formularzu. **Zostaje otwarte dla toru CPY:**
-  `documents_numbering_dc_only` i `revisions_numbering_dc_only` nadal są
-  `BEFORE UPDATE`, więc nic nie broni ORIG-owi wstawić dokument z wypełnionym
-  `cpy_doc_number` albo rewizję z `cpy_revision` od razu — **1b.03** jest
-  właścicielem UX edycji CPY i tej decyzji. Wzorzec do skopiowania jest już
-  w repo, gdyby reguła miała żyć w bazie: przestawić trigger na `before
-  insert or update` i dodać gałąź dla `tg_op = 'INSERT'` (wtedy porównanie
-  „zmieniło się" znaczy „jest niepuste").
+  w bazie, nie w formularzu. Tor CPY zamknęło **1b.03** (migracja
+  `20260918092728_dc_only_numbering_on_insert`) — dokładnie tym wzorcem, który
+  ten punkt wskazywał: `enforce_dc_only_numbering()` rozgałęzia się na `TG_OP`
+  (przy INSERT „zmieniło się" znaczy „jest niepuste", bo nie ma `OLD`),
+  `documents_numbering_dc_only` jest teraz `BEFORE INSERT OR UPDATE`, a
+  `dcs.revisions` dostało drugi trigger `revisions_numbering_dc_only_insert`
+  na `cpy_revision`. Furtka `auth.uid() is null` (migracja, seed, psql,
+  `service_role`) działa również przy INSERT.
+
+  **Jedno wyłączenie, świadome:** `scl_revision` **nie jest** pilnowany przy
+  INSERT, choć jest przy UPDATE. Kolumna jest `NOT NULL`, więc każdy INSERT
+  ją podaje — reguła „niepuste = zmiana" znaczyłaby, że rewizję tworzy
+  wyłącznie DC w sesji aal2, wbrew `docs/00-glossary.md` (Originator tworzy
+  dokumenty **i rewizje**) i wbrew polityce `"Originators insert revisions"`.
+  Insertowa strona `scl_revision` to **generator**, w kształcie, jaki 1b.02
+  dało `scl_doc_number`, i należy do **1b.08** — patrz (pp) niżej. Stan jest
+  asercją w `supabase/tests/dc_only_numbering_on_insert.test.sql`, nie
+  przemilczeniem.
 - **Dokument da się utworzyć na projekcie bez wiersza `dcs.mdr_settings`.**
   1b.01 wskazało tu **1b.02** („refusing to create a document at all for a
   project with no mdr_settings row… belongs with the generator"). 1b.02
@@ -1819,9 +1829,12 @@ z maszyną stanów przy pierwszej zmianie słownika `workflow_step`.
 w ogóle. Numer rewizji powstaje tam, gdzie wybierany jest krok — czyli
 w **1b.08 (okno New Revision)**. Do tego czasu luka jest otwarta i nazwana.
 
-Uwaga przy realizacji: `revisions_numbering_dc_only` już teraz pilnuje, kto
-może **zmienić** `scl_revision` (DC tego projektu przy aal2), ale wyłącznie
-przy `UPDATE` — strona `INSERT` jest wolna, dokładnie jak była wolna dla
-`scl_doc_number` przed 1b.02. Wzorzec do skopiowania jest w migracji
+Uwaga przy realizacji: `revisions_numbering_dc_only` pilnuje, kto może
+**zmienić** `scl_revision` (DC tego projektu przy aal2), ale wyłącznie przy
+`UPDATE` — strona `INSERT` jest wolna, dokładnie jak była wolna dla
+`scl_doc_number` przed 1b.02. **1b.03 świadomie jej nie zamknęło** i zapisało
+dlaczego: kolumna jest `NOT NULL`, więc blokada „tylko DC" na INSERT odebrałaby
+Originatorowi tworzenie rewizji. Właściwym rozwiązaniem jest generator, nie
+blokada — wzorzec do skopiowania jest w migracji
 `20260918085125_scl_doc_number_generator`.
 
