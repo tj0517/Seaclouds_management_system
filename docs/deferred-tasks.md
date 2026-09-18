@@ -1800,3 +1800,28 @@ nazwana także w komentarzu migracji
   auth.jwt() ->> 'aal')`, jest w advisorze mimo podzapytania. Przepisanie
   tamtych dwóch to jeden `alter policy` × 2 i zdejmuje 2 z 29 ostrzeżeń —
   zbyt małe, żeby wsadzać je do migracji o rejestrze dokumentów.
+
+## pp) Walidacja formatu `scl_revision` — przeniesiona z 1b.02 do 1b.08
+
+Zgłoszone przy DCS 1b.02 (2026-09-18). `dcs.revisions.scl_revision` jest
+`NOT NULL` i unikalny w obrębie dokumentu (`UNIQUE (document_id,
+scl_revision)`), ale **żadna reguła nie pilnuje jego formatu**: dziś przejdzie
+tam dowolny tekst.
+
+Serie zależą od kroku obiegu (`docs/00-glossary.md`): `A, B, …` dla IDC,
+`00, 01, …` dla IFR, `1, 2, …` dla rewizji finalnych. Właśnie dlatego nie
+jest to `CHECK` — warunek musiałby znać `step_id` wiersza i rozjechałby się
+z maszyną stanów przy pierwszej zmianie słownika `workflow_step`.
+
+`docs/02-data-model.md` obiecywało tę walidację „generatorowi (1b.02)".
+**To był zły adres** i został poprawiony: 1b.02 nadaje numer *dokumentu*
+(`scl_doc_number`, tor `PROJEKT-ORIG-TYPE-SEQ-LANG`) i nie dotyka rewizji
+w ogóle. Numer rewizji powstaje tam, gdzie wybierany jest krok — czyli
+w **1b.08 (okno New Revision)**. Do tego czasu luka jest otwarta i nazwana.
+
+Uwaga przy realizacji: `revisions_numbering_dc_only` już teraz pilnuje, kto
+może **zmienić** `scl_revision` (DC tego projektu przy aal2), ale wyłącznie
+przy `UPDATE` — strona `INSERT` jest wolna, dokładnie jak była wolna dla
+`scl_doc_number` przed 1b.02. Wzorzec do skopiowania jest w migracji
+`20260918085125_scl_doc_number_generator`.
+

@@ -768,8 +768,12 @@ Triggery: `revisions_numbering_dc_only` (`scl_revision`, `cpy_revision`),
 `audit_revisions`. RLS: sześć polityk, identycznie jak `documents`.
 
 Walidacja formatu `scl_revision` (A,B,… / 00,01,… / 1,2,…) **nie jest** w
-1b.01: która seria obowiązuje, zależy od kroku, więc reguła należy do
-generatora (1b.02), nie do CHECK-a, który by się z nim rozjechał.
+1b.01: która seria obowiązuje, zależy od kroku, więc nie da się jej zapisać
+CHECK-iem, który by się z maszyną stanów nie rozjechał. **Należy do 1b.08**
+(okno New Revision) — tam wybierany jest krok, a więc i seria. Do 1b.02 to
+zdanie wskazywało generator numeracji dokumentów; przeniesione, bo 1b.02
+nadaje numer **dokumentu**, a `scl_revision` jest numerem **rewizji** —
+inny obiekt, inna reguła, inny ekran (`docs/deferred-tasks.md` pp).
 Niemodyfikowalność rewizji finalnych (IFC/IFI/IFB) egzekwowana triggerem
 w bazie — **1b.10**, nie tutaj.
 
