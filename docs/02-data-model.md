@@ -591,10 +591,77 @@ w `project_roles`" NIE jest egzekwowane w bazie** — 1b.01 świadomie tego nie
 dodało (potrzebny trigger, a ustawia je ekran 1b.04);
 `docs/deferred-tasks.md` (oo).
 
-Numer SCL: `PROJEKT-ORIG-TYPE-SEQ-LANG` (np. `SC2601-SCL-RA-0012-EN`);
-SEQ atomowo per PROJEKT+TYPE, luki niewypełniane, ręczny wpis niemożliwy —
-**generator to 1b.02**, w 1b.01 numer podaje wołający (i nie ma jeszcze
-żadnego wołającego).
+#### Numer SCL — generator (DCS 1b.02)
+
+Migracja `20260918085125_scl_doc_number_generator`. Numer ma postać
+`PROJEKT-ORIG-TYPE-SEQ-LANG` (np. `SC2601-SCL-RA-0012-EN`) i od 1b.02 nadaje
+go wyłącznie baza.
+
+`dcs.next_doc_number(p_project_id uuid, p_doc_type_id uuid, p_language_id
+uuid, p_orig text default 'SCL') returns text` — zwraca gotowy numer.
+`PROJEKT` bierze z `public.projects.project_code`, `TYPE` i `LANG` ze
+słownika `dcs.dictionaries` (odpowiednio `dict_type = 'doc_type'` i
+`'language'`); każdy brakujący albo niewłaściwego typu kończy się `22023`
+z komunikatem, który człon numeru nie dał się rozwiązać. Typ słownika jest
+sprawdzany **także tutaj**, mimo złożonych FK z 1b.01: funkcja działa
+w triggerze `BEFORE INSERT`, czyli zanim FK w ogóle się wykona. `ORIG` nie
+ma słownika (`SCL` to kod originatora Sea Clouds) — walidowany jest tylko
+kształt `^[A-Z0-9]{1,10}$` po `btrim` i `upper`, bo separator w ORIG dołożyłby
+człon do numeru i zepsuł parser SEQ.
+
+**Atomowość:** `pg_advisory_xact_lock(hashtext(project_code ||
+doc_type_code))` — blokada transakcyjna w dokładnie tym zakresie, w którym
+liczy się SEQ, brana **przed** odczytem maksimum i trzymana do `COMMIT`.
+Bez niej dwadzieścia równoległych `INSERT`-ów czyta to samo maksimum
+i generuje ten sam numer (sprawdzone: przy usuniętej linii 10 z 20 sesji
+dostało `23505`, cztery z nich na tym samym `SC2602-SCL-AS-0001-EN`).
+
+**SEQ** = najwyższy numer już użyty w danym PROJEKT+TYPE plus jeden,
+dopełniony do czterech cyfr. Liczone są wiersze po kolumnach (`project_id`,
+`doc_type_id`), a SEQ jest wyciągany z zapisanego numeru regexem
+`-([0-9]{1,6})-[^-]*$` — **od prawej**, bo `project_code` sam może zawierać
+myślnik (`SCMS-IT` na scl-dev daje numer sześcioczłonowy). Parsowanie jest
+celowo pobłażliwe co do dopełnienia: historyczny `SC2602-SCL-TN-12-EN`
+z Excela liczy się jako SEQ 12, a nie znika z maksimum. Wiersze, które nie
+pasują do wzorca w ogóle, nie wnoszą nic — zabezpieczeniem ostatecznym jest
+globalny `UNIQUE`, więc pomyłka kończy się głośnym `23505`, nigdy cichym
+duplikatem.
+
+**Void i luki:** brak filtra na `workflow_status` — dokument Void zachowuje
+wiersz i numer i **liczy się** do maksimum. To `max + 1`, nie „pierwsza wolna
+pozycja": luka po Voidzie ani żadna inna nie jest uzupełniana
+(`docs/00-glossary.md`). SEQ > 9999 podnosi `22003` zamiast rozszerzać pole
+do pięciu cyfr — zmiana formatu nie należy do tej funkcji.
+
+Generator **nie jest** obiektem `sequence` Postgresa: dokumenty przyjeżdżają
+z Excela z historyczną numeracją (brief §13.2), a sekwencja nic nie wie
+o numerach, których z niej nie pobrano. Źródłem prawdy jest tabela.
+
+`SECURITY DEFINER`, bez `EXECUTE` dla `anon`/`authenticated`/`service_role`.
+To **odstępstwo od wzorca 1b.01** (tam wszystkie funkcje triggerowe są
+`SECURITY INVOKER`) i ma jeden powód: tamte czytają tabele, które i tak widzi
+każdy zalogowany, a ta czyta `dcs.documents` pod RLS — polityka ukrywająca
+wiersz kazałaby liczyć maksimum z widoku częściowego. Numer jest tożsamością
+dokumentu, więc nie może zależeć od tego, kto pyta. Advisor 0029 liczy
+wyłącznie funkcje `SECURITY DEFINER` wykonywalne przez `authenticated`, więc
+baseline 12 się nie rusza. Koszt zapisany wprost: schemat `dcs` jest
+wystawiony w API, ale po `REVOKE` funkcja **nie jest** endpointem RPC —
+jeśli 1b.04 zechce pokazywać numer przed zapisem, doda `GRANT` i przyjmie
+0029 = 13. Pułapka do zapamiętania: `pnpm db:gen` odwzorowuje schemat, a nie
+granty, więc `next_doc_number` **jest** w `Database['dcs']['Functions']`
+w `packages/db/src/database.ts` — wywołanie `supabase.rpc('next_doc_number')`
+skompiluje się i dostanie `42501` w czasie wykonania. Numer bierze się
+z `INSERT`-a z pustym `scl_doc_number`, nie z RPC.
+
+**GUC `dcs.import_mode`** — furtka dla importu SMDR. Czytany przez
+`current_setting('dcs.import_mode', true)`; wartość `'on'` (ustawiana przez
+`set local` w sesji importu) pozwala wstawić dokument z własnym numerem,
+zapisywanym **dosłownie**, także w formacie, który nigdy nie był SCL-owy.
+Każda inna wartość i brak ustawienia znaczą „wyłączone". Świadomie **nie**
+dołożono drugiego warunku `auth.uid() is null`: to przesądziłoby, że import
+nigdy nie pobiegnie z sesji zalogowanego DC, a ta decyzja należy do
+1b.12–1b.15. Praktycznie furtka i tak jest poza zasięgiem aplikacji —
+klient REST nie potrafi wykonać `SET`.
 
 Integralność typów słownikowych jest **deklaratywna**: `dcs.dictionaries`
 dostało `UNIQUE (id, dict_type)`, a każda kolumna FK niesie stałą kolumnę
@@ -604,8 +671,21 @@ od triggera blokuje to również późniejszą zmianę `dict_type` samego wiersz
 słownika (który poza tym jest niepilnowany — `deferred-tasks.md` (bb)).
 Koszt: osiem kolumn tylko-do-odczytu w `packages/db/src/database.ts`.
 
-Triggery (wszystkie funkcje w `public`, SECURITY INVOKER, `search_path=''`,
-bez `EXECUTE` dla ról API):
+Triggery (wszystkie funkcje w `public`, `search_path=''`, bez `EXECUTE` dla
+ról API; cztery z 1b.01 są SECURITY INVOKER, `assign_scl_doc_number()`
+z 1b.02 jest SECURITY DEFINER — uzasadnienie wyżej):
+- `documents_assign_scl_number` → `assign_scl_doc_number()` (1b.02).
+  `BEFORE INSERT`, nazwany tak, żeby sortował się **pierwszy** spośród
+  triggerów `BEFORE` tej tabeli (odpalają się w kolejności nazw). Pusty
+  `scl_doc_number` → uzupełniany z `dcs.next_doc_number()`; NOT NULL jest
+  sprawdzany po triggerach `BEFORE`, więc kolumna jest spełniona. Podany
+  `scl_doc_number` → `23001`, chyba że sesja ustawiła `dcs.import_mode = 'on'`
+  (wtedy numer idzie do bazy dosłownie). To jest insertowa połowa reguły
+  „ręczny wpis niemożliwy"; połowa updatowa to `forbid_scl_doc_number_change()`
+  poniżej i 1b.02 jej nie tyka. Funkcja musi być SECURITY DEFINER również
+  dlatego, że `dcs.next_doc_number` nie ma `EXECUTE` dla żadnej roli API,
+  a `EXECUTE` na wywołaniu **wewnątrz** ciała funkcji jest sprawdzane
+  w czasie wykonania (inaczej niż przy `CREATE TRIGGER`).
 - `documents_scl_number_immutable` → `forbid_scl_doc_number_change()`.
   `scl_doc_number` jest niezmienny **bezwarunkowo** — także dla admina, DC
   i `postgres`, dokładnie jak `dictionaries.code` (1a.15b). Błędny dokument
@@ -688,8 +768,12 @@ Triggery: `revisions_numbering_dc_only` (`scl_revision`, `cpy_revision`),
 `audit_revisions`. RLS: sześć polityk, identycznie jak `documents`.
 
 Walidacja formatu `scl_revision` (A,B,… / 00,01,… / 1,2,…) **nie jest** w
-1b.01: która seria obowiązuje, zależy od kroku, więc reguła należy do
-generatora (1b.02), nie do CHECK-a, który by się z nim rozjechał.
+1b.01: która seria obowiązuje, zależy od kroku, więc nie da się jej zapisać
+CHECK-iem, który by się z maszyną stanów nie rozjechał. **Należy do 1b.08**
+(okno New Revision) — tam wybierany jest krok, a więc i seria. Do 1b.02 to
+zdanie wskazywało generator numeracji dokumentów; przeniesione, bo 1b.02
+nadaje numer **dokumentu**, a `scl_revision` jest numerem **rewizji** —
+inny obiekt, inna reguła, inny ekran (`docs/deferred-tasks.md` pp).
 Niemodyfikowalność rewizji finalnych (IFC/IFI/IFB) egzekwowana triggerem
 w bazie — **1b.10**, nie tutaj.
 
