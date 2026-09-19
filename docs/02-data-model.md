@@ -14,6 +14,7 @@ Pojęcia: [00-glossary.md](00-glossary.md). Punkty otwarte:
 ```mermaid
 erDiagram
     profiles ||--o{ dcs_project_roles : "rola per projekt"
+    profiles ||--o{ dcs_user_views : "zapisane widoki MDR (bez project_id)"
     projects ||--o{ dcs_project_roles : "project_id (RLS)"
     projects ||--o{ dcs_mdr_settings : "1:1 konfiguracja MDR"
     projects ||--o{ dcs_documents : "project_id (RLS)"
@@ -356,9 +357,11 @@ Reguła nienegocjowalna: każda tabela `dcs.*` ma `project_id` + RLS + polityki
 + test pgTAP w tym samym PR (patrz `CLAUDE.md`). Tam, gdzie `project_id` nie
 jest kluczem naturalnym (np. `files`), jest denormalizowany właśnie pod RLS.
 Tabele bez danych projektowych (słownikowe/globalne) nie mają `project_id`
-i muszą być tu jawnie opisane — dziś: `dcs.dictionaries`. Poza
-`mdr_settings`, `project_roles`, `dictionaries`, `documents`, `revisions`
-i `files` całość poniżej to 📐 PROJEKT.
+i muszą być tu jawnie opisane — dziś: `dcs.dictionaries` (słownik) oraz
+`dcs.user_views` (prywatne preferencje UI, 1b.06 — uzasadnienie w jej
+sekcji niżej). Poza `mdr_settings`, `project_roles`, `dictionaries`,
+`documents`, `revisions`, `files` i `user_views` całość poniżej to
+📐 PROJEKT.
 
 ### ✅ `dcs.mdr_settings` (1:1 z `projects`)
 `project_id (PK/FK → projects, ON DELETE CASCADE)`, `cpy_numbering bool
@@ -948,6 +951,88 @@ dodano nic** — obsługują je `documents_scl_doc_number_key`
 i `documents_project_id_idx` z 1b.01; złożony `(project_id, scl_doc_number)`
 napisano, zmierzono i usunięto, bo planista nie wybrał go w żadnym
 sprawdzonym rozmiarze danych (szczegóły pomiaru w nagłówku migracji).
+
+### ✅ `dcs.user_views` (zapisane widoki rejestru, DCS 1b.06)
+
+`id`, `user_id (FK → public.profiles, ON DELETE CASCADE)`, `name text`,
+`filters jsonb`, `columns jsonb`, `is_default bool`, `created_at`,
+`updated_at`. Migracja `20260919152836_create_dcs_user_views`, test
+`supabase/tests/user_views_rls.test.sql` (54 asercje). Jeden wiersz = nazwany
+zestaw filtrów i widocznych kolumn rejestru `/mdr`; zapisuje go i czyta
+wyłącznie kontrolka „My views" nad tabelą rejestru.
+
+**Bez `project_id` — jawny wyjątek wymagany przez `CLAUDE.md`.** Uzasadnienie:
+tabela nie niesie danych projektowych. Wiersz należy do OSOBY, nie do
+projektu, a filtr projektu — jeśli użytkownik go zapisał — leży w środku
+`filters` jako wartość, której baza nigdy nie czyta: żadnego FK, żadnego
+CHECK-a na zawartość, żadnego triggera. To nie jest skrót, tylko warunek
+poprawności: **zapisanie filtra nie jest i nie może stać się drogą do
+wiersza.** Widok zapisany na projekcie, do którego użytkownik później straci
+rolę, po przywróceniu zwraca zero wierszy, bo dane i tak idą przez
+`dcs.v_mdr` (`security_invoker`) pod RLS wołającego. Nie ma tu czego
+poszerzyć.
+
+**Bez `audit_trigger()` — świadomy wyjątek od nawyku z 1a.08**, nazwany
+w opisie PR-a i asercją w teście (sekcja 1: na tabeli wisi wyłącznie
+`set_updated_at` i nic więcej). `public.audit_log` jest dowodem wobec
+klienta — kto zmienił który dokument, kto co zatwierdził. Zmiana nazwy
+własnego widoku „moja dyscyplina, do przeglądu" nie jest czynnością, z której
+ktokolwiek będzie się rozliczał, a wrzucenie strumienia nawyków ekranowych
+jednej osoby do tej samej tabeli obniża wartość śladu audytowego przez sam
+szum. Wyjątek jest wąski i **nie uogólnia się**: tabela `dcs.*`, która
+zapisuje cokolwiek o DOKUMENCIE, trigger dostaje.
+
+**Bez polityki admina** — jako jedyna tabela `dcs.*`. Cztery polityki
+(`select` / `insert` / `update` / `delete`), wszystkie `(select auth.uid()) =
+user_id`, żadnej `FOR ALL` z `is_admin()`. Administrator nie ma powodu czytać
+cudzych zapisanych filtrów rejestru, a ekranu, na którym zarządzałby cudzymi
+widokami, nie ma ani w planach. Test pilnuje obu połówek: `policies_are`
+(komplet nazw) plus osobna asercja `polcmd = '*'` → 0, bo politykę `FOR ALL`
+dałoby się dodać pod jedną z tych czterech nazw i przejść przez sprawdzenie
+po nazwach. **Koszt przyjęty świadomie:** zgłoszenia „mój domyślny widok się
+zepsuł" rozwiązuje się pytając użytkownika, nie czytając tabelę.
+
+`WITH CHECK` jest i na INSERT, i na UPDATE — te dwa warunki kupują różne
+rzeczy. Bez `WITH CHECK` na INSERT użytkownik wstawiłby wiersz z cudzym
+`user_id`: polityka SELECT ukryłaby go przed autorem i **podałaby go ofierze
+do listy widoków**. Bez `WITH CHECK` na UPDATE właściciel przepisałby
+`user_id` istniejącego wiersza i wepchnął swój widok komuś innemu. Oba
+przypadki są w teście jako czerwone (`42501`).
+
+**Najwyżej jeden domyślny widok na użytkownika — w bazie, nie w UI**
+(kryterium akceptacyjne 1b.06): częściowy indeks unikalny
+`user_views_one_default_per_user on (user_id) where is_default`. Częściowy,
+bo „unikalny wśród wierszy z `is_default`" nie da się wyrazić jako
+`constraint`. PostgREST nie umie wyrazić `set is_default = (id = $1)` jednym
+żądaniem, więc `apps/dcs/lib/user-views.ts` robi to **dwoma, w tej
+kolejności**: najpierw CZYŚCI domyślne użytkownika, potem USTAWIA wybrany.
+Kolejność jest tu całym argumentem — stan pośredni to **zero** domyślnych,
+nigdy dwa, więc indeksu nie narusza; dwie karty ścigające się o ustawienie
+różnych domyślnych obie czyszczą, jedna wygrywa, druga dostaje `23505`,
+zamiast rejestru otwieranego losowo. Awaria między żądaniami zostawia
+użytkownika bez domyślnego widoku — widać to od razu na `/mdr` i naprawia
+jedno kliknięcie. Odrzucona alternatywa: funkcja SECURITY INVOKER przez RPC
+(jedna atomowa instrukcja) — kupuje wyłącznie to okno awarii, kosztuje
+funkcję w schemacie `dcs` z własnym grantem. Test asercjonuje obie własności indeksu z osobna: **unikalny** ORAZ
+**częściowy** — indeks unikalny bez `WHERE` zabraniałby użytkownikowi mieć
+więcej niż jeden widok w ogóle, a częściowy bez `UNIQUE` nie zabraniałby
+niczego.
+
+Granty zawężone do `select, insert, update, delete` (domyślne uprawnienia
+schematu `dcs` dają `ALL`, migracja to odbiera — `authenticated` nie może
+`TRUNCATE`). `anon` nie ma nic; dowód w teście przez `has_table_privilege`
+i `aclexplode(relacl)` (również dla `PUBLIC`, grantee 0), **nie** przez
+`information_schema.role_table_grants`, które filtruje po roli łączącej się
+z bazą i zwraca `null` dla grantów, które istnieją.
+
+Czego w tej tabeli NIE MA i nie powinno być: kształtu `filters`. Format
+zna wyłącznie `apps/dcs/lib/mdr.ts` (`parseMdrSearchParams` jest totalna —
+nieznany albo uszkodzony klucz staje się wartością domyślną, nie błędem),
+więc CHECK wyliczający klucze zamroziłby w migracji coś, czego właścicielem
+jest ekran. Baza sprawdza tylko `jsonb_typeof(filters) = 'object'`
+i `jsonb_typeof(columns) = 'array'`. Pusta tablica `columns` znaczy
+„wszystkie kolumny" — i to jest zarazem znaczenie widoku zapisanego, zanim
+kontrolka wyboru kolumn powstała.
 
 ### `dcs.approval_tasks`
 Jeden silnik dla obu trybów obiegu: `id`, `revision_id (FK)`, `project_id`,

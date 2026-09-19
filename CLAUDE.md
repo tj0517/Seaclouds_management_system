@@ -74,9 +74,10 @@ Supabase, prod ref `tfbzivfsqsgebegcvfah`.
 - Oba projekty startują przy każdym pushu i każdym merge'u, ale Vercel bywa,
   że **auto-pomija** build: w checkach PR-a widać to jako
   `Skipped - Not affected`, w dashboardzie jako `CANCELED`. **Kiedy dokładnie
-  pomija — nie wiemy.** **Siedem obserwacji** (osiem punktów danych — #66 wnosi
-  dwa commity), wszystkie z tego repo, których nie da się złożyć w jedną
-  regułę — a od #71 **nie da się ich już nawet uzgodnić między sobą**:
+  pomija — nie wiemy.** **Osiem obserwacji** (dziewięć punktów danych — #66
+  i #71 wnoszą po dwa commity), wszystkie z tego repo, których nie da się
+  złożyć w jedną regułę — a od #71 **nie da się ich już nawet uzgodnić między
+  sobą**:
   - **PR #58** — nowa gałąź, wyłącznie `docs/` — **zbudował oba projekty**.
   - **PR #64** — nowa gałąź, `supabase/` + `docs/`, bez `apps/`
     i bez `packages/` — **pominął oba** (`Skipped - Not affected`).
@@ -129,6 +130,34 @@ Supabase, prod ref `tfbzivfsqsgebegcvfah`.
     (Zastrzeżenie do odczytu: dotyczy PIERWSZEGO runu #71. Commit dopisujący
     tę obserwację rusza `CLAUDE.md`, więc kolejny run tego PR-a nie jest już
     tym samym kształtem i nie wolno go czytać jako powtórzenia tej próby.)
+  - **PR #71, DRUGI run** (19.09) — i jest dokładnie tym, co zastrzeżenie
+    wyżej zapowiadało, więc stoi jako **osobna obserwacja, a nie powtórzenie
+    pierwszej próby**. Ten sam PR, ta sama gałąź, ta sama konfiguracja;
+    zmienia się **wyłącznie zawartość commita**:
+    - `e176d9c` — wyłącznie `docs/` (`03-conventions.md` +
+      `deferred-tasks.md`), bez `CLAUDE.md` → **oba projekty POMINIĘTE**
+      (`Skipped - Not affected`).
+    - `8fdbcae` — `CLAUDE.md` + `docs/03-conventions.md` +
+      `docs/deferred-tasks.md`, czyli **ściśle więcej** niż commit wyżej →
+      **oba projekty zbudowały się** (`Deployment has completed`).
+
+    Odczytane z checków obu commitów (`gh api .../commits/<sha>/status`,
+    2026-09-19), nie z pamięci i nie z `gh pr checks`, które pokazuje stan
+    ostatniego commita i o pierwszym nic by nie powiedziało.
+
+    Kształt jest ten sam co para commitów w #66 — jeden PR, dwa commity,
+    przeciwne wyniki — tylko **z przeciwnym znakiem**: w #66 zbudował się
+    commit ruszający MNIEJ (`1c0d558`, tylko dokumentacja), a pominięty
+    został ten ruszający WIĘCEJ (`7c6a55e`, `apps/dcs` + `supabase`). Tutaj
+    zbudował się ten ruszający więcej. Dwie pary z tego samego repo,
+    trzymające stałe wszystko poza zawartością commita, wskazują w
+    **przeciwne** strony.
+
+    Żadnej nowej teorii pod to nie podstawiam — w szczególności nie
+    „`CLAUDE.md` wymusza build": #71 pierwszy run i #58 były tylko-`docs/`
+    z przeciwnymi wynikami, a `CLAUDE.md` nie należy do żadnego pakietu
+    workspace, więc hipoteza o członkostwie tłumaczyłaby tu pominięcie, nie
+    build. Obserwacja dochodzi do listy, **pytanie zostaje otwarte**.
 
   Sama „nowa gałąź" więc builda nie wymusza (to zdanie stało tu wcześniej jako
   reguła i jest nieprawdziwe), ale i „mniej zmienionych plików = pominięty

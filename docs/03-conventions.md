@@ -56,6 +56,70 @@ Architektura i droga migracji: [01-architecture.md](01-architecture.md).
   musi robić sama baza. Ekran, który filtruje po stronie aplikacji, nie
   dowodzi niczego o politykach.
 
+## `public.audit_log` nie jest w pełni zakresowalny po projekcie
+
+**Reguła: każdy filtr, eksport, raport, reguła retencji albo sprzątanie, które
+rozumuje „po projekcie" na `public.audit_log`, musi jawnie nazwać to
+założenie — bo ono nie jest prawdziwe dla całej tabeli.**
+
+Do dziennika pisze dziś **dziesięć** tabel przez `public.audit_trigger()`.
+Funkcja ustala `project_id` w trzech krokach i to on decyduje o wszystkim
+poniżej:
+
+```sql
+if v_table = 'public.projects' then
+  v_project_id := v_record_id;          -- sam projekt: własne id
+elsif v_row ? 'project_id' then
+  v_project_id := (v_row ->> 'project_id')::uuid;
+end if;                                  -- w pozostałych przypadkach: NULL
+```
+
+Czyli podział przebiega nie tam, gdzie się wydaje — **`public.projects` nie ma
+kolumny `project_id`, a mimo to jest zakresowane**, bo funkcja obsługuje je
+osobnym przypadkiem:
+
+| `project_id` w dzienniku | tabele |
+|---|---|
+| zawsze ustawione | `dcs.documents`, `dcs.revisions`, `dcs.files`, `dcs.mdr_settings`, `dcs.project_roles` (mają kolumnę) + `public.projects` (przypadek szczególny) |
+| **zawsze NULL** | `dcs.dictionaries`, `public.profiles`, `public.clients`, `public.module_permissions` |
+
+Odczyt z lokalnego stacka po `db reset` (2026-09-19) potwierdza to wprost:
+`dcs.dictionaries` 101 wierszy z NULL i 0 bez, `public.profiles` 8 / 0,
+`public.module_permissions` 4 / 0, przy `public.projects` 0 / 2
+i `dcs.mdr_settings` 0 / 1.
+
+**Uwaga na `dcs.dictionaries`:** to nie jest przypadek brzegowy o kilku
+wierszach. Słowniki są tabelą `dcs.*` i intuicja podpowiada, że ich ślad da się
+odczytać „po projekcie" — nie da się, są globalne, i to one dają w dzienniku
+najwięcej wierszy z NULL.
+
+Dwie konsekwencje, obie praktyczne:
+
+1. **`where project_id = …` nie zwraca całego śladu.** Zwraca ślad tabel
+   projektowych. Wiersze o osobach i o słownikach — utworzenie i usunięcie
+   profilu, nadanie i odebranie dostępu do modułu, każda zmiana słownika DCS —
+   są poza nim i **żaden filtr po projekcie ich nie zobaczy**, bo nie należą
+   do projektu.
+2. **`record_id` bywa jedynym uchwytem, a czasem nie da się go zapisać z
+   góry.** `public.module_permissions` powstaje z triggera
+   `grant_default_module_access()` (1a.22) ze **świeżym UUID przy każdym
+   wywołaniu**, więc odpowiadającego wiersza dziennika nie da się wskazać
+   literałem — trzeba go odczytać, zanim źródłowy wiersz zniknie.
+
+**Jak to wyszło — i to jest tu najważniejsze zdanie.** Nie z testu. Test
+przechodził. Wyszło z **uzgodnienia liczby wierszy**: zapytanie zakresowane po
+`project_id` raportowało **zero**, a `select count(*) from public.audit_log`
+rosło o **osiem przy każdym przebiegu** (116 → 124 → 132, pomiar
+2026-09-19, DCS 1b.06). Zapytanie zakresowane odpowiadało poprawnie na pytanie,
+które zadano; pytanie było węższe niż tabela. Pełna historia i decyzje:
+`docs/deferred-tasks.md` (ss).
+
+**Wzorzec do naśladowania przy sprzątaniu albo migracji danych dziennika:**
+policz wiersze w zakresie ORAZ całość przed i po, i porównaj różnice. Jeżeli
+`total_before - total_after` nie równa się liczbie wierszy w zakresie, operacja
+ruszyła coś poza nim — a `public.audit_log` to dowód wobec klienta, nie dane
+testowe (patrz `CLAUDE.md`: na produkcji kasowanie jest zakazane bez wyjątków).
+
 ## Advisor — świadomie akceptowane ostrzeżenia
 
 Baseline advisora security: **zero** lintów `function_search_path_mutable`
