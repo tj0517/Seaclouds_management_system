@@ -2055,6 +2055,14 @@ the first is reachable by the obvious `where project_id in (…)`:
 | `dcs.documents`, `dcs.revisions`, `dcs.mdr_settings`, `dcs.project_roles`, `public.projects` | the fixture project | yes |
 | `public.profiles`, `public.module_permissions` | **NULL** | **no** |
 
+The table above lists only what THIS fixture touches. The full picture — which
+audited tables land `project_id IS NULL` and why `public.projects` is scoped
+despite having no such column — is now a rule in
+[`03-conventions.md`](03-conventions.md), section "`public.audit_log` nie jest
+w pełni zakresowalny po projekcie". Two more tables belong to the NULL group
+(`dcs.dictionaries`, `public.clients`); `dcs.dictionaries` is in fact the
+largest contributor of NULL-scoped rows in a seeded database.
+
 The second row is eight per run, measured. `public.profiles` is audited with
 `record_id` = the user's own uuid; `public.module_permissions` rows are created
 by the `grant_default_module_access()` trigger (1a.22) with **a fresh uuid per
