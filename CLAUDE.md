@@ -102,7 +102,7 @@ Supabase, prod ref `tfbzivfsqsgebegcvfah`.
     **Wniosek jest negatywny i taki ma zostać: z listy zmienionych plików nie
     da się przewidzieć, które projekty się zbudują.** Żadna z hipotez
     zapisanych w `docs/03-conventions.md` (w tym ta o członkostwie
-    w workspace) nie tłumaczy wszystkich czterech obserwacji — `1c0d558`
+    w workspace) nie tłumaczy wszystkich sześciu obserwacji — `1c0d558`
     ruszył zero pakietów workspace i zbudował oba projekty. **Pytanie
     pozostaje otwarte**; nie wstawiaj tu nowej teorii na miejsce starej,
     dopisuj obserwacje.
@@ -111,6 +111,11 @@ Supabase, prod ref `tfbzivfsqsgebegcvfah`.
     **zbudował**, `seaclouds-management-system` **pominięty**
     (`Skipped - Not affected`). Ten sam kształt co commit `7c6a55e` z #66;
     obserwacja potwierdza, nie komplikuje.
+  - **PR #68** (follow-up 1b.04, 19.09) — nowa gałąź, `apps/dcs/` + `docs/`
+    + `CLAUDE.md`, bez `packages/` → **oba projekty zbudowały się**
+    (`seaclouds-management-system`: `Deployment has completed`, nie
+    `Skipped`). Para faktów do zestawienia z #67 wyżej: oba PR-y ruszyły
+    `apps/dcs/`, #67 pominął Timesheeta, #68 nie.
 
   Sama „nowa gałąź" więc builda nie wymusza (to zdanie stało tu wcześniej jako
   reguła i jest nieprawdziwe), ale i „mniej zmienionych plików = pominięty
