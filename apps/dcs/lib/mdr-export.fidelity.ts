@@ -25,27 +25,27 @@
 // flag becomes unnecessary on Node 22.
 //
 // ---------------------------------------------------------------------------
-// RUN `supabase db reset` AFTERWARDS. MEASURED, NOT PRECAUTIONARY.
+// THE TEARDOWN IS COMPLETE, INCLUDING public.audit_log — MEASURED
 // ---------------------------------------------------------------------------
-// The teardown below removes every row this file created — documents,
-// revisions, mdr_settings, project_roles, projects, users — and asserts that
-// it did. What it does NOT remove is the trail those writes leave in
-// public.audit_log: ten tables carry audit_trigger() (dcs.documents,
-// dcs.revisions, dcs.mdr_settings, dcs.project_roles and public.projects among
-// them), audit_log has no FK to projects, so deleting a project leaves its
-// audit rows behind.
+// This suite can be run repeatedly with no `supabase db reset` between runs.
+// Verified 2026-09-19: three consecutive runs from one reset, audit_log at 116
+// rows before and after every one of them (drift 0), then `supabase test db`
+// Files=27 Tests=866 PASS with no reset at any point.
 //
-// That is not cosmetic. Measured 2026-09-19: after a few runs, 472 audit rows
-// for the two fixture projects remained, and they FAIL two pgTAP files —
-// audit_log.test.sql test 31 and audit_mdr_settings.test.sql tests 9, 18 and
-// 19 — each of which reads audit_log expecting only the seed's own rows. The
-// suite went from 863 assertions passing to four failures that have nothing to
-// do with the code under test.
+// That is not free, and the reason is worth knowing before touching afterAll.
+// Ten tables carry audit_trigger() and public.audit_log has no FK to projects,
+// so every write AND every delete this file makes leaves a trail. Left alone
+// it fails four assertions in audit_log.test.sql and audit_mdr_settings.test.sql
+// — which is how this was found, as two files failing for reasons that look
+// unrelated to anything here.
 //
-// The teardown deliberately does not delete from public.audit_log. Clearing it
-// is a `supabase db reset`, which is one command, rebuilds from migrations and
-// seed, and needs no special-casing of the one table the project treats as
-// evidence rather than as data.
+// Two kinds of row have to be cleaned, and only the first is obvious:
+//   * rows carrying one of the three fixture project ids;
+//   * rows with project_id NULL that this fixture nonetheless owns —
+//     public.profiles and public.module_permissions, the latter created by the
+//     grant_default_module_access() trigger with a fresh uuid per run. Eight
+//     per run, invisible to a project-scoped delete, and the reason afterAll
+//     captures ids into a temp table before deleting anything.
 //
 // ---------------------------------------------------------------------------
 // WHAT MAKES THIS A PROOF AND NOT A TAUTOLOGY
@@ -64,7 +64,7 @@
 // teardown in afterAll. assertLocal() is what keeps it there: this file
 // refuses to run against anything but 127.0.0.1.
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -72,25 +72,54 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import ExcelJS from 'exceljs'
 import { exportMdr } from './mdr-export'
 
-const DB = 'postgresql://postgres:postgres@127.0.0.1:54322/postgres'
-const API = 'http://127.0.0.1:54321'
+// The ONLY things that decide what this file touches. Compared by strict
+// equality below, never by `includes` — see assertLocal().
+const LOCAL_DB = 'postgresql://postgres:postgres@127.0.0.1:54322/postgres'
+const LOCAL_API = 'http://127.0.0.1:54321'
+const DB = LOCAL_DB
+const API = LOCAL_API
 const PUBLISHABLE =
   process.env.LOCAL_PUBLISHABLE_KEY ?? 'sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH'
 
 const SEED_SQL = join(__dirname, '..', '..', '..', 'scripts', 'mdr-export-fidelity.sql')
 const MEMBER = { email: 'fidelity-member@example.com', password: 'fidelity-pass' }
-const PROJECT = 'eeeeeeee-0000-4000-8000-000000000001'
-const OTHER_PROJECT = 'eeeeeeee-0000-4000-8000-000000000002'
+const MEMBER_ID = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee1'
+const OUTSIDER_ID = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee2'
+const PROJECT = 'eeeeeeee-0000-4000-8000-000000000001'        // SC9906, member reads
+const OTHER_PROJECT = 'eeeeeeee-0000-4000-8000-000000000002'  // SC9907, member does NOT
+const SECOND_PROJECT = 'eeeeeeee-0000-4000-8000-000000000003' // SC9908, member reads
+
+/** Every project this file creates — the exact scope of everything it deletes. */
+const FIXTURE_PROJECTS = [PROJECT, OTHER_PROJECT, SECOND_PROJECT]
+const FIXTURE_LIST = FIXTURE_PROJECTS.map((id) => `'${id}'`).join(', ')
 
 /**
- * This file writes rows and deletes them, so it must be incapable of pointing
- * anywhere but the local stack. Checked before anything runs, not left to
- * convention.
+ * THE GUARD. This file writes rows and deletes them — including from
+ * public.audit_log — so it must be incapable of pointing anywhere but the
+ * local stack.
+ *
+ * STRICT EQUALITY on the connection string, not `includes`, and this is the
+ * whole control rather than the first of several: the DSN is literally the
+ * argument psql connects with, there is no environment override for it, and
+ * nothing else in this file selects a target. A substring check would accept
+ * `postgresql://…@db.tfbzivfsqsgebegcvfah.supabase.co/…?options=127.0.0.1`.
+ *
+ * Runtime checks against the SERVER were tried and rejected as theatre, which
+ * is worth recording so nobody adds them back believing they help:
+ *   * inet_server_addr() returns the CONTAINER's address (192.168.107.8,
+ *     port 5432 — measured), not the published 127.0.0.1:54322, so comparing
+ *     it to a loopback literal fails on the local stack and proves nothing.
+ *   * The pgbouncer schema, and the supabase_* role set, are present on BOTH
+ *     the local stack and scl-dev (read 2026-09-19). Neither discriminates.
+ *
+ * What does discriminate, beyond the literal: this DSN is superuser/plaintext
+ * on a loopback port. Neither remote would accept it — they are not on
+ * 127.0.0.1:54322 and their passwords are not `postgres`. If a connection on
+ * this string succeeds at all, it is the local stack.
  */
 function assertLocal() {
-  for (const url of [DB, API]) {
-    if (!url.includes('127.0.0.1')) throw new Error(`refusing a non-local target: ${url}`)
-  }
+  if (DB !== LOCAL_DB) throw new Error(`refusing a non-local database: ${DB}`)
+  if (API !== LOCAL_API) throw new Error(`refusing a non-local API: ${API}`)
 }
 
 function psql(sql: string): string {
@@ -149,42 +178,105 @@ describe('MDR export fidelity (local stack)', () => {
     const { error } = await supabase.auth.signInWithPassword(MEMBER)
     if (error) throw new Error(`sign-in failed: ${error.message}`)
 
-    outDir = mkdtempSync(join(tmpdir(), 'mdr-export-'))
+    // A caller-supplied directory when given, so the generated .xlsx files can
+    // be handed to a reader that is NOT exceljs (see the OPC validation in the
+    // 1b.06 verification notes) rather than vanishing into a temp dir.
+    outDir = process.env.MDR_EXPORT_OUT_DIR ?? mkdtempSync(join(tmpdir(), 'mdr-export-'))
+    mkdirSync(outDir, { recursive: true })
+    console.log(`  exports written to ${outDir}`)
   }, 120_000)
 
   afterAll(() => {
     // Always, pass or fail: this database is shared with `supabase test db`,
-    // and 55 documents left behind would change what the next run measures.
-    psql(`
-      delete from dcs.documents where project_id in ('${PROJECT}', '${OTHER_PROJECT}');
-      delete from dcs.mdr_settings where project_id in ('${PROJECT}', '${OTHER_PROJECT}');
-      delete from public.projects where id in ('${PROJECT}', '${OTHER_PROJECT}');
-      delete from auth.users where email in ('${MEMBER.email}', 'fidelity-outsider@example.com');
+    // and fixtures left behind would change what the next run measures.
+    //
+    // ONE psql session, because the audit cleanup below needs ids that stop
+    // existing halfway through it (see _fx) and a temp table does not survive
+    // between separate psql invocations.
+    assertLocal()
+
+    const out = psql(`
+      -- Rows this fixture OWNS but which carry no project_id, so a
+      -- project-scoped delete cannot reach them. Captured BEFORE the deletes,
+      -- because deleting the users is what destroys the ids.
+      --   * public.profiles     — record_id is the fixture user's own uuid
+      --   * public.module_permissions — created by the
+      --     grant_default_module_access() trigger on profiles INSERT (1a.22);
+      --     its record_id is a fresh uuid per run, so it can only be captured,
+      --     never written down as a literal.
+      create temp table _fx(id uuid);
+      insert into _fx select id from public.module_permissions
+        where user_id in ('${MEMBER_ID}', '${OUTSIDER_ID}');
+      insert into _fx select id from public.profiles
+        where id in ('${MEMBER_ID}', '${OUTSIDER_ID}');
+
+      delete from dcs.documents where project_id in (${FIXTURE_LIST});
+      delete from dcs.mdr_settings where project_id in (${FIXTURE_LIST});
+      delete from dcs.project_roles where project_id in (${FIXTURE_LIST});
+      delete from public.projects where id in (${FIXTURE_LIST});
+      delete from auth.users where id in ('${MEMBER_ID}', '${OUTSIDER_ID}');
+
+      create temp table _counts as select
+        (select count(*) from public.audit_log) as total_before,
+        (select count(*) from public.audit_log
+          where project_id in (${FIXTURE_LIST})
+             or record_id in (select id from _fx)) as in_scope;
+
+      delete from public.audit_log
+       where project_id in (${FIXTURE_LIST})
+          or record_id in (select id from _fx);
+
+      select total_before, in_scope,
+             (select count(*) from public.audit_log) as total_after,
+             (select count(*) from public.audit_log
+               where project_id in (${FIXTURE_LIST})
+                  or record_id in (select id from _fx)) as left_in_scope
+        from _counts;
     `)
+
+    const [totalBefore, inScope, totalAfter, leftInScope] = out
+      .trim()
+      .split('\n')
+      .slice(-1)[0]
+      .split('|')
+      .map(Number)
+
+    // ---------------------------------------------------------------------
+    // Why public.audit_log is cleaned here at all, and how it is fenced
+    // ---------------------------------------------------------------------
+    // Ten tables carry audit_trigger(); audit_log has no FK to projects, so
+    // every write and every delete above leaves a trail. Measured: left alone
+    // it FAILS four assertions in audit_log.test.sql and
+    // audit_mdr_settings.test.sql, which read the table expecting only the
+    // seed's own rows — the next `supabase test db` then breaks in two files
+    // that look unrelated to anything here.
+    //
+    // public.audit_log is the one table this project treats as evidence rather
+    // than as data (CLAUDE.md: NEVER on production). So the delete is fenced
+    // three ways, each load-bearing:
+    //   1. assertLocal() immediately above — strict equality on the local DSN,
+    //      re-checked here and not only in beforeAll, so the guard cannot be
+    //      skipped by reaching this hook another way.
+    //   2. An enumerated scope: the three fixture project ids, plus the record
+    //      ids this fixture itself created. Nothing else is in range.
+    //   3. The reconciliation below. If the statement removed one row more
+    //      than it counted, that is a discrepancy in an evidence table and the
+    //      test says so loudly rather than leaving it to be found later.
+    expect(leftInScope, 'fixture audit rows remain after teardown').toBe(0)
+    expect(
+      totalBefore - totalAfter,
+      'the delete removed rows OUTSIDE the enumerated fixture scope',
+    ).toBe(inScope)
+
     const left = psql(`select count(*) from dcs.documents where scl_doc_number like 'SC990%'`).trim()
     // Reported as an assertion rather than a console line: a teardown that
     // silently half-worked is how the NEXT run gets a confusing failure.
     expect(left, 'fixtures left behind — run `supabase db reset`').toBe('0')
-
-    // The part the teardown cannot undo — said out loud, because the next
-    // `supabase test db` will otherwise fail in two files that look unrelated
-    // to anything here. See the header.
-    const trail = psql(`
-      select count(*) from public.audit_log
-       where project_id in ('${PROJECT}', '${OTHER_PROJECT}')
-    `).trim()
-    if (trail !== '0') {
-      console.warn(
-        `\n  NOTE: ${trail} rows remain in public.audit_log from these fixtures.\n` +
-          '  They are not deleted here (audit_log is evidence, not test data).\n' +
-          '  Run `supabase db reset` before the next `supabase test db`, or\n' +
-          '  audit_log.test.sql and audit_mdr_settings.test.sql will fail.\n',
-      )
-    }
   })
 
-  it('seeded ~50 documents the member can read, plus 5 they cannot', () => {
+  it('seeded 50 + 2 documents the member can read, plus 5 they cannot', () => {
     expect(psql(`select count(*) from dcs.documents where project_id = '${PROJECT}'`).trim()).toBe('50')
+    expect(psql(`select count(*) from dcs.documents where project_id = '${SECOND_PROJECT}'`).trim()).toBe('2')
     expect(psql(`select count(*) from dcs.documents where project_id = '${OTHER_PROJECT}'`).trim()).toBe('5')
   })
 
@@ -263,15 +355,41 @@ describe('MDR export fidelity (local stack)', () => {
     const { buffer } = await exportMdr(supabase, {})
     const numbers = await sheetNumbers(buffer)
     expect(numbers.filter((n) => n.startsWith('SC9907'))).toEqual([])
-    // And it does contain the member's own — otherwise "none of the other
-    // project" would be satisfied by an empty sheet.
+    // And it does contain BOTH projects the member may read — otherwise "none
+    // of the other project" would be satisfied by an empty sheet.
     expect(numbers.filter((n) => n.startsWith('SC9906')).length).toBe(50)
+    expect(numbers.filter((n) => n.startsWith('SC9908')).length).toBe(2)
   }, 60_000)
 
-  it('names the file MDR_[project_code]_[YYYY-MM-DD].xlsx', async () => {
-    const { filename } = await exportMdr(supabase, { project: PROJECT })
-    expect(filename).toMatch(/^MDR_SC9906_\d{4}-\d{2}-\d{2}\.xlsx$/)
-    const { filename: unfiltered } = await exportMdr(supabase, {})
-    expect(unfiltered).toMatch(/^MDR_ALL_\d{4}-\d{2}-\d{2}\.xlsx$/)
+  // Acceptance criterion 2, for TWO different projects — one project would be
+  // satisfied by a hard-coded string, and the code has to come from the rows
+  // the filter actually matched.
+  it('names the file MDR_[project_code]_[YYYY-MM-DD].xlsx, per project', async () => {
+    const today = new Date()
+    const day = [
+      today.getFullYear(),
+      String(today.getMonth() + 1).padStart(2, '0'),
+      String(today.getDate()).padStart(2, '0'),
+    ].join('-')
+
+    const first = await exportMdr(supabase, { project: PROJECT })
+    const second = await exportMdr(supabase, { project: SECOND_PROJECT })
+    const unfiltered = await exportMdr(supabase, {})
+
+    writeFileSync(join(outDir, first.filename), first.buffer)
+    writeFileSync(join(outDir, second.filename), second.buffer)
+    writeFileSync(join(outDir, unfiltered.filename), unfiltered.buffer)
+
+    expect(first.filename).toBe(`MDR_SC9906_${day}.xlsx`)
+    expect(second.filename).toBe(`MDR_SC9908_${day}.xlsx`)
+    // Two different projects really do produce two different names.
+    expect(first.filename).not.toBe(second.filename)
+    // And no project filter means no single code to name it after.
+    expect(unfiltered.filename).toBe(`MDR_ALL_${day}.xlsx`)
+
+    // The generic shape the criterion states, asserted as such.
+    for (const name of [first.filename, second.filename, unfiltered.filename]) {
+      expect(name).toMatch(/^MDR_[A-Za-z0-9._-]+_\d{4}-\d{2}-\d{2}\.xlsx$/)
+    }
   }, 60_000)
 })
