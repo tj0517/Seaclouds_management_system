@@ -2029,3 +2029,123 @@ method — and the method fails silently the moment someone runs it over MCP, in
 CI, or as any role that is not a member of the grantee. Two people can run
 "the same check" against the same grant and get different output, with no error
 on either side.
+
+## ss) `public.audit_log` accumulates from test fixtures, and a project-scoped delete does not reach all of it
+
+Recorded during DCS 1b.06 (2026-09-19). **Resolved for the fidelity suite; the
+general shape is not, and is the reason this is written down.**
+
+`apps/dcs/lib/mdr-export.fidelity.ts` seeds ~57 documents across three projects
+and two users on the local stack, because the export runs over HTTP and cannot
+see a pgTAP transaction's uncommitted rows (see the file's header). Its
+teardown removed every row it created — and the next `supabase test db` failed
+anyway, in **four assertions across two files that have nothing to do with the
+export**: `audit_log.test.sql` test 31, and `audit_mdr_settings.test.sql` tests
+9, 18 and 19. All three read `public.audit_log` expecting only the seed's own
+rows.
+
+**Why the obvious teardown is not enough.** Ten tables carry `audit_trigger()`
+and `public.audit_log` has no foreign key to `public.projects`, so deleting a
+project leaves its trail behind — and *the deletes themselves are audited too*,
+so cleaning up writes more rows than it removes. Two kinds accumulate and only
+the first is reachable by the obvious `where project_id in (…)`:
+
+| rows | project_id | reachable by a project-scoped delete? |
+|---|---|---|
+| `dcs.documents`, `dcs.revisions`, `dcs.mdr_settings`, `dcs.project_roles`, `public.projects` | the fixture project | yes |
+| `public.profiles`, `public.module_permissions` | **NULL** | **no** |
+
+The table above lists only what THIS fixture touches. The full picture — which
+audited tables land `project_id IS NULL` and why `public.projects` is scoped
+despite having no such column — is now a rule in
+[`03-conventions.md`](03-conventions.md), section "`public.audit_log` nie jest
+w pełni zakresowalny po projekcie". Two more tables belong to the NULL group
+(`dcs.dictionaries`, `public.clients`); `dcs.dictionaries` is in fact the
+largest contributor of NULL-scoped rows in a seeded database.
+
+The second row is eight per run, measured. `public.profiles` is audited with
+`record_id` = the user's own uuid; `public.module_permissions` rows are created
+by the `grant_default_module_access()` trigger (1a.22) with **a fresh uuid per
+run**, so they cannot be written down as a literal at all — they have to be
+captured before the users are deleted.
+
+**What was decided, and why.** The teardown clears `public.audit_log`, scoped
+to *rows this fixture created and nothing else*, on the local stack only. That
+is a deliberate decision about the one table this project treats as evidence
+rather than as data, so the reasoning is recorded rather than left in a diff:
+
+- **Rejected: leave it and require `supabase db reset` after every run.** It
+  works, but it makes a passing test suite depend on a step nobody is reminded
+  of, and the punishment for forgetting is four failures in two unrelated
+  files. That is a trap, not a convention.
+- **Rejected: stop auditing the tables involved.** Solves a test problem by
+  weakening the audit trail. Not a trade worth making.
+- **Chosen: an enumerated, reconciled, guarded delete.** Three fences, each
+  load-bearing: `assertLocal()` with **strict equality** on the local DSN,
+  re-checked immediately before the statement; an enumerated scope (three
+  fixture project ids plus the record ids the fixture itself created, captured
+  into a temp table in the same psql session); and a before/after count
+  reconciliation that fails the test if the statement removed even one row
+  outside that scope.
+
+Verified 2026-09-19: three consecutive runs from one reset, `audit_log` at 116
+rows before and after every one (drift **0**), then `supabase test db`
+`Files=27, Tests=866, PASS` with no reset at any point.
+
+**What is NOT resolved, and what to do about it:**
+
+1. **Any future test that seeds through PostgREST inherits this.** The
+   `project_id`-NULL half is the part that will be missed, because it is
+   invisible to the obvious cleanup and only shows up as someone else's test
+   failing later. A shared fixture helper — seed, teardown, audit reconciliation
+   in one place — is the real fix; 1b.06 has one instance and a helper for one
+   caller is speculation.
+2. **`aa`/`gg` note holes punched in `audit_log` on scl-dev by hand.** This is
+   the same table and a different mechanism; do not read the two as one problem.
+3. **Nothing here applies to production.** The rule stands unchanged: never
+   delete from `public.audit_log` on prod, and `assertLocal()` exists so this
+   code cannot reach it.
+
+## tt) A CI guard that greps for a token can be satisfied by rewording a comment
+
+Recorded during DCS 1b.06 (2026-09-19). **Same family as (rr) and (rr-2): a
+tool reporting something other than the truth while the code stays exactly as
+it was.** (rr) was a reset that half-succeeded and still answered; (rr-2) was a
+catalogue view that hid grants that existed; this one is a guard that went
+green for a change that protected nothing.
+
+`.github/workflows/ci.yml` has:
+
+```bash
+for f in $(grep -rl --include='*.ts' --include='*.tsx' -i -e 'SERVICE_ROLE' apps packages); do
+  if ! grep -q "server-only" "$f"; then ...fail... fi
+done
+```
+
+It fired on `apps/dcs/app/data/actions/mdr-export.ts` — where the only
+occurrence was **in a comment**, explaining that the export deliberately does
+*not* use that key. The first fix was to reword the comment. CI went green.
+**Nothing about the module changed**: it was exactly as importable from a
+client component after the "fix" as before. The guard was now silent about a
+file it had no opinion on, and the next file to mention the key in prose would
+get the same treatment.
+
+**The actual fix**: add `server-only` as a real dependency of `@scl/dcs` and
+`import 'server-only'` in the action, which is what the guard was asking for.
+The comment says `service_role` again.
+
+**The detail that decides WHERE the import goes**, and which is worth keeping
+because it is not obvious: `server-only` resolves to an empty module under the
+`react-server` export condition and to one that **throws** under `default`. So
+it belongs in the server-action module and **not** in `lib/mdr-export.ts` —
+a `lib/` module carrying it breaks the moment Vitest imports it, which both
+`lib/mdr-export.test.ts` and `lib/mdr-export.fidelity.ts` do. That split is the
+intended shape: the action is the server boundary, `lib/` stays
+framework-agnostic and testable.
+
+**Not deferred, but worth someone's judgement later:** the guard cannot tell a
+comment from code, so it will keep asking for a `server-only` import in files
+that merely discuss the key. That is the right direction to be wrong in — it
+over-asks rather than under-asks — and tightening it to skip comments would
+make it parse TypeScript, which is a worse trade for a guard whose value is
+that it is three lines of `grep`. Left as is, deliberately.
