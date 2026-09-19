@@ -74,8 +74,9 @@ Supabase, prod ref `tfbzivfsqsgebegcvfah`.
 - Oba projekty startują przy każdym pushu i każdym merge'u, ale Vercel bywa,
   że **auto-pomija** build: w checkach PR-a widać to jako
   `Skipped - Not affected`, w dashboardzie jako `CANCELED`. **Kiedy dokładnie
-  pomija — nie wiemy.** Cztery obserwacje, wszystkie z tego repo, których nie da
-  się złożyć w jedną regułę:
+  pomija — nie wiemy.** **Siedem obserwacji** (osiem punktów danych — #66 wnosi
+  dwa commity), wszystkie z tego repo, których nie da się złożyć w jedną
+  regułę — a od #71 **nie da się ich już nawet uzgodnić między sobą**:
   - **PR #58** — nowa gałąź, wyłącznie `docs/` — **zbudował oba projekty**.
   - **PR #64** — nowa gałąź, `supabase/` + `docs/`, bez `apps/`
     i bez `packages/` — **pominął oba** (`Skipped - Not affected`).
@@ -102,7 +103,7 @@ Supabase, prod ref `tfbzivfsqsgebegcvfah`.
     **Wniosek jest negatywny i taki ma zostać: z listy zmienionych plików nie
     da się przewidzieć, które projekty się zbudują.** Żadna z hipotez
     zapisanych w `docs/03-conventions.md` (w tym ta o członkostwie
-    w workspace) nie tłumaczy wszystkich sześciu obserwacji — `1c0d558`
+    w workspace) nie tłumaczy wszystkich siedmiu obserwacji — `1c0d558`
     ruszył zero pakietów workspace i zbudował oba projekty. **Pytanie
     pozostaje otwarte**; nie wstawiaj tu nowej teorii na miejsce starej,
     dopisuj obserwacje.
@@ -116,6 +117,18 @@ Supabase, prod ref `tfbzivfsqsgebegcvfah`.
     (`seaclouds-management-system`: `Deployment has completed`, nie
     `Skipped`). Para faktów do zestawienia z #67 wyżej: oba PR-y ruszyły
     `apps/dcs/`, #67 pominął Timesheeta, #68 nie.
+  - **PR #71** (docs 1b.05, 19.09) — nowa gałąź, **wyłącznie `docs/`**
+    (`03-conventions.md` + `deferred-tasks.md`), bez `apps/`, bez `packages/`,
+    bez `supabase/`, bez `CLAUDE.md` → **oba projekty POMINIĘTE**
+    (`Skipped - Not affected`). **To pierwszy przypadek WPROST sprzeczny
+    z listą powyżej**, i tak ma tu stać: **PR #58 był tylko-`docs/` i zbudował
+    oba**, a **#65 był tylko-`CLAUDE.md` i też zbudował oba**. Ten sam kształt
+    zmian, przeciwny wynik — nie „inny zestaw ścieżek", tylko ta sama
+    kategoria zmiany raz budująca, raz pomijana. Żadnej nowej teorii pod to
+    nie podstawiam; obserwacja dochodzi do listy i pytanie zostaje otwarte.
+    (Zastrzeżenie do odczytu: dotyczy PIERWSZEGO runu #71. Commit dopisujący
+    tę obserwację rusza `CLAUDE.md`, więc kolejny run tego PR-a nie jest już
+    tym samym kształtem i nie wolno go czytać jako powtórzenia tej próby.)
 
   Sama „nowa gałąź" więc builda nie wymusza (to zdanie stało tu wcześniej jako
   reguła i jest nieprawdziwe), ale i „mniej zmienionych plików = pominięty

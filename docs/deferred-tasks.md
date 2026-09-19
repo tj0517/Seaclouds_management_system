@@ -1984,3 +1984,48 @@ to**, and reported in a way that reads as success or as an ordinary failure
 rather than as "I did not run". Both were found the same day. When a result is
 surprising, check that the step which produced it actually ran to completion
 before interpreting the result itself.
+
+### rr-2) `information_schema.role_table_grants` hides grants that exist
+
+Same day, same shape as (rr) above, third instance: a read that showed **less
+than the truth** and reported it as an ordinary answer rather than as "I could
+not see".
+
+Verifying 1b.05's grants on scl-dev, this returned **null** for
+`authenticated` on `dcs.v_mdr`:
+
+```sql
+select privilege_type from information_schema.role_table_grants
+ where table_schema = 'dcs' and table_name = 'v_mdr' and grantee = 'authenticated';
+```
+
+Read at face value: "the view has no grant for `authenticated`" — i.e. the
+migration's `grant select` did not take, and the register is unreadable. All of
+that would have been wrong.
+
+`information_schema` views are **filtered by the connecting role**. They show
+only grants where the current role is the grantor, the grantee, or a member of
+the grantee. The MCP connection is none of those for `authenticated`, so the
+row is simply not shown. Nothing is NULL in the database.
+
+**Use the catalog, not `information_schema`, when verifying grants:**
+
+```sql
+select grantee::regrole::text, privilege_type
+  from pg_class c, aclexplode(c.relacl) a
+  join pg_namespace n on n.oid = c.relnamespace
+ where n.nspname = 'dcs' and c.relname = 'v_mdr' and a.grantee <> 0;
+-- authenticated=SELECT, service_role=SELECT, postgres=…  (anon absent)
+```
+
+`has_table_privilege('authenticated', 'dcs.v_mdr', 'select')` answers the same
+question per-privilege and is what `supabase/tests/*.test.sql` already uses —
+which is why the pgTAP assertions were right while the ad-hoc check was not.
+
+**Worth stating because it makes the trap concrete:** the owner's independent
+verification of these same grants on production gave the *correct* answer, but
+only because they connect as a role that can see them. Right answer, wrong
+method — and the method fails silently the moment someone runs it over MCP, in
+CI, or as any role that is not a member of the grantee. Two people can run
+"the same check" against the same grant and get different output, with no error
+on either side.

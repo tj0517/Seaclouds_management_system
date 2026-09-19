@@ -353,6 +353,36 @@ w `apps/dcs/lib/module-permissions.ts`). Admin nie jest tym dotknięty:
   bramka na linii `github.ref` zostaje bez zmian, bo własność, którą kupuje,
   jest warta więcej.
 
+- **19.09.2026: podział 1b.05 na dwa PR-y NIE ZADZIAŁAŁ. Okno 11m16s na
+  produkcji.** Zapisane z godzinami, bo godziny są tu całą treścią:
+
+  | Czas (UTC) | Co się stało |
+  |---|---|
+  | 14:33:50 | **merge #69** — ekran **razem z migracją** (PR nie był przebazowany) |
+  | 14:33:53 | `push-dev` → scl-dev, sukces |
+  | ~14:34 | Vercel wdraża `dcs` na **produkcję**: `/mdr` żyje, a prod nie ma `dcs.v_mdr` → **okno otwarte** |
+  | 14:42:27 | **merge #70** — `git diff 51e8026 eb8dc47` **pusty**, nie wniósł nic |
+  | 14:42:38 | dispatch `production-db` z `main` startuje |
+  | 14:45:06 | `push-prod` sukces → **okno zamknięte** |
+
+  Przez **11 minut 16 sekund** `/mdr` na `dcs.seaclouds.eu` zwracało 500
+  (PostgREST `42P01`), a wpis w sidebarze renderował się przy tym na **każdej**
+  stronie DCS, bo jest bezwarunkowy. Czy ktoś wszedł — nie wiadomo, nie ma jak
+  tego odczytać.
+
+  **Podział na dwa PR-y powstał dokładnie po to, żeby temu zapobiec, i nie
+  zapobiegł.** Powód nie jest techniczny: **kolejność merge'ów nigdy nie
+  została zapisana jako instrukcja dla człowieka, który merguje** — żyła
+  wyłącznie w numeracji kroków planu. Numer kroku nie jest instrukcją. PR
+  z migracją stał otwarty i gotowy, PR z ekranem też, nic w GitHubie nie mówiło
+  „nie ten pierwszy", i poszedł ten drugi.
+
+  **Reguła, która z tego wychodzi — zdaniem, nie numerem kroku:** gdy zadanie
+  wiezie schemat i front, **PR z samą migracją musi zostać zmergowany, a
+  wdrożenie na proda potwierdzone ODCZYTEM bazy, ZANIM zmergowany zostanie PR
+  z aplikacją.** Nie „najpierw krok 1, potem krok 4" — dokładnie to zdanie, w
+  opisie obu PR-ów, w tej kolejności, z nazwą drugiego PR-a w treści pierwszego.
+
 - **Integracja GitHub Supabase (branching) musi pozostać WYŁĄCZONA na obu
   projektach** (scl-dev i prod). Włączona w dashboardzie aplikuje migracje
   i `config.toml` na prod przy każdym merge'u do `main`, z pominięciem
