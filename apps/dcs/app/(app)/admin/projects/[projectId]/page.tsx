@@ -11,15 +11,25 @@
 // starved both for a non-admin DC. See the migration comment for why this
 // is a function and not a wider profiles policy (column exposure).
 //
+// DCS 1b.04 follow-up: and the way into the project's document register. The
+// per-row "Documents" link on the project list (app/(app)/page.tsx) had no
+// counterpart here, so a project opened from the admin side was a dead end —
+// /admin/projects/<id>/documents does not exist and 404s. The link points at
+// the same /projects/<id>/documents route as the list, and like it is offered
+// to every reader rather than only an admin: the register is a read for
+// anyone who can see the project, and RLS decides what it contains.
+//
 // DCS 1a.17: this page also became the project's MDR summary and the home of
 // EditProjectDialog — the wizard sends you here after creating a project, and
 // this is where its settings are changed afterwards. The summary renders for
 // every reader (mdr_settings' SELECT policy admits any signed-in user); the
 // Edit button only for an admin, matching updateProjectMdr's requireAdmin and
 // the "Admins manage mdr settings" / "Admin zarządza projektami" policies.
+import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { createClient } from '@scl/db/server'
 import AddMemberForm from '@/components/AddMemberForm'
+import NavLinkStatus from '@/components/NavLinkStatus'
 import EditProjectDialog from '@/components/EditProjectDialog'
 import RoleCheckboxGroup from '@/components/RoleCheckboxGroup'
 import { Badge } from '@/components/ui/badge'
@@ -107,14 +117,22 @@ export default async function ProjectTeamPage({ params }: { params: Promise<{ pr
         }
         description={<span className="font-mono">{project.project_code}</span>}
         actions={
-          isAdmin ? (
-            <EditProjectDialog
-              project={project}
-              settings={settings}
-              clients={clients.map((client) => ({ id: client.id, name: client.name, code: client.code }))}
-              trigger={<Button size="sm" variant="outline">Edit</Button>}
-            />
-          ) : null
+          <>
+            <Button size="sm" variant="outline" asChild>
+              <Link href={`/projects/${projectId}/documents`}>
+                Documents
+                <NavLinkStatus />
+              </Link>
+            </Button>
+            {isAdmin ? (
+              <EditProjectDialog
+                project={project}
+                settings={settings}
+                clients={clients.map((client) => ({ id: client.id, name: client.name, code: client.code }))}
+                trigger={<Button size="sm" variant="outline">Edit</Button>}
+              />
+            ) : null}
+          </>
         }
       />
 

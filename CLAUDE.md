@@ -106,6 +106,11 @@ Supabase, prod ref `tfbzivfsqsgebegcvfah`.
     ruszył zero pakietów workspace i zbudował oba projekty. **Pytanie
     pozostaje otwarte**; nie wstawiaj tu nowej teorii na miejsce starej,
     dopisuj obserwacje.
+  - **PR #67** (follow-up 1b.04, 19.09) — nowa gałąź, `apps/dcs/`
+    + `supabase/tests/`, bez `packages/` i bez `apps/timesheet/` → `dcs`
+    **zbudował**, `seaclouds-management-system` **pominięty**
+    (`Skipped - Not affected`). Ten sam kształt co commit `7c6a55e` z #66;
+    obserwacja potwierdza, nie komplikuje.
 
   Sama „nowa gałąź" więc builda nie wymusza (to zdanie stało tu wcześniej jako
   reguła i jest nieprawdziwe), ale i „mniej zmienionych plików = pominięty
