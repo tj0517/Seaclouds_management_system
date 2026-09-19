@@ -97,13 +97,21 @@ function psql(sql: string): string {
   return execFileSync('psql', [DB, '-At', '-c', sql], { encoding: 'utf8' })
 }
 
-/** The SCL numbers in a built workbook, top to bottom — the sheet's own order. */
-async function sheetNumbers(buffer: Buffer): Promise<string[]> {
+/** Reads a built workbook back, the way Excel would. */
+async function readBack(buffer: Buffer) {
   const workbook = new ExcelJS.Workbook()
   type Loadable = Parameters<typeof workbook.xlsx.load>[0]
   await workbook.xlsx.load(buffer as unknown as Loadable)
   const sheet = workbook.getWorksheet('MDR')
+  // Thrown rather than asserted non-null: if the sheet is missing, THIS is the
+  // failure worth reporting, not a cell read blowing up three lines later.
   if (!sheet) throw new Error('the workbook has no MDR worksheet')
+  return sheet
+}
+
+/** The SCL numbers in a built workbook, top to bottom — the sheet's own order. */
+async function sheetNumbers(buffer: Buffer): Promise<string[]> {
+  const sheet = await readBack(buffer)
 
   // Located by heading, not by a hard-coded index, so a column added to
   // DOCUMENT INFO later does not make this read the wrong column and still
@@ -239,10 +247,7 @@ describe('MDR export fidelity (local stack)', () => {
       project: PROJECT,
       cols: 'scl_doc_number,title,workflow_status_code',
     })
-    const workbook = new ExcelJS.Workbook()
-    type Loadable = Parameters<typeof workbook.xlsx.load>[0]
-    await workbook.xlsx.load(buffer as unknown as Loadable)
-    const sheet = workbook.getWorksheet('MDR')!
+    const sheet = await readBack(buffer)
     expect((sheet.getRow(2).values as unknown[]).filter(Boolean)).toEqual([
       'SCL Doc. Number',
       'Title',
