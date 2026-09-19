@@ -20,8 +20,11 @@ import { ArrowDown, ArrowUp, ChevronsUpDown, Search, X } from 'lucide-react'
 import { createClient } from '@scl/db/server'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { EmptyState, PageBody, PageHeader, ScrollableTable } from '@/components/page-chrome'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { EmptyState, PageBody, PageHeader, RegisterScroll } from '@/components/page-chrome'
+// Deliberately NOT the `Table` primitive: it wraps its <table> in a second
+// overflow container, and the frozen band needs exactly one scroller to pin
+// against. See RegisterScroll's comment. The rest are plain thead/tr/th/td.
+import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { getActiveDictionary } from '@/lib/dictionaries'
 import { getProfileDirectory } from '@/lib/profile-directory'
 import {
@@ -32,6 +35,7 @@ import {
   getMdrProjectOptions,
   hasActiveFilters,
   listMdrPage,
+  mdrFrozenBand,
   mdrHref,
   mdrStatusColor,
   parseMdrSearchParams,
@@ -42,6 +46,77 @@ import {
 import { cn } from '@/lib/utils'
 
 const SORTABLE = new Set<string>(MDR_SORT_COLUMNS)
+
+/**
+ * Every column with its position in the WHOLE register, not in its group.
+ * The frozen band is defined by that global index, and a per-group index
+ * cannot express it: the band is the first five of DOCUMENT INFO's eleven.
+ */
+const FLAT_COLUMNS = MDR_COLUMN_GROUPS.flatMap((group, groupIndex) =>
+  group.columns.map((column, columnIndex) => ({ group, groupIndex, column, columnIndex })),
+)
+
+/** Shared by both header rows; `border-b` is on the cells, see the <table>. */
+const GROUP_HEAD = 'border-b text-center text-[11px] font-semibold uppercase tracking-wider'
+
+/**
+ * The frozen band, resolved against the columns this screen renders.
+ *
+ * Every column is visible today, so this is the whole band; it is written as a
+ * resolution rather than a constant because 1b.06's column picker will hand it
+ * a narrower list, and the offsets have to be the running total of what is
+ * ACTUALLY rendered. See mdrFrozenBand().
+ */
+const FROZEN = new Map(
+  mdrFrozenBand(FLAT_COLUMNS.map((entry) => entry.column.key)).map((column) => [column.key, column]),
+)
+
+/**
+ * Where the band sits in the header row — derived, so the group header cannot
+ * come apart from the columns it is supposed to sit over.
+ *
+ * DOCUMENT INFO therefore renders as up to three cells: whatever scrolls to
+ * the band's left (Process), the band itself, which carries the label because
+ * it is the piece always on screen, and the rest of the group. A span of zero
+ * is not rendered at all, so dropping a column from the band cannot leave a
+ * colSpan={0} behind.
+ */
+const FROZEN_INDEXES = FLAT_COLUMNS.map((entry, index) =>
+  entry.column.key && FROZEN.has(entry.column.key) ? index : -1,
+).filter((index) => index >= 0)
+const BAND_FIRST = FROZEN_INDEXES[0] ?? 0
+const BAND_LAST = FROZEN_INDEXES[FROZEN_INDEXES.length - 1] ?? -1
+const BAND_LEADING = BAND_FIRST
+const BAND_SPAN = BAND_LAST - BAND_FIRST + 1
+const BAND_TRAILING = MDR_COLUMN_GROUPS[0].columns.length - BAND_LAST - 1
+
+/**
+ * What pins one cell of the frozen band, or nothing for every other column.
+ *
+ * The offset is an inline style rather than `left-[52px]`, because Tailwind's
+ * JIT only emits classes it can read as literals in the source — a class here
+ * would mean writing the ladder down a second time, and the second copy is the
+ * one that rots.
+ */
+function frozenCell(key: string | null): { className: string; style?: { left: number } } {
+  const frozen = key ? FROZEN.get(key) : undefined
+  if (!frozen) return { className: '' }
+  return {
+    className: cn('mdr-frozen sticky z-10', frozen.last && 'mdr-frozen-edge border-r border-border'),
+    style: { left: frozen.left },
+  }
+}
+
+/** Holds a frozen column to its declared width, so the offsets stay true. */
+function frozenWidth(key: string | null, children: React.ReactNode) {
+  const frozen = key ? FROZEN.get(key) : undefined
+  if (!frozen || frozen.contentPx === null) return children
+  return (
+    <span className="block truncate" style={{ width: frozen.contentPx }}>
+      {children}
+    </span>
+  )
+}
 
 /** dd.MM.yyyy — the format the sheet uses; the register is read, not parsed. */
 function formatDate(value: string | null): string {
@@ -225,41 +300,65 @@ export default async function MdrPage({
             Documents appear here as soon as they are created, with the SCL number the system assigns them.
           </EmptyState>
         ) : (
-          <ScrollableTable>
-            <Table>
+          <RegisterScroll>
+            {/* border-separate, not the preflight default: with collapsed
+                borders a cell's borders are painted by the TABLE, so a sticky
+                cell travels and leaves its borders behind. Separated borders
+                belong to the cell, which is why every th/td below carries its
+                own `border-b` instead of the row carrying one. */}
+            <table className="w-full min-w-[44rem] caption-bottom border-separate border-spacing-0 text-sm">
               <TableHeader>
                 {/* Two header rows that have to agree — both derived from
                     MDR_COLUMN_GROUPS so they cannot drift apart. */}
                 <TableRow className="hover:bg-transparent">
-                  {MDR_COLUMN_GROUPS.map((group) => (
+                  {/* DOCUMENT INFO is the one group the frozen band cuts
+                      through — see BAND_LEADING above. The band's cell pins at
+                      left 0, the same place the band's first column does,
+                      which is what keeps the two header rows aligned at every
+                      scroll position. */}
+                  {BAND_LEADING > 0 ? <TableHead colSpan={BAND_LEADING} className={GROUP_HEAD} /> : null}
+                  <TableHead
+                    colSpan={BAND_SPAN}
+                    className={cn(GROUP_HEAD, 'mdr-frozen mdr-frozen-edge sticky left-0 z-20 border-r border-border')}
+                  >
+                    {MDR_COLUMN_GROUPS[0].label}
+                  </TableHead>
+                  {BAND_TRAILING > 0 ? <TableHead colSpan={BAND_TRAILING} className={GROUP_HEAD} /> : null}
+                  {MDR_COLUMN_GROUPS.slice(1).map((group) => (
                     <TableHead
                       key={group.label}
                       colSpan={group.columns.length}
-                      className="border-l border-border/60 text-center text-[11px] font-semibold uppercase tracking-wider first:border-l-0"
+                      className={cn(GROUP_HEAD, 'border-l border-border/60')}
                     >
                       {group.label}
                     </TableHead>
                   ))}
                 </TableRow>
                 <TableRow className="hover:bg-transparent">
-                  {MDR_COLUMN_GROUPS.flatMap((group, groupIndex) =>
-                    group.columns.map((column, columnIndex) => (
+                  {FLAT_COLUMNS.map(({ group, groupIndex, column, columnIndex }) => {
+                    const frozen = frozenCell(column.key)
+                    return (
                       <TableHead
                         key={`${group.label}-${column.label}`}
                         className={cn(
-                          'whitespace-nowrap text-xs',
+                          'whitespace-nowrap border-b text-xs',
                           columnIndex === 0 && groupIndex > 0 && 'border-l border-border/60',
                           column.numeric && 'text-right',
+                          frozen.className,
                         )}
+                        style={frozen.style}
                       >
-                        {column.key && SORTABLE.has(column.key) ? (
-                          <SortLink query={query} column={column.key} label={column.label} />
-                        ) : (
-                          column.label
+                        {frozenWidth(
+                          column.key,
+                          column.key && SORTABLE.has(column.key) ? (
+                            <SortLink query={query} column={column.key} label={column.label} />
+                          ) : (
+                            column.label
+                          ),
                         )}
                       </TableHead>
-                    )),
-                  )}
+                    )
+                  })}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -270,27 +369,31 @@ export default async function MdrPage({
                     </TableCell>
                   </TableRow>
                 ) : null}
-                {page.rows.map((row) => (
+                {page.rows.map((row, rowIndex) => (
                   <TableRow key={row.document_id}>
-                    {MDR_COLUMN_GROUPS.flatMap((group, groupIndex) =>
-                      group.columns.map((column, columnIndex) => (
+                    {FLAT_COLUMNS.map(({ group, groupIndex, column, columnIndex }) => {
+                      const frozen = frozenCell(column.key)
+                      return (
                         <TableCell
                           key={`${group.label}-${column.label}`}
                           className={cn(
                             'whitespace-nowrap text-xs',
+                            rowIndex < page.rows.length - 1 && 'border-b',
                             columnIndex === 0 && groupIndex > 0 && 'border-l border-border/60',
                             column.numeric && 'text-right tabular-nums',
+                            frozen.className,
                           )}
+                          style={frozen.style}
                         >
-                          {cell(row, column)}
+                          {frozenWidth(column.key, cell(row, column))}
                         </TableCell>
-                      )),
-                    )}
+                      )
+                    })}
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
-          </ScrollableTable>
+            </table>
+          </RegisterScroll>
         )}
 
         {page.pageCount > 1 ? (

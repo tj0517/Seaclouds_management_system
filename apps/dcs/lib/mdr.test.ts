@@ -8,15 +8,19 @@
 // that the page does its filtering in SQL rather than in JavaScript.
 import { describe, expect, it } from 'vitest'
 import {
+  MDR_CELL_PADDING_PX,
   MDR_COLUMN_COUNT,
   MDR_COLUMN_GROUPS,
   MDR_DEFAULT_SORT,
+  MDR_FROZEN_ANCHOR_KEY,
+  MDR_FROZEN_BAND,
   MDR_PAGE_SIZE,
   MDR_STATUS_COLORS,
   MDR_STATUS_COLOR_FALLBACK,
   escapeSearchTerm,
   hasActiveFilters,
   listMdrPage,
+  mdrFrozenBand,
   mdrHref,
   mdrStatusColor,
   parseMdrSearchParams,
@@ -126,6 +130,93 @@ describe('MDR_COLUMN_GROUPS', () => {
       MDR_COLUMN_GROUPS.reduce((n, g) => n + g.columns.length, 0),
     )
     expect(MDR_COLUMN_COUNT).toBe(11 + 4 + 4 + 4 * 4)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// The frozen band
+// ---------------------------------------------------------------------------
+
+// WHAT THESE TESTS CANNOT DO, said here rather than implied: none of them
+// proves the column is visually pinned. That needs a layout engine — whether
+// a cell stays put is decided by Chromium, not by this module, and a unit
+// test asserting it would be asserting its own arithmetic. The visual proof
+// for this change is the in-browser measurements in the PR body (SCL header
+// at a constant distance from the container's left edge at scroll 0, 50% and
+// 100%).
+//
+// What they DO cover are the two failures that are silent AND look right in a
+// screenshot taken with today's columns: the offset ladder drifting from the
+// widths it is the running total of, and — the one that only appears once
+// 1b.06's column picker exists — the band ending somewhere other than the SCL
+// number because a column before it was hidden.
+
+/** Every column key the register can render, which is what the page passes in. */
+const ALL_KEYS = MDR_COLUMN_GROUPS.flatMap((group) => group.columns.map((column) => column.key))
+
+describe('mdrFrozenBand', () => {
+  it('ends on the anchor for EVERY subset of visible columns', () => {
+    // The whole point of keying the band. Exhaustive over the band's own
+    // columns, because those are the ones whose absence moves the anchor: with
+    // positional slicing, hiding `Seq` pins `Company Doc. Number` instead.
+    const optional = MDR_FROZEN_BAND.filter((c) => c.key !== MDR_FROZEN_ANCHOR_KEY).map((c) => c.key)
+    for (let mask = 0; mask < 2 ** optional.length; mask += 1) {
+      const hidden = optional.filter((_, i) => (mask >> i) & 1)
+      const visible = ALL_KEYS.filter((key) => !hidden.includes(key as string))
+      const band = mdrFrozenBand(visible)
+      expect(band.length, `hiding ${hidden.join(', ') || 'nothing'}`).toBeGreaterThan(0)
+      expect(band[band.length - 1].key, `hiding ${hidden.join(', ') || 'nothing'}`).toBe(
+        MDR_FROZEN_ANCHOR_KEY,
+      )
+      expect(band.filter((c) => c.last)).toHaveLength(1)
+    }
+  })
+
+  it('offsets each column by the running total of the widths actually rendered', () => {
+    const band = mdrFrozenBand(ALL_KEYS)
+    expect(band[0].left).toBe(0)
+    for (let i = 1; i < band.length; i += 1) {
+      expect(band[i].left, `offset ${i}`).toBe(
+        band[i - 1].left + (band[i - 1].contentPx ?? 0) + MDR_CELL_PADDING_PX,
+      )
+    }
+  })
+
+  it('closes the gap when a band column is hidden, rather than leaving a hole', () => {
+    // A ladder computed from the FULL band would leave `scl_doc_number` one
+    // slot too far right and a dead 52px where `Type` used to be.
+    const withoutType = mdrFrozenBand(ALL_KEYS.filter((key) => key !== 'doc_type_code'))
+    expect(withoutType.map((c) => c.key)).toEqual(['orig_code', 'seq', MDR_FROZEN_ANCHOR_KEY])
+    expect(withoutType.map((c) => c.left)).toEqual([0, 36 + MDR_CELL_PADDING_PX, 36 + 36 + 2 * MDR_CELL_PADDING_PX])
+  })
+
+  it('freezes nothing at all when the anchor itself is hidden', () => {
+    // Strictly better than freezing the wrong columns: the register scrolls
+    // as it did before this change, which is a known state.
+    expect(mdrFrozenBand(ALL_KEYS.filter((key) => key !== MDR_FROZEN_ANCHOR_KEY))).toEqual([])
+  })
+
+  it('declares a width for every band column except the anchor', () => {
+    // The anchor is free to grow so a long SCL number is never truncated; it
+    // can be, because nothing is pinned to its right-hand edge.
+    for (const column of MDR_FROZEN_BAND) {
+      if (column.key === MDR_FROZEN_ANCHOR_KEY) expect(column.contentPx).toBeNull()
+      else expect(column.contentPx, column.key).toBeGreaterThan(0)
+    }
+    expect(MDR_FROZEN_BAND[MDR_FROZEN_BAND.length - 1].key).toBe(MDR_FROZEN_ANCHOR_KEY)
+  })
+
+  it('is contiguous inside DOCUMENT INFO, which the group header split assumes', () => {
+    const positions = MDR_FROZEN_BAND.map((c) =>
+      MDR_COLUMN_GROUPS[0].columns.findIndex((column) => column.key === c.key),
+    )
+    expect(positions.every((p) => p >= 0)).toBe(true)
+    for (let i = 1; i < positions.length; i += 1) {
+      expect(positions[i]).toBe(positions[i - 1] + 1)
+    }
+    // Leaves at least one DOCUMENT INFO column outside, or the trailing
+    // header cell would be a colSpan of zero.
+    expect(MDR_FROZEN_BAND.length).toBeLessThan(MDR_COLUMN_GROUPS[0].columns.length)
   })
 })
 

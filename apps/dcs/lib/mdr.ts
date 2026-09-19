@@ -197,6 +197,103 @@ export const MDR_COLUMN_GROUPS: readonly MdrColumnGroup[] = [
 export const MDR_COLUMN_COUNT = MDR_COLUMN_GROUPS.reduce((n, g) => n + g.columns.length, 0)
 
 // ---------------------------------------------------------------------------
+// The frozen band
+// ---------------------------------------------------------------------------
+
+/**
+ * The columns that stay put while the rest of the register scrolls.
+ *
+ * WHY THE BAND IS KEYED AND NOT COUNTED. The obvious spelling is "the first N
+ * columns", and it is wrong in a way that says nothing when it breaks. The
+ * value a Document Controller navigates by is the SCL document number, which
+ * is the FIFTH column of the register — and 1b.06 adds a column picker, so
+ * which column is fifth depends on what the reader has hidden. Hide `Seq` and
+ * a band defined as positions 1..4 freezes `Company Doc. Number` instead of
+ * the SCL number, pinning it against a width belonging to a column that is no
+ * longer rendered. No exception, no failing request; the register just quietly
+ * freezes the wrong thing. So the band is a list of KEYS, the offsets are
+ * computed from the columns actually visible, and mdrFrozenBand() cannot
+ * return a band that does not end on the anchor.
+ *
+ * WHY THESE FOUR. Freezing through the SCL number rather than only it is what
+ * Excel's freeze panes does, and it keeps DOCUMENT INFO's group header as one
+ * cell over one contiguous block. `Process` was in the band and came out
+ * again: it is the widest of the four lead columns and the least useful
+ * pinned, so it scrolls with everything else and the band drops under half the
+ * scroll area at 1024px. Owner's decisions, 2026-09-19.
+ */
+
+/** Horizontal padding a register cell adds around its content — `p-2`, both sides. */
+export const MDR_CELL_PADDING_PX = 16
+
+/**
+ * The column the band exists for. A band that does not end here is a bug, and
+ * mdrFrozenBand() returns nothing rather than a band that does.
+ */
+export const MDR_FROZEN_ANCHOR_KEY = 'scl_doc_number'
+
+/**
+ * The band, in register order, with the content width each column is held to.
+ *
+ * The anchor carries `null` and is deliberately last: it is the only column in
+ * the band with nothing pinned to its right-hand edge, so it is free to size
+ * to its own content and can never be truncated — ORIG may be up to ten
+ * characters and a project code may itself contain a hyphen (SCMS-IT). The
+ * others cannot have that freedom, because each one's width is the next one's
+ * offset; they carry `truncate`, which is safe precisely here, since Orig,
+ * Type and Seq are the middle segments of the number the anchor prints in
+ * full (SC2609-SCL-AA-0005-PL).
+ *
+ * Widths are sized from the HEADINGS, which are fixed strings, not from the
+ * data, which is not: measured in a browser at text-xs, "Type" is 45px with
+ * its sort icon, "Orig" 25px, "Seq" 23px.
+ */
+export const MDR_FROZEN_BAND: readonly { key: string; contentPx: number | null }[] = [
+  { key: 'orig_code', contentPx: 36 },
+  { key: 'doc_type_code', contentPx: 48 },
+  { key: 'seq', contentPx: 36 },
+  { key: MDR_FROZEN_ANCHOR_KEY, contentPx: null },
+]
+
+export type MdrFrozenColumn = {
+  key: string
+  /** Distance from the scroll container's left edge, in px. */
+  left: number
+  /** The width the column is held to, or null for the anchor. */
+  contentPx: number | null
+  /** The band's right-hand edge — the cell that carries the divider. */
+  last: boolean
+}
+
+/**
+ * The frozen band for one set of visible columns, offsets and all.
+ *
+ * Returns an EMPTY band when the anchor is not among them. That is not
+ * defensive padding: freezing a band whose last column is not the SCL number
+ * is the exact failure this function exists to make unreachable, and freezing
+ * nothing is strictly better than freezing the wrong thing.
+ */
+export function mdrFrozenBand(visibleKeys: Iterable<string | null>): MdrFrozenColumn[] {
+  const visible = new Set(visibleKeys)
+  if (!visible.has(MDR_FROZEN_ANCHOR_KEY)) return []
+
+  let left = 0
+  const present = MDR_FROZEN_BAND.filter((column) => visible.has(column.key))
+  return present.map((column, index) => {
+    const frozen: MdrFrozenColumn = {
+      key: column.key,
+      left,
+      contentPx: column.contentPx,
+      last: index === present.length - 1,
+    }
+    // The anchor adds nothing to the running total — it is last, and nothing
+    // is offset against it.
+    if (column.contentPx !== null) left += column.contentPx + MDR_CELL_PADDING_PX
+    return frozen
+  })
+}
+
+// ---------------------------------------------------------------------------
 // searchParams
 // ---------------------------------------------------------------------------
 
