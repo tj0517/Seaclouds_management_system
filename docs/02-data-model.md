@@ -865,6 +865,72 @@ VIEW / ORIG / DC aal1 / DC aal2 / ORIG+DC aal1). Insertowa strona reguły DC
 dla toru CPY ma własny plik: `supabase/tests/dc_only_numbering_on_insert.test.sql`
 (44 asercje — 1b.03).
 
+### ✅ `dcs.v_mdr` (widok rejestru, DCS 1b.05)
+
+Jedyny widok w schemacie `dcs`. Jeden wiersz na dokument, z kompletem grup
+kolumn arkusza SMDR (aneks C), czytany przez ekran `/mdr`
+(`apps/dcs/app/(app)/mdr/page.tsx` + `apps/dcs/lib/mdr.ts`). Migracja
+`20260919123436_create_mdr_register_view`.
+
+**`security_invoker = true`** — to jest cały mechanizm dostępu: widok nie ma
+własnych polityk i niczego nie poszerza, a wiersze wybiera polityka
+`"Project members read documents"` na `dcs.documents`. Bez tej opcji widok
+czytałby się uprawnieniami WŁAŚCICIELA i oddawał każdemu zalogowanemu
+użytkownikowi rejestr wszystkich projektów. Pilnują tego dwie asercje
+w `supabase/tests/mdr_register_view.test.sql`: fakt katalogowy (`reloptions`)
+oraz dowód behawioralny (użytkownik bez roli na projekcie widzi `0` wierszy
+przy gołym `count(*)` bez `WHERE`). Granty zawężone do `SELECT` — domyślne
+uprawnienia schematu `dcs` (1a.05) dają `ALL`, migracja to odbiera.
+
+Źródła: `documents` → `current_revision_id` w `revisions` → `dictionaries`
+(doc_type, discipline, area, language, workflow_status) → `public.projects`
+(`process_type`) → `public.sub_projects` (kod CTR). **Wszystkie złączenia są
+LEFT**, także te pod kluczem obcym: INNER sprawiłby, że przyszłe zawężenie
+RLS na `dictionaries` albo `projects` po cichu USUWA dokumenty z rejestru,
+a LEFT degraduje się do pustej etykiety, którą widać.
+
+Kolumny bez źródła, celowo wystawione jako **otypowane NULL-e**, żeby układ
+został 1:1 z arkuszem, a Faza 2 podmieniała wyłącznie widok:
+
+- **16 kolumn etapowych** (IDC / IFR / RETCOM / IFC-IFI × Planned / Forecast /
+  Actual / rewizja etapu) — `dcs.plan_dates` NIE ISTNIEJE (odczyt
+  `information_schema.tables` dla schematu `dcs` na scl-dev 2026-09-19: sześć
+  tabel, bez `plan_dates`). Daty planowane i prognozowane to Faza 2 (2.12–2.14).
+- **`workflow_type`** (aneks C, grupa WORKFLOW, kolumna „Type") — i to jest
+  inny przypadek niż daty: nie odłożone źródło, tylko **nie wiadomo, co ta
+  kolumna arkusza znaczy**. Ani brief, ani `00-glossary.md`, ani ten plik tego
+  nie zapisują. Odrzucono mapowanie na krok obiegu bieżącej rewizji: grupa
+  STATUS niesie już status dokumentu, więc powstałaby zdublowana kolumna
+  CZYTANA jako uzgodniona. Pytanie wraca na demo.
+
+`orig_code` i `seq` **parsowane są z numeru SCL od PRAWEJ**, nie po indeksie
+pola. `public.projects.project_code` może zawierać myślnik — `SCMS-IT` jest
+żywym kodem na scl-dev (O-11), więc `SCMS-IT-SCL-RA-0001-EN` ma sześć pól,
+nie pięć, a `split_part(…, '-', 2)` zwróciłoby `IT`. `dcs.next_doc_number`
+(1b.02) czyta SEQ od prawej z dokładnie tego powodu; widok idzie za nim.
+Żadna z tych dwóch wartości nie ma własnej kolumny nigdzie w schemacie —
+numer jest ich jedynym źródłem.
+
+`search_text` to **pole filtra, nie pole wyświetlane**: konkatenacja
+`scl_doc_number + cpy_doc_number + title`, na której stoi indeks
+`documents_search_idx`. Istnieje jako kolumna, bo PostgREST potrafi filtrować
+po kolumnie, ale nie umie wyrazić wyrażenia — a trzy osobne `.ilike()` złączone
+przez `.or()` przestałyby pasować do indeksu. Ekran filtruje po niej, nigdy jej
+nie selectuje. Nie renderować — to trzy sklejone kolumny.
+
+Imion nie ma w widoku: `public.profiles` ma RLS „własny wiersz albo admin",
+więc złączenie pokazałoby członkowi projektu wyłącznie jego samego. Widok
+wystawia `originator_id` / `checker_id` / `approver_id`, a ekran rozwiązuje je
+przez `public.dcs_profile_directory()` (1a.14b) — tak samo jak profil
+dokumentu z 1b.04.
+
+Indeksy: `documents_search_idx` (GIN `gin_trgm_ops`, rozszerzenie `pg_trgm`
+w schemacie `extensions`) pod wyszukiwarkę. **Pod sortowanie domyślne nie
+dodano nic** — obsługują je `documents_scl_doc_number_key`
+i `documents_project_id_idx` z 1b.01; złożony `(project_id, scl_doc_number)`
+napisano, zmierzono i usunięto, bo planista nie wybrał go w żadnym
+sprawdzonym rozmiarze danych (szczegóły pomiaru w nagłówku migracji).
+
 ### `dcs.approval_tasks`
 Jeden silnik dla obu trybów obiegu: `id`, `revision_id (FK)`, `project_id`,
 `assignee_id (zawsze osoba, nie rola)`, `role (reviewer|checker|approver|
@@ -882,6 +948,9 @@ RLS: assignee widzi i wypełnia swoje zadanie; oceny innych niewidoczne do
 zamknięcia etapu; DC/ORIG zarządzają składem wg reguł §7.2.1.
 
 ### `dcs.plan_dates`
+**Nie istnieje** (stan 2026-09-19). Do czasu powstania 16 kolumn etapowych
+`dcs.v_mdr` (1b.05) to otypowane NULL-e — patrz wyżej; wypełnienie ich jest
+zmianą w samym widoku, nie na ekranie.
 `id`, `document_id (FK)`, `project_id`, `step`, `planned` (z cyklu MDR,
 nadpisywalne przez DC), `planned_overridden bool`
 (blokuje automatyczne przeliczenie), `forecast` (edytuje ORIG), `actual`
