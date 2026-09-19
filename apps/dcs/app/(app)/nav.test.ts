@@ -176,11 +176,19 @@ describe('DcsSidebar renders exactly the links it is told to', () => {
       .map((element) => element.props?.href)
   }
 
-  it('offers Projects, Dictionaries and Clients when allowed', async () => {
-    await expect(navHrefs(true)).resolves.toEqual(['/', '/admin/dictionaries', '/admin/clients'])
+  it('offers Projects, MDR, Dictionaries and Clients when allowed', async () => {
+    await expect(navHrefs(true)).resolves.toEqual([
+      '/',
+      '/mdr',
+      '/admin/dictionaries',
+      '/admin/clients',
+    ])
   })
 
-  it('offers Projects alone otherwise', async () => {
-    await expect(navHrefs(false)).resolves.toEqual(['/'])
+  // DCS 1b.05: MDR stays in the list. It is not an admin screen — /mdr has no
+  // page guard at all, because RLS already decides which rows a caller sees,
+  // so hiding the link from a non-admin would hide a page they may open.
+  it('offers Projects and MDR to everyone else', async () => {
+    await expect(navHrefs(false)).resolves.toEqual(['/', '/mdr'])
   })
 })

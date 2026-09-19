@@ -24,7 +24,7 @@
 // component would hide them from that test and force this file to become a
 // client component to read the pathname.
 import Link from 'next/link'
-import { FolderKanban, BookMarked, Building2, LogOut } from 'lucide-react'
+import { FolderKanban, Table2, BookMarked, Building2, LogOut } from 'lucide-react'
 import ModuleSwitcher from './ModuleSwitcher'
 import NavLinkStatus from './NavLinkStatus'
 import SidebarNav from './SidebarNav'
@@ -68,6 +68,18 @@ export default function DcsSidebar({ email, fullName, hasTesAccess, canSeeAdminL
         <Link href="/">
           <FolderKanban className={ICON} />
           Projects
+          <NavLinkStatus />
+        </Link>
+        {/* DCS 1b.05: the MDR register. No `canSeeAdminLinks` condition and
+            no page guard to mirror — /mdr is readable by every signed-in DCS
+            user, because the rows it returns are exactly the rows RLS lets
+            the caller read (an outsider gets an empty table, not a redirect).
+            The convention in docs/03-conventions.md is that link visibility
+            must match the target's guard; an unguarded page therefore gets an
+            unconditional link. */}
+        <Link href="/mdr">
+          <Table2 className={ICON} />
+          MDR
           <NavLinkStatus />
         </Link>
         {canSeeAdminLinks ? (

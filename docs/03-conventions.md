@@ -37,6 +37,19 @@ Architektura i droga migracji: [01-architecture.md](01-architecture.md).
 - Minimalny zakres testu tabeli `dcs.*`: członek projektu widzi, nie-członek
   nie widzi, zapis dozwolony tylko dla właściwej roli, zapis zabroniony
   odrzucany.
+- **Widok nad tabelą `dcs.*`: `security_invoker = true` i wszystkie złączenia
+  LEFT — także te pod kluczem obcym.** Pierwsze, bo widok bez tej opcji czyta
+  się uprawnieniami WŁAŚCICIELA, więc oddaje każdemu zalogowanemu użytkownikowi
+  wszystko, co widzi właściciel — widok ma nie poszerzać dostępu, tylko
+  przepuszczać RLS tabeli źródłowej. Drugie jest mniej oczywiste i dlatego
+  stoi tutaj: **klucz obcy gwarantuje, że wiersz ISTNIEJE, a nie że wołający
+  MOŻE GO ZOBACZYĆ.** INNER JOIN do tabeli, której RLS ktoś później zawęzi,
+  nie zwróci wtedy pustej etykiety — **usunie cały wiersz z widoku**, po cichu
+  i bez błędu. Dla rejestru, którego jedynym zadaniem jest kompletność, to
+  najgorszy możliwy tryb awarii: brakującego dokumentu nikt nie zauważy.
+  LEFT JOIN degraduje się do pustej komórki, którą widać. Tabelą wiodącą ma
+  być ta, której RLS jest bramką (w `dcs.v_mdr`: `dcs.documents`).
+  Wzorzec: migracja `20260919123436_create_mdr_register_view` (1b.05).
 - Dowód na RLS (test, ekran, demo) jest ważny wyłącznie, gdy zapytanie nie
   zawiera żadnego warunku w kodzie — czysty `select` z tabeli, bez `.eq()`,
   bez embedów `!inner`, bez filtrów. Różnicę zbiorów między użytkownikami
@@ -55,11 +68,14 @@ Baseline advisora security: **zero** lintów `function_search_path_mutable`
 
 Poniższe ostrzeżenia advisora są akceptowane **świadomie** — nie wykonuj ich
 rekomendacji, bo odebranie uprawnień roli `authenticated` wyłączy TES.
-**Przyjęty baseline (scl-dev, odczyt 2026-09-18 08:06Z, stan po DCS 1b.01
-+ 1b.01a): 22 × 0027 + 12 × 0029**, nic innego — poprzednio 19 × 0027
-(odczyt 2026-09-15, stan po DCS 1a.17c); trzy nowe to `dcs.documents`,
+**Przyjęty baseline (scl-dev, odczyt 2026-09-19 12:51Z, stan po DCS 1b.04):
+22 × 0027 + 12 × 0029**, nic innego — bez zmian względem odczytu
+2026-09-18 08:06Z (stan po 1b.01 + 1b.01a); poprzednio 19 × 0027 (odczyt
+2026-09-15, stan po DCS 1a.17c), a trzy nowe to `dcs.documents`,
 `dcs.revisions` i `dcs.files`, rejestr dokumentów z 1b.01, czytany przez
-każdego członka projektu. **0029 nie urosło**: cztery funkcje triggerowe
+każdego członka projektu.
+
+**0029 nie urosło**: cztery funkcje triggerowe
 1b.01 są SECURITY INVOKER i żadna rola API nie ma na nie `EXECUTE`
 (sprawdzane przy `CREATE TRIGGER`, nie przy wykonaniu). Historia liczby 12:
 0029 urosło z 10 o `public.is_any_doc_controller()` (1a.09b)
@@ -76,6 +92,16 @@ nazwana w PR, a baseline tutaj zaktualizowany. Uwaga: 1a.22 dodaje też
 `audit_trigger()` to czysta funkcja triggera bez `EXECUTE` dla żadnej roli
 API (EXECUTE jest sprawdzane przy `CREATE TRIGGER`, nie przy wykonaniu) —
 nie liczy się do 0029.
+
+**DCS 1b.05 podniesie 0027 do 23.** `dcs.v_mdr` jest widokiem z `SELECT` dla
+`authenticated`, a lint 0027 liczy także widoki — jego opis wymienia je wprost
+(„tables, views, materialized views, and foreign tables"). Powód jest ten sam
+co przy każdej pozycji na tej liście i tak samo zamierzony: bez `SELECT` dla
+`authenticated` rejestr nie zwróciłby nikomu ani wiersza, a widoczność wierszy
+ogranicza RLS (`security_invoker`), nie granty. To liczba **przewidziana, nie
+zmierzona** — migracji nie ma jeszcze na scl-dev (trafia tam przy merge'u do
+`main`), więc dopiero pierwszy odczyt po merge'u czyni ją faktem i wtedy trzeba
+ją tutaj potwierdzić. 0029 się nie rusza: widok nie jest funkcją.
 
 - **0027 `pg_graphql_authenticated_table_exposed`** (po jednym na każdą
   tabelę `public`/`dcs` z `SELECT` dla `authenticated`; 22 = 14 tabel TES/core
@@ -113,13 +139,14 @@ nie liczy się do 0029.
 
 Advisor wydajnościowy nie miał tu baseline'u do DCS 1b.01, która podniosła
 dwa linty o liczbę wynikającą wprost z przyjętych wzorców. **Przyjęty
-baseline (scl-dev, odczyt 2026-09-18 08:06Z, stan po 1b.01 + 1b.01a):**
+baseline (scl-dev, odczyt 2026-09-19 12:51Z, stan po 1b.04; kolumna „było"
+to odczyt 2026-09-18 08:06Z po 1b.01 + 1b.01a):**
 
 | Lint | Poziom | Liczba |
 |---|---|---|
 | `multiple_permissive_policies` | WARN | 223 |
 | `auth_rls_initplan` | WARN | 29 |
-| `unused_index` | INFO | 25 |
+| `unused_index` | INFO | 22 (było 25) |
 | `unindexed_foreign_keys` | INFO | 10 |
 | `auth_db_connections_absolute` | INFO | 1 |
 
@@ -133,13 +160,22 @@ baseline (scl-dev, odczyt 2026-09-18 08:06Z, stan po 1b.01 + 1b.01a):**
   — zeruje lint, ale łamie wzorzec wszystkich istniejących tabel i odbiera
   możliwość `alter policy` na pojedynczej komendzie, na której oparło się
   1a.11.
-- **`unused_index`** — **20 z 25 wpisów to indeksy trzech nowych, wciąż
-  pustych tabel** (`dcs.documents` 11, `dcs.revisions` 6, `dcs.files` 3);
-  pozostałe 5 są zastane (`dcs.dictionaries` 1, `public.projects` 1,
-  `public.expense_entries` 2, `public.user_monthly_earnings` 1). Advisor mówi
-  tu wyłącznie „scl-dev jeszcze z tego indeksu nie skorzystał", co dla tabeli
-  bez wierszy jest tautologią — nie usuwaj ich, dopóki rejestr nie ma danych
-  i realnego ruchu.
+- **`unused_index`** — **17 z 22 wpisów to indeksy trzech tabel rejestru**
+  (`dcs.documents` 8, `dcs.revisions` 6, `dcs.files` 3); pozostałe 5 są zastane
+  (`dcs.dictionaries` 1, `public.projects` 1, `public.expense_entries` 2,
+  `public.user_monthly_earnings` 1). Advisor mówi tu wyłącznie „scl-dev jeszcze
+  z tego indeksu nie skorzystał", co dla tabeli z jednym wierszem jest niemal
+  tautologią — nie usuwaj ich, dopóki rejestr nie ma danych i realnego ruchu.
+
+  **Liczba SPADŁA z 25 na 22 między 2026-09-18 a 2026-09-19** i nie zrobiła
+  tego żadna migracja: trzy indeksy na `dcs.documents` (z 11 zostało 8)
+  zaczęły być używane, gdy ekrany 1b.04 zaczęły tę tabelę czytać. Spadek jest
+  po dobrej stronie i nikt go nie „naprawiał" — odnotowany, żeby następny
+  odczyt nie czytał różnicy wobec 25 jako regresji. **DCS 1b.05 doda z powrotem
+  jeden** (`documents_search_idx`): indeks trigramowy pod wyszukiwarkę
+  rejestru, którego planista przy jednym wierszu nigdy nie wybierze — i to jest
+  oczekiwane, patrz nagłówek migracji `20260919123436_create_mdr_register_view`
+  z pomiarem progu (~20 000 wierszy).
 - **`unindexed_foreign_keys`** wróciło do zastanych 10 po 1b.01a. Wszystkie
   dziesięć to TES/core plus `dcs.project_roles.assigned_by`; **żaden nie
   dotyczy tabel rejestru dokumentów**. Pilnuje tego asercja w
@@ -147,11 +183,28 @@ baseline (scl-dev, odczyt 2026-09-18 08:06Z, stan po 1b.01 + 1b.01a):**
   kolumn klucza obcego z wiodącymi kolumnami indeksu — 1b.01 miała tu asercję
   słabszą niż advisor (tylko pierwsza kolumna), przez co przepuściła
   jedenaście złożonych kluczy i lint skoczył chwilowo do 21.
-- **`auth_rls_initplan`** stoi na 29 od 1a.22; 1b.01 nie dołożyła nic, bo
-  warunek `aal2` jest tam zapisany jako `((select auth.jwt()) ->> 'aal')`.
-  Dwa z 29 wpisów to polityki DC na `dcs.dictionaries` z 1a.11, zapisane jako
-  `(select auth.jwt() ->> 'aal')`, którą to formę advisor mimo podzapytania
-  nadal zgłasza — `docs/deferred-tasks.md` (oo).
+- **`auth_rls_initplan`** stoi na 29 od 1a.22; 1b.01 i 1b.05 nie dołożyły nic
+  (warunek `aal2` jest w 1b.01 zapisany jako `((select auth.jwt()) ->> 'aal')`,
+  a widok `dcs.v_mdr` nie ma własnych polityk). **29 wpisów rozkłada się na 12
+  tabel i to w OGROMNEJ większości dług TES/core, nie DCS** — odczyt scl-dev
+  2026-09-19 12:51Z:
+
+  | Tabela | Wpisów |
+  |---|---|
+  | `public.timesheet_entries` | 7 |
+  | `public.expense_entries` | 4 |
+  | `public.expense_tables` | 4 |
+  | `public.profiles` | 3 |
+  | `public.timesheet_submissions` | 3 |
+  | `dcs.dictionaries` | 2 |
+  | `public.pdf_exports`, `public.project_assignments`, `public.projects`, `public.sub_project_assignments`, `public.sub_projects`, `public.weekly_contract_codes` | po 1 |
+
+  Czyli **27 z 29 to `public` (TES/core), a tylko 2 to `dcs`** — polityki DC na
+  `dcs.dictionaries` z 1a.11, zapisane jako `(select auth.jwt() ->> 'aal')`,
+  którą to formę advisor mimo podzapytania nadal zgłasza
+  (`docs/deferred-tasks.md` (oo)). Ta rozpiska stoi tu, bo wcześniejsza wersja
+  tego punktu wymieniała wyłącznie `dcs.dictionaries` i dało się ją przeczytać
+  jako „to lint o słownikach DCS". Nie jest — jest o RLS Timesheeta.
 
 Uzasadnienie 0027/0029 zweryfikowano odczytem na prod (2026-08-31):
 `pg_policy` (wyrażenia polityk wołające te funkcje) oraz
