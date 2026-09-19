@@ -1884,3 +1884,51 @@ Originatorowi tworzenie rewizji. Właściwym rozwiązaniem jest generator, nie
 blokada — wzorzec do skopiowania jest w migracji
 `20260918085125_scl_doc_number_generator`.
 
+
+## qq) `rls_document_register.test.sql` never runs the number generator
+
+Recorded during the DCS 1b.04 follow-up (PR #67). Nothing here is broken; the
+point is that the file's name promises more coverage than the file delivers,
+and the next person to read the filename should not be misled.
+
+`supabase/tests/rls_document_register.test.sql` opens 1b.02's import escape
+hatch once, near the top, for its whole (rolled-back) transaction:
+
+```sql
+set local dcs.import_mode = 'on';
+```
+
+Its own comment explains why, and the reason is sound: the file is about 1b.01
+— shape, constraints, the four guard triggers and RLS — and its assertions
+depend on knowing the numbers, so every INSERT in it supplies `scl_doc_number`
+by hand ('VIEW-1', 'ORIG-1', 'DC-AAL2', …) rather than being rewritten around a
+generator it does not set out to test.
+
+**The consequence, which was not written down anywhere until now:**
+`dcs.next_doc_number` is **never called** in that file, and neither is the
+normal path through `documents_assign_scl_number` (the branch where
+`scl_doc_number` arrives NULL and the system assigns it). So despite lines that
+read like end-to-end coverage — `'GREEN: an ORIG inserts a document at aal1'` —
+the file does **not** cover:
+
+- the generator running inside an INSERT, for any caller at all;
+- the real client insert path, which is the only one the app uses
+  (`apps/dcs/lib/documents.ts` never sends the column, by construction);
+- therefore, whether a given role can get a document created *the way the form
+  creates one*, as opposed to the way the SMDR import will.
+
+What it does cover stays valid: who RLS admits and refuses, the guard triggers,
+the audit attachment, and the numbering columns' two layers.
+
+The gap itself is **closed for the Originator** by
+`supabase/tests/rls_documents_originator_insert.test.sql` (1b.04 follow-up),
+which sets no hatch, supplies no number, and asserts the hatch is off so the
+distinction cannot quietly erode. It is **not** closed for the DC, who inserts
+only at aal2 and whose real-path insert is still asserted nowhere.
+
+**Deliberately not fixed here.** Rewriting `rls_document_register.test.sql`
+around the generator would mean rewriting assertions that depend on known
+numbers across a 107-test file, for a file whose subject is 1b.01. If it is
+ever done, the cheaper shape is a second file per role in the manner of the
+Originator one, not an edit to that one. Whoever adds the DC case should also
+check whether `dc_only_numbering_on_insert.test.sql` has the same shape.
