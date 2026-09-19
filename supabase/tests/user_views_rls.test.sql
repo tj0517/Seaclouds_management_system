@@ -40,7 +40,7 @@
 -- auth.users — the same path 1b.05's file relies on.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(55);
+select plan(58);
 
 -- ============================================================
 -- 1. Shape (red without the migration)
@@ -116,12 +116,16 @@ select ok(not has_table_privilege('authenticated', 'dcs.user_views', 'truncate')
 -- Acceptance criterion: anon has NO privileges. Proved with
 -- has_table_privilege, NOT with information_schema.role_table_grants, which
 -- filters by the connecting role and returns null for grants that do exist.
-select ok(
-  not has_table_privilege('anon', 'dcs.user_views', 'select')
-  and not has_table_privilege('anon', 'dcs.user_views', 'insert')
-  and not has_table_privilege('anon', 'dcs.user_views', 'update')
-  and not has_table_privilege('anon', 'dcs.user_views', 'delete'),
-  'anon has NO privilege on dcs.user_views — not select, insert, update or delete');
+-- One assertion per command, not a single conjunction: a combined ok() that
+-- goes red tells you anon gained SOMETHING, and leaves you to find out what.
+select ok(not has_table_privilege('anon', 'dcs.user_views', 'select'),
+  'anon may NOT select dcs.user_views');
+select ok(not has_table_privilege('anon', 'dcs.user_views', 'insert'),
+  'anon may NOT insert dcs.user_views');
+select ok(not has_table_privilege('anon', 'dcs.user_views', 'update'),
+  'anon may NOT update dcs.user_views');
+select ok(not has_table_privilege('anon', 'dcs.user_views', 'delete'),
+  'anon may NOT delete dcs.user_views');
 
 -- The same fact read from the other side: anon appears nowhere in the ACL.
 -- has_table_privilege answers "can this role", aclexplode answers "is it
