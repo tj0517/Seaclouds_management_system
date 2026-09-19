@@ -30,8 +30,8 @@ import { Callout } from '@/components/page-chrome'
 import { SKIPPED, usePendingAction } from '@/hooks/use-pending-action'
 import { createDocument } from '@/app/data/actions/documents'
 import {
-  DEFAULT_LANGUAGE_CODE,
   budgetHoursFromMeta,
+  defaultLanguageId,
   originatorIsChecker,
   type CtrOption,
   type TeamMember,
@@ -70,9 +70,7 @@ export default function DocumentCreateForm({
   const [docTypeId, setDocTypeId] = useState('')
   const [disciplineId, setDisciplineId] = useState('')
   const [areaId, setAreaId] = useState('')
-  const [languageId, setLanguageId] = useState(
-    () => languages.find((row) => row.code === DEFAULT_LANGUAGE_CODE)?.id ?? languages[0]?.id ?? '',
-  )
+  const [languageId, setLanguageId] = useState(() => defaultLanguageId(languages))
   const [ctrCode, setCtrCode] = useState('')
   const [originatorId, setOriginatorId] = useState(currentUserId)
   const [checkerId, setCheckerId] = useState('')

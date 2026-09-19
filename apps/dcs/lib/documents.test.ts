@@ -5,8 +5,10 @@
 // app-side duplicates that decide what the user is told.
 import { describe, expect, it } from 'vitest'
 import {
+  DEFAULT_LANGUAGE_CODE,
   budgetHoursFromMeta,
   creatableProjects,
+  defaultLanguageId,
   mapDbError,
   originatorIsChecker,
   parseCreateDocumentInput,
@@ -186,6 +188,50 @@ describe('creatableProjects', () => {
 
   it('offers nothing to someone with no qualifying role anywhere', () => {
     expect(creatableProjects(projects, new Map([[C, ['view']]]), withMdr, false)).toEqual([])
+  })
+})
+
+// DCS 1b.04 follow-up. The acceptance criterion "Language defaults to EN" was
+// never asserted anywhere: the smoke-test document on scl-dev came out PL,
+// which proves the field is changeable, not that it starts on EN.
+//
+// This is the whole of the form's language default. DocumentCreateForm's only
+// remaining say in the matter is `useState(() => defaultLanguageId(languages))`
+// — a useState INITIALISER, so it is what the field holds on first render,
+// before any user input, which is exactly the claim being made. No jsdom or RTL
+// is involved because this repo has neither on purpose (vitest.config.ts, DCS
+// 1a.12); the rule was extracted from the component so it could be tested
+// directly instead.
+describe('defaultLanguageId', () => {
+  // The two rows the language dictionary actually holds, in the order the page
+  // loads them (getActiveDictionary orders by sort_order, and EN is not first).
+  const languages = [
+    { id: A, code: 'PL' },
+    { id: B, code: 'EN' },
+  ]
+
+  it('starts on EN, not on the first row of the dictionary', () => {
+    expect(defaultLanguageId(languages)).toBe(B)
+  })
+
+  it('picks EN by code, wherever it sits in the list', () => {
+    expect(defaultLanguageId([{ id: C, code: 'EN' }, { id: A, code: 'PL' }])).toBe(C)
+    expect(defaultLanguageId([{ id: A, code: 'PL' }, { id: C, code: 'EN' }])).toBe(C)
+  })
+
+  it('resolves the code named by DEFAULT_LANGUAGE_CODE, not a literal of its own', () => {
+    const row = languages.find((l) => l.code === DEFAULT_LANGUAGE_CODE)
+    expect(defaultLanguageId(languages)).toBe(row?.id)
+  })
+
+  // The fallbacks. Neither is a second default — they keep a required field
+  // from starting empty in an environment whose dictionary lost EN.
+  it('falls back to the first row when the dictionary has no EN', () => {
+    expect(defaultLanguageId([{ id: A, code: 'PL' }, { id: C, code: 'DE' }])).toBe(A)
+  })
+
+  it('returns an empty string for an empty dictionary rather than throwing', () => {
+    expect(defaultLanguageId([])).toBe('')
   })
 })
 
