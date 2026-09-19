@@ -55,6 +55,26 @@ export const INITIAL_WORKFLOW_STATUS = 'NOT_STARTED'
  */
 export const DEFAULT_LANGUAGE_CODE = 'EN'
 
+/**
+ * The language id the form starts on, before the user has touched anything.
+ *
+ * Extracted from DocumentCreateForm's useState initialiser rather than left
+ * inline, because that is the only way this repo can prove it. vitest here runs
+ * in a node environment with no jsdom and no React Testing Library, on purpose
+ * (vitest.config.ts, DCS 1a.12): a component's behaviour is asserted by testing
+ * the pure function it calls, not by rendering it. The initialiser was the rule;
+ * it is now a function, and the component calls it.
+ *
+ * The two fallbacks are a convenience, not a second default. The caller passes
+ * whatever `dict_type = 'language'` returned for this environment, so a
+ * dictionary that has lost EN still yields a usable form instead of an empty
+ * required field — but whenever EN is present it is the answer, which is what
+ * the test pins.
+ */
+export function defaultLanguageId(languages: readonly Pick<DictionaryRow, 'id' | 'code'>[]): string {
+  return languages.find((row) => row.code === DEFAULT_LANGUAGE_CODE)?.id ?? languages[0]?.id ?? ''
+}
+
 /** The roles that may create a document, mirroring the two INSERT policies on dcs.documents. */
 export const DOCUMENT_AUTHOR_ROLES: readonly ProjectRole[] = ['orig', 'dc']
 
