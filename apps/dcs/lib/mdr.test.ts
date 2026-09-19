@@ -8,6 +8,7 @@
 // that the page does its filtering in SQL rather than in JavaScript.
 import { describe, expect, it } from 'vitest'
 import {
+  MDR_ALL_COLUMN_KEYS,
   MDR_CELL_PADDING_PX,
   MDR_COLUMN_COUNT,
   MDR_COLUMN_GROUPS,
@@ -17,13 +18,20 @@ import {
   MDR_PAGE_SIZE,
   MDR_STATUS_COLORS,
   MDR_STATUS_COLOR_FALLBACK,
+  MDR_REQUIRED_COLUMN_KEY,
+  columnCount,
   escapeSearchTerm,
   hasActiveFilters,
+  isColumnVisible,
+  listMdrAll,
   listMdrPage,
   mdrFrozenBand,
   mdrHref,
   mdrStatusColor,
+  mdrStatusFill,
+  normaliseColumnSelection,
   parseMdrSearchParams,
+  visibleColumnGroups,
 } from './mdr'
 
 const PROJECT = '11111111-1111-4111-8111-111111111111'
@@ -54,8 +62,8 @@ describe('mdrStatusColor', () => {
 
   it('maps every one of the nine seeded workflow_status codes', () => {
     for (const code of SEEDED) {
-      expect(MDR_STATUS_COLORS[code], code).toBeTypeOf('string')
-      expect(mdrStatusColor(code)).not.toBe(MDR_STATUS_COLOR_FALLBACK)
+      expect(MDR_STATUS_COLORS[code]?.classes, code).toBeTypeOf('string')
+      expect(mdrStatusColor(code)).not.toBe(MDR_STATUS_COLOR_FALLBACK.classes)
     }
     expect(Object.keys(MDR_STATUS_COLORS).sort()).toEqual([...SEEDED].sort())
   })
@@ -65,19 +73,46 @@ describe('mdrStatusColor', () => {
   // register has to render that document rather than throw.
   it('falls back to a neutral palette for an unknown code instead of throwing', () => {
     expect(() => mdrStatusColor('SOMETHING_A_DC_ADDED')).not.toThrow()
-    expect(mdrStatusColor('SOMETHING_A_DC_ADDED')).toBe(MDR_STATUS_COLOR_FALLBACK)
+    expect(mdrStatusColor('SOMETHING_A_DC_ADDED')).toBe(MDR_STATUS_COLOR_FALLBACK.classes)
   })
 
   it('falls back for null and undefined too — v_mdr LEFT JOINs the dictionary', () => {
-    expect(mdrStatusColor(null)).toBe(MDR_STATUS_COLOR_FALLBACK)
-    expect(mdrStatusColor(undefined)).toBe(MDR_STATUS_COLOR_FALLBACK)
-    expect(mdrStatusColor('')).toBe(MDR_STATUS_COLOR_FALLBACK)
+    expect(mdrStatusColor(null)).toBe(MDR_STATUS_COLOR_FALLBACK.classes)
+    expect(mdrStatusColor(undefined)).toBe(MDR_STATUS_COLOR_FALLBACK.classes)
+    expect(mdrStatusColor('')).toBe(MDR_STATUS_COLOR_FALLBACK.classes)
   })
 
   // The whole point of keeping the palette in one constant (O-05 is open).
   it('never reaches outside MDR_STATUS_COLORS for a colour', () => {
-    const known = new Set(Object.values(MDR_STATUS_COLORS))
-    for (const code of SEEDED) expect(known.has(mdrStatusColor(code))).toBe(true)
+    const knownClasses = new Set(Object.values(MDR_STATUS_COLORS).map((c) => c.classes))
+    for (const code of SEEDED) expect(knownClasses.has(mdrStatusColor(code))).toBe(true)
+  })
+
+  // 1b.06: the same constant now answers for the .xlsx too. These three are
+  // what stop the export growing a palette of its own — the failure mode is
+  // not a crash but O-05 being answered in lib/mdr.ts while the sheet quietly
+  // keeps the old colours.
+  it('gives every status an exceljs ARGB fill from the same entry as its classes', () => {
+    const knownFills = new Set(Object.values(MDR_STATUS_COLORS).map((c) => c.argb))
+    for (const code of SEEDED) {
+      expect(mdrStatusFill(code)).toMatch(/^FF[0-9A-F]{6}$/)
+      expect(knownFills.has(mdrStatusFill(code))).toBe(true)
+    }
+  })
+
+  it('falls back to the neutral fill for an unknown, null or empty code', () => {
+    expect(mdrStatusFill('SOMETHING_A_DC_ADDED')).toBe(MDR_STATUS_COLOR_FALLBACK.argb)
+    expect(mdrStatusFill(null)).toBe(MDR_STATUS_COLOR_FALLBACK.argb)
+    expect(mdrStatusFill('')).toBe(MDR_STATUS_COLOR_FALLBACK.argb)
+  })
+
+  it('keeps the two renderings of a status in the same entry, so O-05 is one edit', () => {
+    // Not a style check: if an entry ever gains a class without a fill (or the
+    // reverse), one of the two consumers silently shows last month's colour.
+    for (const [code, colour] of Object.entries(MDR_STATUS_COLORS)) {
+      expect(colour.classes, code).toMatch(/\bbg-/)
+      expect(colour.argb, code).toMatch(/^FF[0-9A-F]{6}$/)
+    }
   })
 })
 
@@ -236,6 +271,9 @@ describe('parseMdrSearchParams', () => {
       sort: MDR_DEFAULT_SORT,
       ascending: true,
       page: 1,
+      // 1b.06: empty means EVERY column, not "no columns" — see
+      // normaliseColumnSelection. A bare /mdr shows the whole annex-C layout.
+      columns: [],
     })
   })
 
@@ -517,5 +555,144 @@ describe('listMdrPage', () => {
     const page = await listMdrPage(stub.client, parseMdrSearchParams({}))
     expect(page.total).toBe(0)
     expect(page.pageCount).toBe(1)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Column visibility (DCS 1b.06)
+// ---------------------------------------------------------------------------
+
+describe('column selection', () => {
+  it('lists every annex-C column key, in sheet order, derived from the groups', () => {
+    expect(MDR_ALL_COLUMN_KEYS).toHaveLength(MDR_COLUMN_COUNT)
+    expect(MDR_ALL_COLUMN_KEYS[0]).toBe('process')
+    expect(MDR_ALL_COLUMN_KEYS).toContain('scl_doc_number')
+    expect(new Set(MDR_ALL_COLUMN_KEYS).size).toBe(MDR_ALL_COLUMN_KEYS.length)
+  })
+
+  // The distinction the whole feature rests on: "no choice made" is not "no
+  // columns". Getting this backwards exports an empty sheet for every user who
+  // never opened the picker.
+  it('treats an empty selection as EVERY column, not as none', () => {
+    expect(normaliseColumnSelection([])).toEqual([])
+    expect(isColumnVisible([], 'title')).toBe(true)
+    expect(visibleColumnGroups([])).toHaveLength(MDR_COLUMN_GROUPS.length)
+    expect(columnCount(visibleColumnGroups([]))).toBe(MDR_COLUMN_COUNT)
+  })
+
+  it('drops unknown keys rather than failing — a hand-edited ?cols= still renders', () => {
+    expect(normaliseColumnSelection(['title', 'banana', 'DROP TABLE'])).toEqual([
+      'scl_doc_number',
+      'title',
+    ])
+  })
+
+  it('always puts the SCL number back, even when a saved view omits it', () => {
+    expect(normaliseColumnSelection(['title'])).toContain(MDR_REQUIRED_COLUMN_KEY)
+  })
+
+  it('re-sorts into annex-C order regardless of the order asked for', () => {
+    expect(normaliseColumnSelection(['budget_hours', 'process', 'title'])).toEqual([
+      'process',
+      'scl_doc_number',
+      'title',
+      'budget_hours',
+    ])
+  })
+
+  it('drops a group that loses every one of its columns', () => {
+    const groups = visibleColumnGroups(['scl_doc_number', 'title'])
+    expect(groups.map((g) => g.label)).toEqual(['DOCUMENT INFO'])
+    expect(columnCount(groups)).toBe(2)
+  })
+
+  it('keeps a partially hidden group, narrowed to what survives', () => {
+    const groups = visibleColumnGroups(['scl_doc_number', 'issue_date'])
+    expect(groups.map((g) => g.label)).toEqual(['DOCUMENT INFO', 'STATUS'])
+    expect(groups[1]?.columns.map((c) => c.key)).toEqual(['issue_date'])
+  })
+
+  // The serialiser normalises too, so a link and the page it leads to cannot
+  // disagree: asking for ['title'] alone yields a URL that reads back WITH the
+  // SCL number, because that is what the screen will actually show.
+  it('round-trips a selection through the URL, normalised at both ends', () => {
+    const href = mdrHref(parseMdrSearchParams({}), { columns: ['title', 'issue_date'] })
+    const qs = Object.fromEntries(new URLSearchParams(href.split('?')[1]))
+    // URLSearchParams percent-encodes the separator; decoding is the parser's
+    // job and the assertion is about the round trip, not the spelling.
+    expect(qs.cols).toBe('scl_doc_number,title,issue_date')
+    expect(parseMdrSearchParams(qs).columns).toEqual(['scl_doc_number', 'title', 'issue_date'])
+  })
+
+  it('leaves cols out of the URL when every column is shown', () => {
+    expect(mdrHref(parseMdrSearchParams({}), { columns: [] })).toBe('/mdr')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// The export's read — same builder, no paging (DCS 1b.06)
+// ---------------------------------------------------------------------------
+
+describe('listMdrAll', () => {
+  it('applies exactly the same filters, search and ordering as listMdrPage', async () => {
+    const params = { project: PROJECT, type: TYPE, orig: ORIG, status: STATUS, discipline: DISCIPLINE, q: 'RA-00', sort: 'title', dir: 'desc' }
+    const query = parseMdrSearchParams(params)
+
+    const paged = stubClient([ROW], 1)
+    await listMdrPage(paged.client, query)
+    const all = stubClient([ROW], 1)
+    await listMdrAll(all.client, query)
+
+    // Everything except select (no count on the export) and range (the export
+    // walks the result) has to be identical — that identity IS the guarantee
+    // the sheet matches the screen.
+    const shape = (calls: { method: string; args: unknown[] }[]) =>
+      calls.filter((c) => c.method !== 'select' && c.method !== 'range')
+    expect(shape(all.calls)).toEqual(shape(paged.calls))
+  })
+
+  it('ignores the page — the export is the whole filtered register', async () => {
+    const stub = stubClient([ROW], 1)
+    await listMdrAll(stub.client, parseMdrSearchParams({ page: '7' }))
+    expect(stub.calls.filter((c) => c.method === 'range')[0]?.args).toEqual([0, 499])
+  })
+
+  it('stops after a short chunk instead of querying forever', async () => {
+    const stub = stubClient([ROW], 1)
+    const { rows, truncated } = await listMdrAll(stub.client, parseMdrSearchParams({}))
+    expect(stub.fromCount).toBe(1)
+    expect(rows).toHaveLength(1)
+    expect(truncated).toBe(false)
+  })
+
+  // PostgREST's max_rows (1000 in supabase/config.toml) truncates silently, so
+  // a single unbounded request would produce a short export with no error at
+  // all. This is the assertion that the read is chunked.
+  it('asks for a chunk below PostgREST max_rows, not for everything at once', async () => {
+    const stub = stubClient([ROW], 1)
+    await listMdrAll(stub.client, parseMdrSearchParams({}))
+    const [from, to] = stub.calls.find((c) => c.method === 'range')?.args as [number, number]
+    expect(to - from + 1).toBeLessThan(1000)
+  })
+
+  it('keeps walking while chunks come back full, and concatenates them in order', async () => {
+    const full = Array.from({ length: 500 }, (_, i) => ({ ...ROW, document_id: `d${i}` }))
+    let call = 0
+    const request: Record<string, unknown> = {
+      then: (onOk: (v: unknown) => unknown) => {
+        call += 1
+        // Two full chunks, then a short one.
+        return Promise.resolve({ data: call <= 2 ? full : [ROW], error: null }).then(onOk)
+      },
+    }
+    for (const method of ['select', 'eq', 'ilike', 'order', 'range']) {
+      request[method] = () => request
+    }
+    const client = { schema: () => ({ from: () => request }) } as never
+
+    const { rows, truncated } = await listMdrAll(client, parseMdrSearchParams({}))
+    expect(rows).toHaveLength(1001)
+    expect(truncated).toBe(false)
+    expect(call).toBe(3)
   })
 })

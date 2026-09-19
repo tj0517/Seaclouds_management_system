@@ -56,17 +56,43 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  * Keys are dictionary CODES, not ids: ids differ between local, scl-dev and
  * prod, codes do not. Light-theme classes only, matching globals.css ("Light
  * theme only, by this task's scope" — nothing in DCS ever sets .dark).
+ *
+ * ---------------------------------------------------------------------------
+ * 1b.06: EACH ENTRY NOW CARRIES BOTH RENDERINGS OF THE SAME COLOUR
+ * ---------------------------------------------------------------------------
+ * The .xlsx export has to fill a status cell, and a spreadsheet knows nothing
+ * about `bg-amber-50`. The alternative — a hex table living in the export
+ * module — would be a SECOND palette: answering O-05 would then mean editing
+ * two files, and the one nobody remembered would go on showing the old
+ * colours. So the entry got wider instead of the map getting duplicated.
+ *
+ * `argb` is exceljs's format: eight hex digits, alpha FIRST (FF = opaque).
+ * Each one is the Tailwind `bg-*` shade of the same entry, so screen and sheet
+ * are the same colour by construction and not by anyone keeping two lists in
+ * step. The `border-*` and `text-*` shades have no spreadsheet equivalent and
+ * are deliberately not represented.
+ *
+ * ANSWERING O-05 IS STILL EDITING THIS ONE OBJECT — that property is the whole
+ * point of the constant and survives the change. Both renderings of an entry
+ * move together, or the entry is wrong.
  */
-export const MDR_STATUS_COLORS: Record<string, string> = {
-  NOT_STARTED: 'border-slate-200 bg-slate-100 text-slate-700',
-  STARTED: 'border-sky-200 bg-sky-50 text-sky-800',
-  IDC: 'border-amber-200 bg-amber-50 text-amber-900',
-  IFR: 'border-indigo-200 bg-indigo-50 text-indigo-800',
-  RETCOM: 'border-orange-200 bg-orange-50 text-orange-900',
-  IFC: 'border-emerald-200 bg-emerald-50 text-emerald-800',
-  IFI: 'border-teal-200 bg-teal-50 text-teal-800',
-  IFB: 'border-cyan-200 bg-cyan-50 text-cyan-900',
-  VOID: 'border-red-200 bg-red-50 text-red-800',
+export type MdrStatusColor = {
+  /** Tailwind classes for the register's status badge. */
+  classes: string
+  /** exceljs solid-fill colour, AARRGGBB — the same shade as `classes`' bg-*. */
+  argb: string
+}
+
+export const MDR_STATUS_COLORS: Record<string, MdrStatusColor> = {
+  NOT_STARTED: { classes: 'border-slate-200 bg-slate-100 text-slate-700', argb: 'FFF1F5F9' },
+  STARTED: { classes: 'border-sky-200 bg-sky-50 text-sky-800', argb: 'FFF0F9FF' },
+  IDC: { classes: 'border-amber-200 bg-amber-50 text-amber-900', argb: 'FFFFFBEB' },
+  IFR: { classes: 'border-indigo-200 bg-indigo-50 text-indigo-800', argb: 'FFEEF2FF' },
+  RETCOM: { classes: 'border-orange-200 bg-orange-50 text-orange-900', argb: 'FFFFF7ED' },
+  IFC: { classes: 'border-emerald-200 bg-emerald-50 text-emerald-800', argb: 'FFECFDF5' },
+  IFI: { classes: 'border-teal-200 bg-teal-50 text-teal-800', argb: 'FFF0FDFA' },
+  IFB: { classes: 'border-cyan-200 bg-cyan-50 text-cyan-900', argb: 'FFECFEFF' },
+  VOID: { classes: 'border-red-200 bg-red-50 text-red-800', argb: 'FFFEF2F2' },
 }
 
 /**
@@ -77,13 +103,30 @@ export const MDR_STATUS_COLORS: Record<string, string> = {
  * that document rather than crash on it. Same for a NULL — v_mdr LEFT JOINs
  * the dictionaries, so a status row hidden by a future policy yields NULL here
  * instead of dropping the document.
+ *
+ * The export uses this same fallback, so a status the screen renders neutral
+ * is neutral in the sheet too — white, which is what an unfilled cell already
+ * looks like.
  */
-export const MDR_STATUS_COLOR_FALLBACK = 'border-slate-200 bg-white text-slate-600'
+export const MDR_STATUS_COLOR_FALLBACK: MdrStatusColor = {
+  classes: 'border-slate-200 bg-white text-slate-600',
+  argb: 'FFFFFFFF',
+}
 
-/** Tailwind classes for one workflow_status code. Never throws; see the fallback above. */
-export function mdrStatusColor(code: string | null | undefined): string {
+/** Both renderings of one workflow_status code. Never throws; see the fallback above. */
+export function mdrStatusColorEntry(code: string | null | undefined): MdrStatusColor {
   if (!code) return MDR_STATUS_COLOR_FALLBACK
   return MDR_STATUS_COLORS[code] ?? MDR_STATUS_COLOR_FALLBACK
+}
+
+/** Tailwind classes for one workflow_status code — what the register's badge uses. */
+export function mdrStatusColor(code: string | null | undefined): string {
+  return mdrStatusColorEntry(code).classes
+}
+
+/** The same colour as an exceljs AARRGGBB fill — what the export's status cell uses. */
+export function mdrStatusFill(code: string | null | undefined): string {
+  return mdrStatusColorEntry(code).argb
 }
 
 // ---------------------------------------------------------------------------
@@ -293,6 +336,126 @@ export function mdrFrozenBand(visibleKeys: Iterable<string | null>): MdrFrozenCo
   })
 }
 
+// Column visibility (1b.06)
+// ---------------------------------------------------------------------------
+
+/**
+ * Every column key, in annex-C order. The allowlist a `cols=` parameter is
+ * checked against, and the order a saved view's column set is re-sorted into.
+ *
+ * Derived from MDR_COLUMN_GROUPS rather than written out, so a column added to
+ * the register in Phase 2 becomes selectable without anyone remembering to add
+ * it here. Every column in the groups has a key today; the filter is what
+ * keeps this honest if a future layout-only column arrives with `key: null`.
+ */
+export const MDR_ALL_COLUMN_KEYS: readonly string[] = MDR_COLUMN_GROUPS.flatMap((group) =>
+  group.columns.map((column) => column.key).filter((key): key is keyof MdrRow => key !== null),
+)
+
+/**
+ * ONE COLUMN CAN NEVER BE HIDDEN: the SCL number.
+ *
+ * It is the document's identity and the only cell that links to the document
+ * profile, so a register without it is a grid of attributes belonging to
+ * nothing in particular — and an exported sheet without it cannot be matched
+ * back to the register by the person reading it. Hiding everything else is the
+ * user's business; this one is not offered, and a saved view that somehow
+ * lacks it gets it back on restore (see normaliseColumnSelection).
+ */
+export const MDR_REQUIRED_COLUMN_KEY = 'scl_doc_number'
+
+/**
+ * The visible-column set, normalised: known keys only, annex-C order, the SCL
+ * number always present.
+ *
+ * Empty in, empty out — and EMPTY MEANS EVERY COLUMN. That is not a special
+ * case bolted on: it is what a register with no column choice made means, so
+ * it is what the URL means when `cols` is absent, what dcs.user_views.columns
+ * defaults to, and what a view saved before the picker existed says. Storing
+ * "all 35 keys" instead would freeze today's column set into every saved view
+ * and quietly hide Phase 2's new columns from anyone who had saved one.
+ */
+export function normaliseColumnSelection(raw: readonly string[]): string[] {
+  const wanted = new Set(raw.filter((key) => MDR_ALL_COLUMN_KEYS.includes(key)))
+  if (wanted.size === 0) return []
+  wanted.add(MDR_REQUIRED_COLUMN_KEY)
+  return MDR_ALL_COLUMN_KEYS.filter((key) => wanted.has(key))
+}
+
+/** True when this column is rendered. An empty selection shows everything. */
+export function isColumnVisible(columns: readonly string[], key: keyof MdrRow | null): boolean {
+  if (columns.length === 0) return true
+  return key !== null && columns.includes(key)
+}
+
+/**
+ * MDR_COLUMN_GROUPS narrowed to the visible columns, with groups that lost
+ * every column dropped.
+ *
+ * THE SCREEN AND THE SHEET BOTH CALL THIS, and that is the only reason the
+ * export can promise "the columns you are looking at". A second filter written
+ * inline in either place would be a second answer to the same question. The
+ * dropped-empty-group rule matters for the same reason: an annex-C group
+ * header spanning zero columns is a broken table in HTML and a broken merge
+ * range in xlsx.
+ */
+export function visibleColumnGroups(columns: readonly string[]): MdrColumnGroup[] {
+  return MDR_COLUMN_GROUPS.map((group) => ({
+    label: group.label,
+    columns: group.columns.filter((column) => isColumnVisible(columns, column.key)),
+  })).filter((group) => group.columns.length > 0)
+}
+
+/** Total columns across the given groups — the colSpan an empty-state row fills. */
+export function columnCount(groups: readonly MdrColumnGroup[]): number {
+  return groups.reduce((n, g) => n + g.columns.length, 0)
+}
+
+// ---------------------------------------------------------------------------
+// Cell values
+// ---------------------------------------------------------------------------
+
+/** dd.MM.yyyy — the format the sheet uses; the register is read, not parsed. */
+export function formatMdrDate(value: string | null): string {
+  if (!value) return ''
+  const [y, m, d] = value.split('-')
+  return y && m && d ? `${d}.${m}.${y}` : value
+}
+
+/** Resolves a staffing id to a name. See the page's `person()` for why ids can survive. */
+export type MdrNameResolver = (id: string | null) => string
+
+/**
+ * What one cell SAYS, for any column — the single answer the screen and the
+ * export both use.
+ *
+ * The three columns the register renders as something other than text (the SCL
+ * number's link, the status badge, the truncated title) still take their TEXT
+ * from here; the page only wraps it. That is what makes "the export is what
+ * you are looking at" a property of the code rather than a promise: there is
+ * one function deciding what a cell says, and two renderings of its result.
+ *
+ * Returns a number for the numeric columns so the sheet can total them — a
+ * budget-hours column of text strings is a column no DC can sum, which is most
+ * of what they would open the file for.
+ */
+export function mdrCellValue(
+  row: MdrRow,
+  key: keyof MdrRow | null,
+  nameFor: MdrNameResolver,
+): string | number | null {
+  if (key === null) return null
+
+  if (key === 'workflow_status_code') return row.workflow_status_label ?? row.workflow_status_code ?? ''
+  if (key === 'originator_id') return nameFor(row.originator_id)
+  if (key === 'checker_id') return nameFor(row.checker_id)
+  if (key === 'approver_id') return nameFor(row.approver_id)
+  if (key === 'budget_hours') return row.budget_hours ?? null
+
+  const value = row[key]
+  return value === null || value === undefined ? '' : String(value)
+}
+
 // ---------------------------------------------------------------------------
 // searchParams
 // ---------------------------------------------------------------------------
@@ -332,6 +495,15 @@ export type MdrQuery = {
   sort: MdrSortColumn
   ascending: boolean
   page: number
+  /**
+   * Visible column keys, annex-C order. EMPTY MEANS EVERY COLUMN (1b.06).
+   *
+   * Part of MdrQuery rather than a separate piece of state because a saved
+   * view is one object, the URL is one string, and the export takes one
+   * argument. Splitting "what to show" from "which rows" would mean three
+   * places deciding to keep them together.
+   */
+  columns: string[]
 }
 
 /** Next.js hands searchParams as string | string[] | undefined; take the first value. */
@@ -372,6 +544,9 @@ export function parseMdrSearchParams(raw: RawSearchParams): MdrQuery {
     // Descending only when explicitly asked for; anything else is ascending.
     ascending: one(raw.dir) !== 'desc',
     page,
+    // Unknown keys are dropped rather than rejected, like every other value
+    // here: `?cols=banana` shows the whole register, not an error page.
+    columns: normaliseColumnSelection(one(raw.cols).split(',').map((key) => key.trim())),
   }
 }
 
@@ -396,6 +571,14 @@ export function mdrHref(current: MdrQuery, change: Partial<MdrQuery>): string {
   if (next.search) params.set('q', next.search)
   if (next.sort !== MDR_DEFAULT_SORT) params.set('sort', next.sort)
   if (!next.ascending) params.set('dir', 'desc')
+  // Normalised here as well as in the parser, because this is the SERIALISER:
+  // a caller passing `{ columns: ['title'] }` must produce the same URL the
+  // parser would produce reading it back, or a link and the page it leads to
+  // disagree about what is on screen. Absent when every column is shown — the
+  // common case, and a `cols=` listing all 35 keys in every link would make
+  // the register's URLs unshareable in practice.
+  const columns = normaliseColumnSelection(next.columns)
+  if (columns.length > 0) params.set('cols', columns.join(','))
 
   const page = 'page' in change ? next.page : 1
   if (page > 1) params.set('page', String(page))
@@ -473,38 +656,66 @@ export type MdrPage = {
  * bare, filter-free count in supabase/tests/mdr_register_view.test.sql
  * section 8.
  */
-export async function listMdrPage(supabase: DbClient, query: MdrQuery): Promise<MdrPage> {
-  let request = supabase
-    .schema('dcs')
-    .from('v_mdr')
-    .select(MDR_SELECT, { count: 'exact' })
+/**
+ * Every filter, the search and the ordering — applied to a query that has
+ * already chosen its select and its count mode.
+ *
+ * THIS FUNCTION IS WHY THE EXPORT CANNOT DRIFT FROM THE SCREEN (1b.06).
+ * listMdrPage() and listMdrAll() differ in exactly one thing — how much they
+ * take — and share everything that decides WHICH rows and in WHAT ORDER. A
+ * second copy of these seven lines in the export module is precisely the bug
+ * this task exists to prevent: it would pass every test on the day it was
+ * written and diverge the first time a filter was added to the screen.
+ *
+ * Generic over the builder type rather than typed as one: supabase-js's
+ * filter builders are a chain of distinct types and naming one of them here
+ * would pin this to whichever call site was written first.
+ */
+function applyMdrQuery<T extends {
+  eq: (column: string, value: string) => T
+  ilike: (column: string, pattern: string) => T
+  order: (column: string, options: { ascending: boolean; nullsFirst: boolean }) => T
+}>(request: T, query: MdrQuery): T {
+  let next = request
 
-  if (query.projectId) request = request.eq('project_id', query.projectId)
-  if (query.docTypeId) request = request.eq('doc_type_id', query.docTypeId)
-  if (query.originatorId) request = request.eq('originator_id', query.originatorId)
-  if (query.workflowStatusId) request = request.eq('workflow_status_id', query.workflowStatusId)
-  if (query.disciplineId) request = request.eq('discipline_id', query.disciplineId)
+  if (query.projectId) next = next.eq('project_id', query.projectId)
+  if (query.docTypeId) next = next.eq('doc_type_id', query.docTypeId)
+  if (query.originatorId) next = next.eq('originator_id', query.originatorId)
+  if (query.workflowStatusId) next = next.eq('workflow_status_id', query.workflowStatusId)
+  if (query.disciplineId) next = next.eq('discipline_id', query.disciplineId)
 
   // The combined search: one predicate over scl_doc_number + cpy_doc_number +
   // title, served by documents_search_idx. It is ONE .ilike() on the view's
   // search_text column rather than three .or()-ed ilikes precisely so the
   // planner can use that index — see the column's comment in the migration.
   const term = escapeSearchTerm(query.search)
-  if (term) request = request.ilike('search_text', `%${term}%`)
+  if (term) next = next.ilike('search_text', `%${term}%`)
 
   // nullsFirst: false so the documents that have a value sort to the top of an
   // ascending sort. Most of these columns are NULL for most rows today (the
   // whole STATUS group is), and a page of empty cells above the real ones is a
   // register that looks broken.
-  request = request.order(query.sort, { ascending: query.ascending, nullsFirst: false })
+  next = next.order(query.sort, { ascending: query.ascending, nullsFirst: false })
 
   // A stable tiebreaker. Without one, two rows equal on the sort column may
   // come back in a different order on every request, so paging can show the
   // same document twice and never show another — Postgres gives no ordering
   // guarantee beyond the ORDER BY, and the register is read page by page.
+  // The export needs it for a second reason: it reads the result in chunks
+  // (see listMdrAll), and an unstable order there would duplicate and drop
+  // rows across chunk boundaries rather than merely shuffle a page.
   if (query.sort !== 'scl_doc_number') {
-    request = request.order('scl_doc_number', { ascending: true, nullsFirst: false })
+    next = next.order('scl_doc_number', { ascending: true, nullsFirst: false })
   }
+
+  return next
+}
+
+export async function listMdrPage(supabase: DbClient, query: MdrQuery): Promise<MdrPage> {
+  let request = applyMdrQuery(
+    supabase.schema('dcs').from('v_mdr').select(MDR_SELECT, { count: 'exact' }),
+    query,
+  )
 
   const from = (query.page - 1) * MDR_PAGE_SIZE
   request = request.range(from, from + MDR_PAGE_SIZE - 1)
@@ -519,6 +730,72 @@ export async function listMdrPage(supabase: DbClient, query: MdrQuery): Promise<
     page: query.page,
     pageCount: Math.max(1, Math.ceil(total / MDR_PAGE_SIZE)),
   }
+}
+
+/**
+ * How many rows one export request asks for.
+ *
+ * Deliberately below `max_rows` in supabase/config.toml, which is 1000 (read
+ * 2026-09-19). That setting is a HARD CEILING PostgREST applies silently: ask
+ * for 5000 rows and you get 1000 and no error, no warning, and an export that
+ * is wrong in the one way this task must not be wrong. Chunking under the
+ * ceiling is how the export stays correct without depending on a server
+ * setting that lives outside this repo for remotes.
+ */
+const MDR_EXPORT_CHUNK = 500
+
+/**
+ * A hard stop, so a filter that matches the whole register cannot turn one
+ * click into an unbounded read. 20 000 rows is ~140x the 146 documents the
+ * 1b.13 import brings, and a sheet larger than this is a data extract, not
+ * "what I see on screen". Reaching it is reported (see MdrExportRows.truncated)
+ * rather than swallowed: a silently short export is the failure mode the whole
+ * fidelity criterion exists to rule out.
+ */
+export const MDR_EXPORT_MAX_ROWS = 20_000
+
+export type MdrExportRows = {
+  rows: MdrRow[]
+  /** True when MDR_EXPORT_MAX_ROWS was hit and the sheet is NOT the whole result. */
+  truncated: boolean
+}
+
+/**
+ * EVERY row matching the filters, in the register's order — the export's read.
+ *
+ * Not `listMdrPage` with a big page size, and not a separate query: the same
+ * applyMdrQuery() the screen uses decides the rows and the order, and the only
+ * difference is that paging is replaced by reading the whole result in chunks.
+ * That is the invariant acceptance criterion 1 checks, and the reason the two
+ * cannot disagree is structural rather than a matter of keeping two functions
+ * in step.
+ *
+ * `query.page` is deliberately IGNORED. The export is the whole filtered
+ * register, not the page the user happens to be standing on — decided with the
+ * owner, 2026-09-19. The button says so.
+ */
+export async function listMdrAll(supabase: DbClient, query: MdrQuery): Promise<MdrExportRows> {
+  const rows: MdrRow[] = []
+
+  for (let from = 0; from < MDR_EXPORT_MAX_ROWS; from += MDR_EXPORT_CHUNK) {
+    const request = applyMdrQuery(
+      supabase.schema('dcs').from('v_mdr').select(MDR_SELECT),
+      query,
+    ).range(from, from + MDR_EXPORT_CHUNK - 1)
+
+    const { data, error } = await request
+    if (error) throw new Error(`listMdrAll: ${error.message}`)
+
+    const chunk = data ?? []
+    rows.push(...chunk)
+
+    // A short chunk means the result is exhausted. Checking the length rather
+    // than an exact count avoids a second query for `count: 'exact'`, which on
+    // this view is a full scan of everything RLS lets the caller read.
+    if (chunk.length < MDR_EXPORT_CHUNK) return { rows, truncated: false }
+  }
+
+  return { rows, truncated: true }
 }
 
 /**

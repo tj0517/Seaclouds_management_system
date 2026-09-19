@@ -1,10 +1,17 @@
 // DCS 1b.05: the MDR register — the system's main screen (brief §9.2).
 //
-// A server component with NO client boundary anywhere in it. Every control is
-// a plain link or a GET form, so the whole register works with JavaScript
-// disabled, and — the part that matters day to day — a filtered, sorted,
-// paged register IS a URL. The DC can bookmark "my discipline, awaiting
-// review" and send it to someone.
+// A server component whose ONLY client boundary is the toolbar (1b.06:
+// MdrToolbar — saved views, the column picker, Export to Excel). Everything
+// that renders a register row is still server-rendered: the filter form is a
+// GET form, every sortable heading and every page link is a plain <a>, so a
+// filtered, sorted, paged register IS a URL. The DC can bookmark "my
+// discipline, awaiting review" and send it to someone — and, since 1b.06, save
+// it under that name.
+//
+// 1b.05 had no client boundary at all and the register worked with JavaScript
+// off. It still renders and filters and sorts and pages without it; what needs
+// JavaScript is the toolbar, because saving a view is a write and an export is
+// bytes. Keeping the table out of the island is what preserves the rest.
 //
 // Not a guard: which rows appear is decided by "Project members read
 // documents" (RLS) reaching through dcs.v_mdr's security_invoker. A user with
@@ -16,6 +23,7 @@
 // caller may read and nothing else, so an outsider gets an empty table rather
 // than a redirect.
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
 import { ArrowDown, ArrowUp, ChevronsUpDown, Search, X } from 'lucide-react'
 import { createClient } from '@scl/db/server'
 import { Button } from '@/components/ui/button'
@@ -28,67 +36,72 @@ import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/compon
 import { getActiveDictionary } from '@/lib/dictionaries'
 import { getProfileDirectory } from '@/lib/profile-directory'
 import {
-  MDR_COLUMN_COUNT,
-  MDR_COLUMN_GROUPS,
   MDR_PAGE_SIZE,
   MDR_SORT_COLUMNS,
+  columnCount,
+  formatMdrDate,
   getMdrProjectOptions,
   hasActiveFilters,
   listMdrPage,
+  mdrCellValue,
   mdrFrozenBand,
   mdrHref,
   mdrStatusColor,
   parseMdrSearchParams,
+  visibleColumnGroups,
   type MdrColumn,
+  type MdrColumnGroup,
   type MdrQuery,
   type MdrRow,
 } from '@/lib/mdr'
+import { getDefaultUserView, listUserViews, viewToQuery } from '@/lib/user-views'
+import MdrToolbar, { PLAIN_HREF, type ToolbarView } from '@/components/MdrToolbar'
 import { cn } from '@/lib/utils'
 
 const SORTABLE = new Set<string>(MDR_SORT_COLUMNS)
-
-/**
- * Every column with its position in the WHOLE register, not in its group.
- * The frozen band is defined by that global index, and a per-group index
- * cannot express it: the band is the first five of DOCUMENT INFO's eleven.
- */
-const FLAT_COLUMNS = MDR_COLUMN_GROUPS.flatMap((group, groupIndex) =>
-  group.columns.map((column, columnIndex) => ({ group, groupIndex, column, columnIndex })),
-)
 
 /** Shared by both header rows; `border-b` is on the cells, see the <table>. */
 const GROUP_HEAD = 'border-b text-center text-[11px] font-semibold uppercase tracking-wider'
 
 /**
- * The frozen band, resolved against the columns this screen renders.
+ * The frozen band and where it sits, resolved against the columns THIS RENDER
+ * shows.
  *
- * Every column is visible today, so this is the whole band; it is written as a
- * resolution rather than a constant because 1b.06's column picker will hand it
- * a narrower list, and the offsets have to be the running total of what is
- * ACTUALLY rendered. See mdrFrozenBand().
- */
-const FROZEN = new Map(
-  mdrFrozenBand(FLAT_COLUMNS.map((entry) => entry.column.key)).map((column) => [column.key, column]),
-)
-
-/**
- * Where the band sits in the header row — derived, so the group header cannot
- * come apart from the columns it is supposed to sit over.
+ * Per render, not a module constant, and that is the whole point of the merge
+ * between the frozen band and the column picker: `groups` is the VISIBLE set,
+ * so hiding a column has to narrow the band and recompute the offsets in the
+ * same pass. A constant computed from MDR_COLUMN_GROUPS would pin the band
+ * against widths belonging to columns that are no longer rendered.
+ * mdrFrozenBand() guarantees the band still ends on the SCL number whatever is
+ * hidden; this adds where it lands in the header row.
  *
  * DOCUMENT INFO therefore renders as up to three cells: whatever scrolls to
  * the band's left (Process), the band itself, which carries the label because
  * it is the piece always on screen, and the rest of the group. A span of zero
- * is not rendered at all, so dropping a column from the band cannot leave a
- * colSpan={0} behind.
+ * is never rendered, so hiding a column cannot leave a colSpan={0} behind.
  */
-const FROZEN_INDEXES = FLAT_COLUMNS.map((entry, index) =>
-  entry.column.key && FROZEN.has(entry.column.key) ? index : -1,
-).filter((index) => index >= 0)
-const BAND_FIRST = FROZEN_INDEXES[0] ?? 0
-const BAND_LAST = FROZEN_INDEXES[FROZEN_INDEXES.length - 1] ?? -1
-const BAND_LEADING = BAND_FIRST
-const BAND_SPAN = BAND_LAST - BAND_FIRST + 1
-const BAND_TRAILING = MDR_COLUMN_GROUPS[0].columns.length - BAND_LAST - 1
+function frozenLayout(groups: MdrColumnGroup[]) {
+  const flat = groups.flatMap((group, groupIndex) =>
+    group.columns.map((column, columnIndex) => ({ group, groupIndex, column, columnIndex })),
+  )
+  const band = new Map(
+    mdrFrozenBand(flat.map((entry) => entry.column.key)).map((column) => [column.key, column]),
+  )
+  const indexes = flat
+    .map((entry, index) => (entry.column.key && band.has(entry.column.key) ? index : -1))
+    .filter((index) => index >= 0)
+  const first = indexes[0] ?? 0
+  const last = indexes[indexes.length - 1] ?? -1
+  return {
+    flat,
+    band,
+    leading: first,
+    span: last - first + 1,
+    trailing: (groups[0]?.columns.length ?? 0) - last - 1,
+  }
+}
+
+type FrozenLayout = ReturnType<typeof frozenLayout>
 
 /**
  * What pins one cell of the frozen band, or nothing for every other column.
@@ -98,8 +111,8 @@ const BAND_TRAILING = MDR_COLUMN_GROUPS[0].columns.length - BAND_LAST - 1
  * would mean writing the ladder down a second time, and the second copy is the
  * one that rots.
  */
-function frozenCell(key: string | null): { className: string; style?: { left: number } } {
-  const frozen = key ? FROZEN.get(key) : undefined
+function frozenCell(layout: FrozenLayout, key: string | null): { className: string; style?: { left: number } } {
+  const frozen = key ? layout.band.get(key) : undefined
   if (!frozen) return { className: '' }
   return {
     className: cn('mdr-frozen sticky z-10', frozen.last && 'mdr-frozen-edge border-r border-border'),
@@ -108,8 +121,8 @@ function frozenCell(key: string | null): { className: string; style?: { left: nu
 }
 
 /** Holds a frozen column to its declared width, so the offsets stay true. */
-function frozenWidth(key: string | null, children: React.ReactNode) {
-  const frozen = key ? FROZEN.get(key) : undefined
+function frozenWidth(layout: FrozenLayout, key: string | null, children: React.ReactNode) {
+  const frozen = key ? layout.band.get(key) : undefined
   if (!frozen || frozen.contentPx === null) return children
   return (
     <span className="block truncate" style={{ width: frozen.contentPx }}>
@@ -118,20 +131,33 @@ function frozenWidth(key: string | null, children: React.ReactNode) {
   )
 }
 
-/** dd.MM.yyyy — the format the sheet uses; the register is read, not parsed. */
-function formatDate(value: string | null): string {
-  if (!value) return ''
-  const [y, m, d] = value.split('-')
-  return y && m && d ? `${d}.${m}.${y}` : value
-}
-
 export default async function MdrPage({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
-  const query = parseMdrSearchParams(await searchParams)
+  const raw = await searchParams
+  const query = parseMdrSearchParams(raw)
   const supabase = await createClient()
+
+  // THE DEFAULT VIEW, APPLIED ON ENTRY (1b.06).
+  //
+  // Only on a BARE /mdr — any parameter at all, including the `view=none` that
+  // PLAIN_HREF carries, means the user has said what they want to see and the
+  // default must not override it. That rule is also the escape hatch: without
+  // it, "Clear filters" would land on /mdr and be bounced straight back into
+  // the default view, with no way to reach the plain register at all.
+  //
+  // The redirect is skipped when the saved view encodes no filters and no
+  // column choice, because its href is then /mdr itself and this would be an
+  // infinite redirect. A view like that changes nothing anyway.
+  if (Object.keys(raw).length === 0) {
+    const fallback = await getDefaultUserView(supabase)
+    if (fallback) {
+      const href = mdrHref(viewToQuery(fallback), {})
+      if (href !== '/mdr') redirect(href)
+    }
+  }
 
   // ONE query returns the register's rows — filtered, searched, sorted and
   // paged by Postgres (listMdrPage). The other three reads are NOT a second
@@ -139,7 +165,7 @@ export default async function MdrPage({
   // staffing ids to names, because public.profiles RLS ("own row or admin")
   // means the view cannot join the names itself. Nothing below filters, sorts
   // or slices `page.rows` — lib/mdr.test.ts asserts that against a stub client.
-  const [page, projects, dictionaries, directory] = await Promise.all([
+  const [page, projects, dictionaries, directory, savedViews] = await Promise.all([
     listMdrPage(supabase, query),
     getMdrProjectOptions(supabase),
     Promise.all([
@@ -148,8 +174,32 @@ export default async function MdrPage({
       getActiveDictionary(supabase, 'workflow_status'),
     ]),
     getProfileDirectory(supabase),
+    listUserViews(supabase),
   ])
   const [docTypes, disciplines, statuses] = dictionaries
+
+  // Each saved view as the toolbar needs it: a name and the URL it restores.
+  // The href is built here, on the server, by the same viewToQuery + mdrHref
+  // pair — so a saved view and a hand-typed URL are the same thing, and the
+  // client never has to know how a query is serialised.
+  const toolbarViews: ToolbarView[] = savedViews.map((view) => ({
+    id: view.id,
+    name: view.name,
+    isDefault: view.is_default,
+    href: mdrHref(viewToQuery(view), {}),
+  }))
+
+  // Which saved view, if any, the current URL IS. Compared as canonical hrefs
+  // rather than field by field, so "the same register, reached two ways" is
+  // one comparison and not five.
+  const currentHref = mdrHref({ ...query, page: 1 }, {})
+  const activeViewId = toolbarViews.find((view) => view.href === currentHref)?.id ?? null
+
+  // The columns this render shows — the SAME call the export makes, which is
+  // what lets the sheet promise "the columns you are looking at".
+  const groups = visibleColumnGroups(query.columns)
+  const totalColumns = columnCount(groups)
+  const layout = frozenLayout(groups)
 
   const nameById = new Map(directory.entries.map((entry) => [entry.id, entry.full_name]))
   // A colleague outside every shared project is not in the directory (1a.14b
@@ -160,9 +210,12 @@ export default async function MdrPage({
   const first = page.total === 0 ? 0 : (page.page - 1) * MDR_PAGE_SIZE + 1
   const last = Math.min(page.page * MDR_PAGE_SIZE, page.total)
 
+  // The three columns rendered as something other than plain text still take
+  // their TEXT from mdrCellValue — the same function the .xlsx export uses.
+  // That is what makes "the export is what you are looking at" a property of
+  // the code rather than a promise kept by hand.
   function cell(row: MdrRow, column: MdrColumn) {
     if (column.key === null) return null
-    const value = row[column.key]
 
     // The SCL number is the way into the document profile (1b.07's route,
     // standing in as 1b.04's page until then).
@@ -190,14 +243,10 @@ export default async function MdrPage({
       )
     }
 
-    if (column.key === 'originator_id') return person(row.originator_id)
-    if (column.key === 'checker_id') return person(row.checker_id)
-    if (column.key === 'approver_id') return person(row.approver_id)
-
-    if (column.key === 'issue_date') return formatDate(row.issue_date)
+    if (column.key === 'issue_date') return formatMdrDate(row.issue_date)
     if (column.key === 'title') return <span className="block max-w-[22rem] truncate">{row.title}</span>
 
-    return value === null || value === undefined ? '' : String(value)
+    return mdrCellValue(row, column.key, person)
   }
 
   return (
@@ -214,6 +263,16 @@ export default async function MdrPage({
           spreadsheet, and capping it at max-w-5xl would hide the column groups
           annex C exists to preserve. */}
       <PageBody className="max-w-none">
+        {/* The only client component on this screen. It sits ABOVE the filter
+            form and outside it on purpose: nesting an island inside a GET form
+            would make its buttons submit the form. */}
+        <MdrToolbar
+          views={toolbarViews}
+          query={query}
+          activeViewId={activeViewId}
+          total={page.total}
+        />
+
         {/* A GET form, so filtering needs no client component and no
             JavaScript: the browser builds the next URL and the server renders
             it. Every control below is named for the searchParam it sets. */}
@@ -282,7 +341,10 @@ export default async function MdrPage({
           <Button type="submit">Filter</Button>
           {hasActiveFilters(query) ? (
             <Button asChild variant="outline">
-              <Link href="/mdr">
+              {/* PLAIN_HREF, not "/mdr": a bare /mdr re-applies the default
+                  view, so "Clear" would bounce straight back into the filters
+                  it just cleared. */}
+              <Link href={PLAIN_HREF}>
                 <X className="mr-1.5 h-4 w-4" />
                 Clear
               </Link>
@@ -309,22 +371,24 @@ export default async function MdrPage({
             <table className="w-full min-w-[44rem] caption-bottom border-separate border-spacing-0 text-sm">
               <TableHeader>
                 {/* Two header rows that have to agree — both derived from
-                    MDR_COLUMN_GROUPS so they cannot drift apart. */}
+                    `groups` so they cannot drift apart — and `groups` is
+                    the visible set, so hiding a column narrows the band above
+                    it in the same render. */}
                 <TableRow className="hover:bg-transparent">
                   {/* DOCUMENT INFO is the one group the frozen band cuts
-                      through — see BAND_LEADING above. The band's cell pins at
+                      through — see frozenLayout(). The band's cell pins at
                       left 0, the same place the band's first column does,
                       which is what keeps the two header rows aligned at every
-                      scroll position. */}
-                  {BAND_LEADING > 0 ? <TableHead colSpan={BAND_LEADING} className={GROUP_HEAD} /> : null}
+                      scroll position, whatever the column picker has hidden. */}
+                  {layout.leading > 0 ? <TableHead colSpan={layout.leading} className={GROUP_HEAD} /> : null}
                   <TableHead
-                    colSpan={BAND_SPAN}
+                    colSpan={layout.span}
                     className={cn(GROUP_HEAD, 'mdr-frozen mdr-frozen-edge sticky left-0 z-20 border-r border-border')}
                   >
-                    {MDR_COLUMN_GROUPS[0].label}
+                    {groups[0].label}
                   </TableHead>
-                  {BAND_TRAILING > 0 ? <TableHead colSpan={BAND_TRAILING} className={GROUP_HEAD} /> : null}
-                  {MDR_COLUMN_GROUPS.slice(1).map((group) => (
+                  {layout.trailing > 0 ? <TableHead colSpan={layout.trailing} className={GROUP_HEAD} /> : null}
+                  {groups.slice(1).map((group) => (
                     <TableHead
                       key={group.label}
                       colSpan={group.columns.length}
@@ -335,8 +399,8 @@ export default async function MdrPage({
                   ))}
                 </TableRow>
                 <TableRow className="hover:bg-transparent">
-                  {FLAT_COLUMNS.map(({ group, groupIndex, column, columnIndex }) => {
-                    const frozen = frozenCell(column.key)
+                  {layout.flat.map(({ group, groupIndex, column, columnIndex }) => {
+                    const frozen = frozenCell(layout, column.key)
                     return (
                       <TableHead
                         key={`${group.label}-${column.label}`}
@@ -349,6 +413,7 @@ export default async function MdrPage({
                         style={frozen.style}
                       >
                         {frozenWidth(
+                          layout,
                           column.key,
                           column.key && SORTABLE.has(column.key) ? (
                             <SortLink query={query} column={column.key} label={column.label} />
@@ -364,15 +429,15 @@ export default async function MdrPage({
               <TableBody>
                 {page.rows.length === 0 ? (
                   <TableRow className="hover:bg-transparent">
-                    <TableCell colSpan={MDR_COLUMN_COUNT} className="py-10 text-center text-sm text-muted-foreground">
-                      No documents match these filters. <Link href="/mdr" className="underline underline-offset-4">Clear them</Link> to see the whole register.
+                    <TableCell colSpan={totalColumns} className="py-10 text-center text-sm text-muted-foreground">
+                      No documents match these filters. <Link href={PLAIN_HREF} className="underline underline-offset-4">Clear them</Link> to see the whole register.
                     </TableCell>
                   </TableRow>
                 ) : null}
                 {page.rows.map((row, rowIndex) => (
                   <TableRow key={row.document_id}>
-                    {FLAT_COLUMNS.map(({ group, groupIndex, column, columnIndex }) => {
-                      const frozen = frozenCell(column.key)
+                    {layout.flat.map(({ group, groupIndex, column, columnIndex }) => {
+                      const frozen = frozenCell(layout, column.key)
                       return (
                         <TableCell
                           key={`${group.label}-${column.label}`}
@@ -385,7 +450,7 @@ export default async function MdrPage({
                           )}
                           style={frozen.style}
                         >
-                          {frozenWidth(column.key, cell(row, column))}
+                          {frozenWidth(layout, column.key, cell(row, column))}
                         </TableCell>
                       )
                     })}
