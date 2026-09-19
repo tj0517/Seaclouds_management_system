@@ -356,6 +356,13 @@ export type Database = {
             referencedColumns: ["id", "project_id"]
           },
           {
+            foreignKeyName: "revisions_document_id_project_id_fkey"
+            columns: ["document_id", "project_id"]
+            isOneToOne: false
+            referencedRelation: "v_mdr"
+            referencedColumns: ["document_id", "project_id"]
+          },
+          {
             foreignKeyName: "revisions_status_id_fkey"
             columns: ["status_id", "status_dict_type"]
             isOneToOne: false
@@ -373,7 +380,64 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      v_mdr: {
+        Row: {
+          approver_id: string | null
+          area_code: string | null
+          area_id: string | null
+          area_label: string | null
+          budget_hours: number | null
+          checker_id: string | null
+          cpy_doc_number: string | null
+          cpy_revision: string | null
+          created_at: string | null
+          ctr_code: string | null
+          ctr_description: string | null
+          discipline_code: string | null
+          discipline_id: string | null
+          discipline_label: string | null
+          doc_type_code: string | null
+          doc_type_description: string | null
+          doc_type_id: string | null
+          document_id: string | null
+          idc_actual: string | null
+          idc_forecast: string | null
+          idc_planned: string | null
+          idc_revision: string | null
+          ifc_ifi_actual: string | null
+          ifc_ifi_forecast: string | null
+          ifc_ifi_planned: string | null
+          ifc_ifi_revision: string | null
+          ifr_actual: string | null
+          ifr_forecast: string | null
+          ifr_planned: string | null
+          ifr_revision: string | null
+          issue_date: string | null
+          language_code: string | null
+          language_id: string | null
+          orig_code: string | null
+          originator_id: string | null
+          process: string | null
+          project_code: string | null
+          project_id: string | null
+          project_name: string | null
+          retcom_actual: string | null
+          retcom_forecast: string | null
+          retcom_planned: string | null
+          retcom_revision: string | null
+          scl_doc_number: string | null
+          scl_revision: string | null
+          search_text: string | null
+          seq: string | null
+          title: string | null
+          updated_at: string | null
+          workflow_status_code: string | null
+          workflow_status_id: string | null
+          workflow_status_label: string | null
+          workflow_type: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       next_doc_number: {
