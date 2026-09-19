@@ -201,63 +201,96 @@ export const MDR_COLUMN_COUNT = MDR_COLUMN_GROUPS.reduce((n, g) => n + g.columns
 // ---------------------------------------------------------------------------
 
 /**
- * The register's first five columns stay put while the other thirty scroll.
+ * The columns that stay put while the rest of the register scrolls.
  *
- * WHY FIVE AND NOT ONE. The value a Document Controller navigates by is the
- * SCL document number, and it is the FIFTH column, not the first — Process,
- * Orig, Type and Seq come before it. Pinning the fifth alone would leave those
- * four sliding underneath it and would split DOCUMENT INFO's group header into
- * three pieces. Freezing through it instead is what Excel's freeze panes does
- * (freezing at column E keeps A–E), and it lets the group header stay one
- * cell over one contiguous block. Owner's decision, 2026-09-19.
+ * WHY THE BAND IS KEYED AND NOT COUNTED. The obvious spelling is "the first N
+ * columns", and it is wrong in a way that says nothing when it breaks. The
+ * value a Document Controller navigates by is the SCL document number, which
+ * is the FIFTH column of the register — and 1b.06 adds a column picker, so
+ * which column is fifth depends on what the reader has hidden. Hide `Seq` and
+ * a band defined as positions 1..4 freezes `Company Doc. Number` instead of
+ * the SCL number, pinning it against a width belonging to a column that is no
+ * longer rendered. No exception, no failing request; the register just quietly
+ * freezes the wrong thing. So the band is a list of KEYS, the offsets are
+ * computed from the columns actually visible, and mdrFrozenBand() cannot
+ * return a band that does not end on the anchor.
  *
- * THE CONSTRAINT THAT MAKES THIS FILE THE RIGHT HOME. A sticky column needs a
- * `left` offset, and that offset is the sum of the widths of the columns
- * before it. Widths and offsets therefore cannot live in two places: the
- * moment they disagree, the frozen columns overlap each other by the
- * difference and nothing throws. Below, the widths are declared once and the
- * offsets are derived from them.
+ * WHY THESE FOUR. Freezing through the SCL number rather than only it is what
+ * Excel's freeze panes does, and it keeps DOCUMENT INFO's group header as one
+ * cell over one contiguous block. `Process` was in the band and came out
+ * again: it is the widest of the four lead columns and the least useful
+ * pinned, so it scrolls with everything else and the band drops under half the
+ * scroll area at 1024px. Owner's decisions, 2026-09-19.
  */
 
 /** Horizontal padding a register cell adds around its content — `p-2`, both sides. */
 export const MDR_CELL_PADDING_PX = 16
 
 /**
- * Content widths for the frozen columns that must NOT grow, in px.
- *
- * Four entries, not five: the fifth frozen column (the SCL number) is
- * deliberately absent, because it is the last one in the band and nothing is
- * pinned to its right-hand edge. It is left with NO declared width at all and
- * sizes to its own content, so a longer-than-expected number — ORIG may be up
- * to ten characters, and a project code may itself contain a hyphen
- * (SCMS-IT) — is never truncated. It just makes the band wider, which costs
- * nothing. The four here cannot have that freedom: each one's width is
- * another column's offset.
- *
- * Sized from the headings, which are fixed strings, not from the data, which
- * is not: measured in the browser at text-xs, "Process" is 47px, "Type" 45px
- * with its sort icon, "Orig" 25px, "Seq" 23px. The four carry `truncate`, and
- * that is safe precisely here — Orig, Type and Seq are the middle segments of
- * the SCL number itself (SC2609-SCL-AA-0005-PL), which the next column shows
- * in full, so a clipped code loses the reader nothing.
+ * The column the band exists for. A band that does not end here is a bug, and
+ * mdrFrozenBand() returns nothing rather than a band that does.
  */
-export const MDR_FROZEN_CONTENT_PX = [48, 36, 48, 36] as const
-
-/** How many columns are frozen: the four widths above plus the SCL number. */
-export const MDR_FROZEN_COLUMN_COUNT = MDR_FROZEN_CONTENT_PX.length + 1
+export const MDR_FROZEN_ANCHOR_KEY = 'scl_doc_number'
 
 /**
- * The `left` offset of each frozen column — the sum of the widths before it.
- * Derived, never written down: [0, 64, 116, 180, 232].
+ * The band, in register order, with the content width each column is held to.
+ *
+ * The anchor carries `null` and is deliberately last: it is the only column in
+ * the band with nothing pinned to its right-hand edge, so it is free to size
+ * to its own content and can never be truncated — ORIG may be up to ten
+ * characters and a project code may itself contain a hyphen (SCMS-IT). The
+ * others cannot have that freedom, because each one's width is the next one's
+ * offset; they carry `truncate`, which is safe precisely here, since Orig,
+ * Type and Seq are the middle segments of the number the anchor prints in
+ * full (SC2609-SCL-AA-0005-PL).
+ *
+ * Widths are sized from the HEADINGS, which are fixed strings, not from the
+ * data, which is not: measured in a browser at text-xs, "Type" is 45px with
+ * its sort icon, "Orig" 25px, "Seq" 23px.
  */
-export const MDR_FROZEN_LEFT_PX: readonly number[] = MDR_FROZEN_CONTENT_PX.reduce<number[]>(
-  (offsets, contentPx) => [...offsets, offsets[offsets.length - 1] + contentPx + MDR_CELL_PADDING_PX],
-  [0],
-)
+export const MDR_FROZEN_BAND: readonly { key: string; contentPx: number | null }[] = [
+  { key: 'orig_code', contentPx: 36 },
+  { key: 'doc_type_code', contentPx: 48 },
+  { key: 'seq', contentPx: 36 },
+  { key: MDR_FROZEN_ANCHOR_KEY, contentPx: null },
+]
 
-/** True for a column index inside the frozen band. */
-export function isMdrFrozenColumn(index: number): boolean {
-  return index < MDR_FROZEN_COLUMN_COUNT
+export type MdrFrozenColumn = {
+  key: string
+  /** Distance from the scroll container's left edge, in px. */
+  left: number
+  /** The width the column is held to, or null for the anchor. */
+  contentPx: number | null
+  /** The band's right-hand edge — the cell that carries the divider. */
+  last: boolean
+}
+
+/**
+ * The frozen band for one set of visible columns, offsets and all.
+ *
+ * Returns an EMPTY band when the anchor is not among them. That is not
+ * defensive padding: freezing a band whose last column is not the SCL number
+ * is the exact failure this function exists to make unreachable, and freezing
+ * nothing is strictly better than freezing the wrong thing.
+ */
+export function mdrFrozenBand(visibleKeys: Iterable<string | null>): MdrFrozenColumn[] {
+  const visible = new Set(visibleKeys)
+  if (!visible.has(MDR_FROZEN_ANCHOR_KEY)) return []
+
+  let left = 0
+  const present = MDR_FROZEN_BAND.filter((column) => visible.has(column.key))
+  return present.map((column, index) => {
+    const frozen: MdrFrozenColumn = {
+      key: column.key,
+      left,
+      contentPx: column.contentPx,
+      last: index === present.length - 1,
+    }
+    // The anchor adds nothing to the running total — it is last, and nothing
+    // is offset against it.
+    if (column.contentPx !== null) left += column.contentPx + MDR_CELL_PADDING_PX
+    return frozen
+  })
 }
 
 // ---------------------------------------------------------------------------

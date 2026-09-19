@@ -218,6 +218,31 @@ Uzasadnienie 0027/0029 zweryfikowano odczytem na prod (2026-08-31):
 `has_function_privilege('authenticated', …)`. „Pusta lista advisora” nie jest
 osiągalnym celem dla tego projektu.
 
+## Dowód wizualny: narzędzie może pokazywać mniej niż prawdę
+
+Zapisane przy DCS 1b.05 follow-up (2026-09-19). Ta sama rodzina co reguła
+o `public.audit_log` wyżej: nie chodzi o błąd w repo, tylko o pomiar, który
+wygląda na wynik, a nim nie jest.
+
+- **Renderer headless nie rezerwuje miejsca na scrollbar** — również dla
+  kontrolki syntetycznej. `::-webkit-scrollbar { height: 12px }` na
+  przewijanym elemencie daje w headless Chromium `offsetHeight - clientHeight
+  = 0`, a w headful 12px. Pomiar w headless „potwierdził" więc, że poprawka
+  nie działa, choć działała.
+- **Chromium ignoruje `::-webkit-scrollbar`, gdy ustawione jest
+  `scrollbar-width` albo `scrollbar-color`.** Arkusz wygląda na ostylowany,
+  a pod spodem zostaje oryginalne zachowanie platformy. (Stąd `@supports not
+  selector(::-webkit-scrollbar)` wokół właściwości standardowych — to nie
+  porządki, tylko warunek działania reguł niżej.) Dodatkowo
+  `scrollbar-gutter` z definicji nie działa na scrollbarze nakładkowym, więc
+  samo `stable` niczego nie naprawia.
+
+Obie rzeczy wyszły z **kontrolki trzyprzypadkowej** (bez stylowania /
+`::-webkit-scrollbar` / plus `scrollbar-gutter`), a nie z testu — test przy
+obu usterkach przechodził. Reguła praktyczna: zanim uznasz pomiar w przeglądarce
+za dowód, zmierz obok przypadek, który **musi** dać inny wynik. Jeżeli nie daje
+— mierzysz renderer, nie swoją zmianę.
+
 ## Nazewnictwo
 
 - Baza: snake_case; tabele w liczbie mnogiej (`documents`, `revisions`);

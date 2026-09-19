@@ -2029,3 +2029,43 @@ method — and the method fails silently the moment someone runs it over MCP, in
 CI, or as any role that is not a member of the grantee. Two people can run
 "the same check" against the same grant and get different output, with no error
 on either side.
+
+## uu) Komunikat pustego wyniku na `/mdr` wyjeżdża poza ekran
+
+Zauważone przy DCS 1b.05 follow-up (`fix/mdr-sticky-first-column`, 2026-09-19),
+**nie wprowadzone przez tamtą zmianę** — zmierzone po obu jej stronach.
+
+Litera: `ss)` i `tt)` są już zajęte przez PR #72, który w chwili pisania nie
+jest zmergowany. Ten wpis bierze więc `uu)`, żeby nie wymuszać renumeracji
+w przyjętym już PR-ze. Jeśli #72 nigdy nie wejdzie, zostaje dziura — i to jest
+tańsze niż kolizja.
+
+Przy filtrach, które nic nie zwracają, rejestr celowo zostawia tabelę i jej
+grupy kolumn na ekranie, a powód pustki mówi jeden wiersz rozciągnięty na całą
+szerokość:
+
+```tsx
+<TableCell colSpan={MDR_COLUMN_COUNT} className="py-10 text-center …">
+```
+
+`colSpan={35}` plus `text-center` centruje ten tekst względem **całej** tabeli,
+czyli ~2650px, a nie względem okna. Zmierzone przy 1440px (kontener 1118px):
+komunikat zaczyna się **926px** od lewej krawędzi kontenera przed zmianą
+i **943px** po niej. Czyli: ledwo mieści się w kadrze i ucieka w prawo — żeby
+go przeczytać, trzeba przewinąć tabelę w bok, dokładnie wtedy, gdy nie ma
+w niej nic, po czym można by się zorientować, że trzeba przewijać.
+
+Czego to **nie** jest: to nie jest ten sam problem co zamrożona kolumna. Pasek
+zamrożony rozwiązuje nawigację po wierszach, a ten wiersz nie ma się do czego
+przykleić — jest jedną komórką bez kolumn.
+
+Możliwe wyjścia (nie rozstrzygam):
+- przykleić komunikat do lewej krawędzi kontenera (`sticky left-0` na
+  zawartości komórki, szerokość z kontenera, nie z tabeli);
+- wyrównać do lewej zamiast centrować — najtańsze, ale przy szerokim oknie
+  wygląda na zgubione;
+- nie renderować wtedy tabeli, tylko `EmptyState` z zachowanym nagłówkiem —
+  zmienia decyzję z 1b.05 („DC czyta rejestr wszerz, układ ma zostać"),
+  więc to decyzja właściciela, nie poprawka.
+
+Dotyczy wyłącznie ekranu; nic w bazie i nic w eksporcie 1b.06.

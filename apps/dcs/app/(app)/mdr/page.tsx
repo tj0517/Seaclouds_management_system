@@ -30,15 +30,12 @@ import { getProfileDirectory } from '@/lib/profile-directory'
 import {
   MDR_COLUMN_COUNT,
   MDR_COLUMN_GROUPS,
-  MDR_FROZEN_COLUMN_COUNT,
-  MDR_FROZEN_CONTENT_PX,
-  MDR_FROZEN_LEFT_PX,
   MDR_PAGE_SIZE,
   MDR_SORT_COLUMNS,
   getMdrProjectOptions,
   hasActiveFilters,
-  isMdrFrozenColumn,
   listMdrPage,
+  mdrFrozenBand,
   mdrHref,
   mdrStatusColor,
   parseMdrSearchParams,
@@ -63,36 +60,59 @@ const FLAT_COLUMNS = MDR_COLUMN_GROUPS.flatMap((group, groupIndex) =>
 const GROUP_HEAD = 'border-b text-center text-[11px] font-semibold uppercase tracking-wider'
 
 /**
- * What pins one cell of the frozen band, or nothing for the other thirty.
+ * The frozen band, resolved against the columns this screen renders.
  *
- * The offset is an inline style rather than `left-[232px]`, because Tailwind's
+ * Every column is visible today, so this is the whole band; it is written as a
+ * resolution rather than a constant because 1b.06's column picker will hand it
+ * a narrower list, and the offsets have to be the running total of what is
+ * ACTUALLY rendered. See mdrFrozenBand().
+ */
+const FROZEN = new Map(
+  mdrFrozenBand(FLAT_COLUMNS.map((entry) => entry.column.key)).map((column) => [column.key, column]),
+)
+
+/**
+ * Where the band sits in the header row — derived, so the group header cannot
+ * come apart from the columns it is supposed to sit over.
+ *
+ * DOCUMENT INFO therefore renders as up to three cells: whatever scrolls to
+ * the band's left (Process), the band itself, which carries the label because
+ * it is the piece always on screen, and the rest of the group. A span of zero
+ * is not rendered at all, so dropping a column from the band cannot leave a
+ * colSpan={0} behind.
+ */
+const FROZEN_INDEXES = FLAT_COLUMNS.map((entry, index) =>
+  entry.column.key && FROZEN.has(entry.column.key) ? index : -1,
+).filter((index) => index >= 0)
+const BAND_FIRST = FROZEN_INDEXES[0] ?? 0
+const BAND_LAST = FROZEN_INDEXES[FROZEN_INDEXES.length - 1] ?? -1
+const BAND_LEADING = BAND_FIRST
+const BAND_SPAN = BAND_LAST - BAND_FIRST + 1
+const BAND_TRAILING = MDR_COLUMN_GROUPS[0].columns.length - BAND_LAST - 1
+
+/**
+ * What pins one cell of the frozen band, or nothing for every other column.
+ *
+ * The offset is an inline style rather than `left-[52px]`, because Tailwind's
  * JIT only emits classes it can read as literals in the source — a class here
  * would mean writing the ladder down a second time, and the second copy is the
- * one that rots. MDR_FROZEN_LEFT_PX derives it from the declared widths.
+ * one that rots.
  */
-function frozenCell(index: number): { className: string; style?: { left: number } } {
-  if (!isMdrFrozenColumn(index)) return { className: '' }
-  const last = index === MDR_FROZEN_COLUMN_COUNT - 1
+function frozenCell(key: string | null): { className: string; style?: { left: number } } {
+  const frozen = key ? FROZEN.get(key) : undefined
+  if (!frozen) return { className: '' }
   return {
-    className: cn('mdr-frozen sticky z-10', last && 'mdr-frozen-edge border-r border-border'),
-    style: { left: MDR_FROZEN_LEFT_PX[index] },
+    className: cn('mdr-frozen sticky z-10', frozen.last && 'mdr-frozen-edge border-r border-border'),
+    style: { left: frozen.left },
   }
 }
 
-/**
- * Holds a frozen column to its declared width, so the offsets above stay true.
- *
- * Only the four narrow ones: the SCL number is the last column in the band and
- * nothing is pinned to its right edge, so it is left free to size to its own
- * content and can never be truncated. `truncate` on the other four is safe —
- * Orig, Type and Seq are the middle segments of the number the next column
- * prints in full.
- */
-function frozenWidth(index: number, children: React.ReactNode) {
-  const width = MDR_FROZEN_CONTENT_PX[index]
-  if (width === undefined) return children
+/** Holds a frozen column to its declared width, so the offsets stay true. */
+function frozenWidth(key: string | null, children: React.ReactNode) {
+  const frozen = key ? FROZEN.get(key) : undefined
+  if (!frozen || frozen.contentPx === null) return children
   return (
-    <span className="block truncate" style={{ width }}>
+    <span className="block truncate" style={{ width: frozen.contentPx }}>
       {children}
     </span>
   )
@@ -292,22 +312,18 @@ export default async function MdrPage({
                     MDR_COLUMN_GROUPS so they cannot drift apart. */}
                 <TableRow className="hover:bg-transparent">
                   {/* DOCUMENT INFO is the one group the frozen band cuts
-                      through, so it renders as two cells: the frozen five,
-                      which carry the label and travel with the band, and the
-                      six that scroll. The band starts at column 1, so this
-                      pins at left 0 — the same place its first column does,
+                      through — see BAND_LEADING above. The band's cell pins at
+                      left 0, the same place the band's first column does,
                       which is what keeps the two header rows aligned at every
                       scroll position. */}
+                  {BAND_LEADING > 0 ? <TableHead colSpan={BAND_LEADING} className={GROUP_HEAD} /> : null}
                   <TableHead
-                    colSpan={MDR_FROZEN_COLUMN_COUNT}
+                    colSpan={BAND_SPAN}
                     className={cn(GROUP_HEAD, 'mdr-frozen mdr-frozen-edge sticky left-0 z-20 border-r border-border')}
                   >
                     {MDR_COLUMN_GROUPS[0].label}
                   </TableHead>
-                  <TableHead
-                    colSpan={MDR_COLUMN_GROUPS[0].columns.length - MDR_FROZEN_COLUMN_COUNT}
-                    className={GROUP_HEAD}
-                  />
+                  {BAND_TRAILING > 0 ? <TableHead colSpan={BAND_TRAILING} className={GROUP_HEAD} /> : null}
                   {MDR_COLUMN_GROUPS.slice(1).map((group) => (
                     <TableHead
                       key={group.label}
@@ -319,8 +335,8 @@ export default async function MdrPage({
                   ))}
                 </TableRow>
                 <TableRow className="hover:bg-transparent">
-                  {FLAT_COLUMNS.map(({ group, groupIndex, column, columnIndex }, index) => {
-                    const frozen = frozenCell(index)
+                  {FLAT_COLUMNS.map(({ group, groupIndex, column, columnIndex }) => {
+                    const frozen = frozenCell(column.key)
                     return (
                       <TableHead
                         key={`${group.label}-${column.label}`}
@@ -333,7 +349,7 @@ export default async function MdrPage({
                         style={frozen.style}
                       >
                         {frozenWidth(
-                          index,
+                          column.key,
                           column.key && SORTABLE.has(column.key) ? (
                             <SortLink query={query} column={column.key} label={column.label} />
                           ) : (
@@ -355,8 +371,8 @@ export default async function MdrPage({
                 ) : null}
                 {page.rows.map((row, rowIndex) => (
                   <TableRow key={row.document_id}>
-                    {FLAT_COLUMNS.map(({ group, groupIndex, column, columnIndex }, index) => {
-                      const frozen = frozenCell(index)
+                    {FLAT_COLUMNS.map(({ group, groupIndex, column, columnIndex }) => {
+                      const frozen = frozenCell(column.key)
                       return (
                         <TableCell
                           key={`${group.label}-${column.label}`}
@@ -369,7 +385,7 @@ export default async function MdrPage({
                           )}
                           style={frozen.style}
                         >
-                          {frozenWidth(index, cell(row, column))}
+                          {frozenWidth(column.key, cell(row, column))}
                         </TableCell>
                       )
                     })}
