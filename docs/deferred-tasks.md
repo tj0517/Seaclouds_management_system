@@ -1932,3 +1932,55 @@ numbers across a 107-test file, for a file whose subject is 1b.01. If it is
 ever done, the cheaper shape is a second file per role in the manner of the
 Originator one, not an edit to that one. Whoever adds the DC case should also
 check whether `dc_only_numbering_on_insert.test.sql` has the same shape.
+
+## rr) `supabase db reset` can abort mid-run and leave a database that still answers
+
+Recorded during DCS 1b.05 (2026-09-19). Nothing in the repo is broken; this is
+about a local tool whose failure mode is quiet, and which cost real time twice
+in one session.
+
+`supabase db reset` failed twice with nothing but:
+
+```
+error running container: exit 1
+```
+
+Both times it had **already applied some migrations** and the Postgres
+container was up and healthy afterwards. So the database was *reachable and
+answering queries* — just incomplete. That is the whole problem: nothing
+downstream notices.
+
+What it produced, both times, looked like a real result:
+
+- **`supabase test db` reported `Files=26, Tests=90 ... Result: FAIL`.** Ninety
+  assertions instead of 808. Read quickly, that is a test suite with failures
+  in it. It was a test suite running against a database missing most of its
+  schema.
+- **`supabase gen types typescript --local` overwrote a correct
+  `packages/db/src/database.ts` with types generated from the partial
+  database**, and the type-drift check then reported it STALE — which was true,
+  but about the file that had just been corrupted, not about the migrations.
+  Restored from the branch; no harm, but only because it was caught.
+
+Re-running the reset on its own succeeded both times. It appears transient
+(container restart at the end of the reset, on this machine), and it is not
+worth chasing upstream — **it is worth not trusting.**
+
+**The habit that catches it**, before `gen types`, before `supabase test db`,
+before believing any local DB result:
+
+```sql
+select count(*) from supabase_migrations.schema_migrations;
+```
+
+Compare against `ls supabase/migrations/*.sql | wc -l`. If the relation itself
+does not exist, the reset got nowhere. A one-line check beats re-deriving why
+808 assertions became 90.
+
+**Same shape as the skipped production dispatch** in
+`docs/03-conventions.md` (a `workflow_dispatch` from a non-`main` ref skips
+`push-prod` and the run goes green): a step that did **less than it appeared
+to**, and reported in a way that reads as success or as an ordinary failure
+rather than as "I did not run". Both were found the same day. When a result is
+surprising, check that the step which produced it actually ran to completion
+before interpreting the result itself.

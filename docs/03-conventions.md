@@ -68,8 +68,8 @@ Baseline advisora security: **zero** lintów `function_search_path_mutable`
 
 Poniższe ostrzeżenia advisora są akceptowane **świadomie** — nie wykonuj ich
 rekomendacji, bo odebranie uprawnień roli `authenticated` wyłączy TES.
-**Przyjęty baseline (scl-dev, odczyt 2026-09-19 12:51Z, stan po DCS 1b.04):
-22 × 0027 + 12 × 0029**, nic innego — bez zmian względem odczytu
+**Przyjęty baseline (scl-dev, odczyt 2026-09-19 14:48Z, stan po DCS 1b.05):
+23 × 0027 + 12 × 0029**, nic innego — bez zmian względem odczytu
 2026-09-18 08:06Z (stan po 1b.01 + 1b.01a); poprzednio 19 × 0027 (odczyt
 2026-09-15, stan po DCS 1a.17c), a trzy nowe to `dcs.documents`,
 `dcs.revisions` i `dcs.files`, rejestr dokumentów z 1b.01, czytany przez
@@ -93,15 +93,19 @@ nazwana w PR, a baseline tutaj zaktualizowany. Uwaga: 1a.22 dodaje też
 API (EXECUTE jest sprawdzane przy `CREATE TRIGGER`, nie przy wykonaniu) —
 nie liczy się do 0029.
 
-**DCS 1b.05 podniesie 0027 do 23.** `dcs.v_mdr` jest widokiem z `SELECT` dla
-`authenticated`, a lint 0027 liczy także widoki — jego opis wymienia je wprost
-(„tables, views, materialized views, and foreign tables"). Powód jest ten sam
-co przy każdej pozycji na tej liście i tak samo zamierzony: bez `SELECT` dla
-`authenticated` rejestr nie zwróciłby nikomu ani wiersza, a widoczność wierszy
-ogranicza RLS (`security_invoker`), nie granty. To liczba **przewidziana, nie
-zmierzona** — migracji nie ma jeszcze na scl-dev (trafia tam przy merge'u do
-`main`), więc dopiero pierwszy odczyt po merge'u czyni ją faktem i wtedy trzeba
-ją tutaj potwierdzić. 0029 się nie rusza: widok nie jest funkcją.
+**DCS 1b.05 podniosła 0027 z 22 na 23 — ZMIERZONE** (scl-dev, odczyt
+2026-09-19 14:48:45Z, po wdrożeniu migracji `20260919123436`). Wcześniejsza
+wersja tego akapitu stała tu jako liczba *przewidziana*; jest zastąpiona
+odczytem. 23. wpis to `dcs.v_mdr` i advisor opisuje go wprost jako **widok**
+(`"view \`dcs.v_mdr\` is visible in the GraphQL schema…"`, `"type":"view"`) —
+lint 0027 liczy także widoki, jego opis wymienia je z nazwy („tables, views,
+materialized views, and foreign tables"). Powód jest ten sam co przy każdej
+pozycji na tej liście i tak samo zamierzony: bez `SELECT` dla `authenticated`
+rejestr nie zwróciłby nikomu ani wiersza, a widoczność wierszy ogranicza RLS
+(`security_invoker = true`), nie granty. Granty na widoku są zawężone do
+samego `SELECT` — odczyt ACL na scl-dev: `authenticated=SELECT`,
+`service_role=SELECT`, `anon` nic. **0029 stoi na 12**, zgodnie z
+przewidywaniem: widok nie jest funkcją.
 
 - **0027 `pg_graphql_authenticated_table_exposed`** (po jednym na każdą
   tabelę `public`/`dcs` z `SELECT` dla `authenticated`; 22 = 14 tabel TES/core
@@ -139,14 +143,13 @@ ją tutaj potwierdzić. 0029 się nie rusza: widok nie jest funkcją.
 
 Advisor wydajnościowy nie miał tu baseline'u do DCS 1b.01, która podniosła
 dwa linty o liczbę wynikającą wprost z przyjętych wzorców. **Przyjęty
-baseline (scl-dev, odczyt 2026-09-19 12:51Z, stan po 1b.04; kolumna „było"
-to odczyt 2026-09-18 08:06Z po 1b.01 + 1b.01a):**
+baseline (scl-dev, odczyt 2026-09-19 14:48Z, stan po 1b.05):**
 
 | Lint | Poziom | Liczba |
 |---|---|---|
 | `multiple_permissive_policies` | WARN | 223 |
 | `auth_rls_initplan` | WARN | 29 |
-| `unused_index` | INFO | 22 (było 25) |
+| `unused_index` | INFO | 23 (22 przed 1b.05, 25 przed 09-19) |
 | `unindexed_foreign_keys` | INFO | 10 |
 | `auth_db_connections_absolute` | INFO | 1 |
 
@@ -160,22 +163,26 @@ to odczyt 2026-09-18 08:06Z po 1b.01 + 1b.01a):**
   — zeruje lint, ale łamie wzorzec wszystkich istniejących tabel i odbiera
   możliwość `alter policy` na pojedynczej komendzie, na której oparło się
   1a.11.
-- **`unused_index`** — **17 z 22 wpisów to indeksy trzech tabel rejestru**
-  (`dcs.documents` 8, `dcs.revisions` 6, `dcs.files` 3); pozostałe 5 są zastane
+- **`unused_index`** — **18 z 23 wpisów to indeksy trzech tabel rejestru**
+  (`dcs.documents` 9, `dcs.revisions` 6, `dcs.files` 3); pozostałe 5 są zastane
   (`dcs.dictionaries` 1, `public.projects` 1, `public.expense_entries` 2,
   `public.user_monthly_earnings` 1). Advisor mówi tu wyłącznie „scl-dev jeszcze
   z tego indeksu nie skorzystał", co dla tabeli z jednym wierszem jest niemal
   tautologią — nie usuwaj ich, dopóki rejestr nie ma danych i realnego ruchu.
 
-  **Liczba SPADŁA z 25 na 22 między 2026-09-18 a 2026-09-19** i nie zrobiła
-  tego żadna migracja: trzy indeksy na `dcs.documents` (z 11 zostało 8)
-  zaczęły być używane, gdy ekrany 1b.04 zaczęły tę tabelę czytać. Spadek jest
-  po dobrej stronie i nikt go nie „naprawiał" — odnotowany, żeby następny
-  odczyt nie czytał różnicy wobec 25 jako regresji. **DCS 1b.05 doda z powrotem
-  jeden** (`documents_search_idx`): indeks trigramowy pod wyszukiwarkę
-  rejestru, którego planista przy jednym wierszu nigdy nie wybierze — i to jest
-  oczekiwane, patrz nagłówek migracji `20260919123436_create_mdr_register_view`
-  z pomiarem progu (~20 000 wierszy).
+  Dwa ruchy tej liczby w ciągu jednego dnia, oba **zmierzone**, oba zamierzone:
+
+  1. **25 → 22 między 2026-09-18 a 2026-09-19, bez żadnej migracji.** Trzy
+     indeksy na `dcs.documents` (z 11 zostało 8) zaczęły być używane, gdy
+     ekrany 1b.04 zaczęły tę tabelę czytać. Spadek jest po dobrej stronie
+     i nikt go nie „naprawiał" — odnotowany, żeby następny odczyt nie czytał
+     różnicy wobec 25 jako regresji.
+  2. **22 → 23 po 1b.05** (odczyt 2026-09-19 14:48Z): doszedł
+     `documents_search_idx`, indeks trigramowy pod wyszukiwarkę rejestru, więc
+     `dcs.documents` wróciło z 8 na 9. Potwierdzone odczytem, że to właśnie ten
+     indeks jest na liście. Planista go przy jednym wierszu nie wybierze i to
+     jest **oczekiwane** — pomiar progu (~20 000 wierszy) stoi w nagłówku
+     migracji `20260919123436_create_mdr_register_view`.
 - **`unindexed_foreign_keys`** wróciło do zastanych 10 po 1b.01a. Wszystkie
   dziesięć to TES/core plus `dcs.project_roles.assigned_by`; **żaden nie
   dotyczy tabel rejestru dokumentów**. Pilnuje tego asercja w
@@ -317,6 +324,35 @@ w `apps/dcs/lib/module-permissions.ts`). Admin nie jest tym dotknięty:
   rozwiązuje — nieprzejrzany kod z gałęzi mógłby mutować dane produkcyjne
   (sprzeczne z §12.2 briefu). Dlatego `[remotes.production].additional_redirect_urls`
   w `config.toml` celowo NIE zawiera wildcardu preview Vercela.
+- **`workflow_dispatch` z gałęzi INNEJ niż `main` nie wdraża na proda —
+  pomija zadanie i raportuje zielono.** `deploy-db.yml` ma na zadaniu
+  produkcyjnym warunek `if: github.event_name == 'workflow_dispatch' &&
+  github.ref == 'refs/heads/main'`, a samo `workflow_dispatch:` **nie deklaruje
+  żadnych `inputs`** — nie ma parametru gałęzi. Selektor ref w UI GitHuba i tak
+  pozwoli wybrać dowolną gałąź; wtedy `github.ref` nie jest `refs/heads/main`,
+  warunek jest fałszywy i `push-prod` zostaje **pominięty**.
+
+  **Groźna jest nie odmowa, tylko jej brak:** run kończy się **zielony**
+  z pominiętym zadaniem — bez bramki zatwierdzenia, bez `supabase link`, bez
+  `db push`, nic nie dociera na proda — a wygląda dokładnie jak udany deploy.
+  Zielony run deploy-db **nie jest dowodem, że migracja jest na produkcji**;
+  dowodem jest odczyt bazy (`supabase_migrations.schema_migrations`, obecność
+  obiektu). Warunek jest celowy i zostaje: kupuje własność „produkcja nigdy nie
+  dostaje migracji, której nie ma na trunku". Wykryte 2026-09-19 przy DCS 1b.05,
+  zanim ktokolwiek dispatchował z gałęzi.
+
+- **Konsekwencja dla zadania, które wiezie schemat i front razem:** te dwie
+  reguły — „prod tylko z `main`" i „merge do `main` wdraża też aplikację na
+  produkcję" — **nie dają się spełnić jednym PR-em**. Migracja może trafić na
+  proda dopiero, gdy jest na `main`, ale ten sam merge wypuszcza na produkcję
+  ekran, który jej potrzebuje. Okno między jednym a drugim to 500 na produkcji
+  (PostgREST `42P01`). DCS 1b.05 rozbiło się z tego powodu na dwa PR-y — #70
+  (sama migracja + test + regeneracja typów, nic w kodzie aplikacji sięgającego
+  do nowego obiektu), potem dispatch na proda, potem #69 z ekranem. Reguła
+  „jedno zadanie = jeden PR" ustępuje tu świadomie i **z nazwanego powodu**;
+  bramka na linii `github.ref` zostaje bez zmian, bo własność, którą kupuje,
+  jest warta więcej.
+
 - **Integracja GitHub Supabase (branching) musi pozostać WYŁĄCZONA na obu
   projektach** (scl-dev i prod). Włączona w dashboardzie aplikuje migracje
   i `config.toml` na prod przy każdym merge'u do `main`, z pominięciem
