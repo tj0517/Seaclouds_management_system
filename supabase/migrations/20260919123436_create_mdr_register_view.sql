@@ -8,7 +8,11 @@
 -- swaps the view's source instead of changing the screen's layout.
 --
 -- ------------------------------------------------------------------
--- Decisions taken for this migration (all confirmed before it was written)
+-- Decisions taken for this migration
+--
+-- All of them were settled before a line of it was written, but they are NOT
+-- all the same KIND of decision, and decision 2 says which is which. Do not
+-- flatten them into "the owner approved this migration".
 -- ------------------------------------------------------------------
 -- 1. The stage-date columns (IDC / IFR / RETCOM / IFC-IFI × Planned /
 --    Forecast / Actual / stage revision — sixteen in all) are NULL constants.
@@ -19,8 +23,13 @@
 --    (tasks 2.12–2.14). Confirmed before writing: keep the columns as typed
 --    NULLs so the layout stays 1:1 with the sheet.
 --
--- 2. WORKFLOW > Type is a NULL constant for the same reason, and this one is
---    worth stating plainly because it is NOT a deferred-source column like the
+-- 2. WORKFLOW > Type is a NULL constant, and TWO things about it are worth
+--    stating plainly. First, whose call it was: decision 1 above is the
+--    OWNER'S, taken in the 1b.05 task text with its reasoning. This one is
+--    NOT — the gap was found, the options framed and the recommendation made
+--    by the implementer mid-task, and the owner accepted it. Accepted, but not
+--    an owner's ruling from the brief, and it must not be presented as one.
+--    Second, why it is empty — it is NOT a deferred-source column like the
 --    dates above: nothing in the brief, the glossary or docs/02-data-model.md
 --    says what the sheet's WORKFLOW "Type" holds. Orig / Ch'd / App'd map
 --    cleanly onto documents.originator_id / checker_id / approver_id; "Type"
@@ -100,8 +109,9 @@ create index documents_search_idx on dcs.documents
 comment on index dcs.documents_search_idx is
   'DCS 1b.05: trigram index behind the MDR register''s single search box, '
   'which matches a fragment anywhere in scl_doc_number, cpy_doc_number or '
-  'title. The indexed expression must be reproduced exactly by the query — '
-  'see MDR_SEARCH_EXPRESSION in apps/dcs/lib/mdr.ts.';
+  'title. The query never rewrites this expression — it filters on the '
+  'dcs.v_mdr column search_text, which IS this expression, so the two cannot '
+  'drift apart (apps/dcs/lib/mdr.ts, listMdrPage).';
 
 -- NO INDEX IS ADDED FOR THE DEFAULT SORT, and this is a finding rather than an
 -- omission — the task asked which indexes support the default sort and why, so

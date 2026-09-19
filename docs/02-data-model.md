@@ -903,6 +903,15 @@ został 1:1 z arkuszem, a Faza 2 podmieniała wyłącznie widok:
   STATUS niesie już status dokumentu, więc powstałaby zdublowana kolumna
   CZYTANA jako uzgodniona. Pytanie wraca na demo.
 
+  **Czyja to decyzja — rozróżnienie warte zapisania, bo łatwo je zatrzeć:**
+  16 pustych kolumn etapowych wyżej to decyzja **właściciela**, podjęta
+  w treści zadania 1b.05 (wraz z uzasadnieniem: `plan_dates` nie istnieje,
+  układ ma zostać 1:1 z arkuszem). Pusty `workflow_type` to **decyzja
+  wykonawcy** — lukę wykrył, warianty sformułował i rekomendację wystawił
+  wykonawca w trakcie zadania, a właściciel ją zatwierdził. Może być słuszna
+  i została przyjęta, ale **nie jest rozstrzygnięciem właściciela z briefu**
+  i nie wolno jej tak przedstawiać.
+
 `orig_code` i `seq` **parsowane są z numeru SCL od PRAWEJ**, nie po indeksie
 pola. `public.projects.project_code` może zawierać myślnik — `SCMS-IT` jest
 żywym kodem na scl-dev (O-11), więc `SCMS-IT-SCL-RA-0001-EN` ma sześć pól,
@@ -917,6 +926,15 @@ numer jest ich jedynym źródłem.
 po kolumnie, ale nie umie wyrazić wyrażenia — a trzy osobne `.ilike()` złączone
 przez `.or()` przestałyby pasować do indeksu. Ekran filtruje po niej, nigdy jej
 nie selectuje. Nie renderować — to trzy sklejone kolumny.
+
+**Area i Language nie są renderowane na ekranie** — decyzja **właściciela**
+(2026-09-19). Aneks C nie wymienia ich w grupie DOCUMENT INFO, a ekran idzie za
+arkuszem, nie za tym, co akurat niosą `dcs.documents`. Widok wystawia
+`area_code`, `area_label` i `language_code` jako klucze filtrów (i dla profilu
+dokumentu 1b.07), ale żadna z nich nie ma kolumny w tabeli rejestru.
+Świadomy stan, nie przeoczenie: **to pytanie do DC na demo**, nie zmiana do
+zrobienia teraz. Gdyby DC chciał je zobaczyć, są w widoku — dochodzi wpis
+w `MDR_COLUMN_GROUPS` (`apps/dcs/lib/mdr.ts`), bez migracji.
 
 Imion nie ma w widoku: `public.profiles` ma RLS „własny wiersz albo admin",
 więc złączenie pokazałoby członkowi projektu wyłącznie jego samego. Widok

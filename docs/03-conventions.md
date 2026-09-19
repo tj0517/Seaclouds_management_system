@@ -37,6 +37,19 @@ Architektura i droga migracji: [01-architecture.md](01-architecture.md).
 - Minimalny zakres testu tabeli `dcs.*`: członek projektu widzi, nie-członek
   nie widzi, zapis dozwolony tylko dla właściwej roli, zapis zabroniony
   odrzucany.
+- **Widok nad tabelą `dcs.*`: `security_invoker = true` i wszystkie złączenia
+  LEFT — także te pod kluczem obcym.** Pierwsze, bo widok bez tej opcji czyta
+  się uprawnieniami WŁAŚCICIELA, więc oddaje każdemu zalogowanemu użytkownikowi
+  wszystko, co widzi właściciel — widok ma nie poszerzać dostępu, tylko
+  przepuszczać RLS tabeli źródłowej. Drugie jest mniej oczywiste i dlatego
+  stoi tutaj: **klucz obcy gwarantuje, że wiersz ISTNIEJE, a nie że wołający
+  MOŻE GO ZOBACZYĆ.** INNER JOIN do tabeli, której RLS ktoś później zawęzi,
+  nie zwróci wtedy pustej etykiety — **usunie cały wiersz z widoku**, po cichu
+  i bez błędu. Dla rejestru, którego jedynym zadaniem jest kompletność, to
+  najgorszy możliwy tryb awarii: brakującego dokumentu nikt nie zauważy.
+  LEFT JOIN degraduje się do pustej komórki, którą widać. Tabelą wiodącą ma
+  być ta, której RLS jest bramką (w `dcs.v_mdr`: `dcs.documents`).
+  Wzorzec: migracja `20260919123436_create_mdr_register_view` (1b.05).
 - Dowód na RLS (test, ekran, demo) jest ważny wyłącznie, gdy zapytanie nie
   zawiera żadnego warunku w kodzie — czysty `select` z tabeli, bez `.eq()`,
   bez embedów `!inner`, bez filtrów. Różnicę zbiorów między użytkownikami
@@ -170,11 +183,28 @@ to odczyt 2026-09-18 08:06Z po 1b.01 + 1b.01a):**
   kolumn klucza obcego z wiodącymi kolumnami indeksu — 1b.01 miała tu asercję
   słabszą niż advisor (tylko pierwsza kolumna), przez co przepuściła
   jedenaście złożonych kluczy i lint skoczył chwilowo do 21.
-- **`auth_rls_initplan`** stoi na 29 od 1a.22; 1b.01 nie dołożyła nic, bo
-  warunek `aal2` jest tam zapisany jako `((select auth.jwt()) ->> 'aal')`.
-  Dwa z 29 wpisów to polityki DC na `dcs.dictionaries` z 1a.11, zapisane jako
-  `(select auth.jwt() ->> 'aal')`, którą to formę advisor mimo podzapytania
-  nadal zgłasza — `docs/deferred-tasks.md` (oo).
+- **`auth_rls_initplan`** stoi na 29 od 1a.22; 1b.01 i 1b.05 nie dołożyły nic
+  (warunek `aal2` jest w 1b.01 zapisany jako `((select auth.jwt()) ->> 'aal')`,
+  a widok `dcs.v_mdr` nie ma własnych polityk). **29 wpisów rozkłada się na 12
+  tabel i to w OGROMNEJ większości dług TES/core, nie DCS** — odczyt scl-dev
+  2026-09-19 12:51Z:
+
+  | Tabela | Wpisów |
+  |---|---|
+  | `public.timesheet_entries` | 7 |
+  | `public.expense_entries` | 4 |
+  | `public.expense_tables` | 4 |
+  | `public.profiles` | 3 |
+  | `public.timesheet_submissions` | 3 |
+  | `dcs.dictionaries` | 2 |
+  | `public.pdf_exports`, `public.project_assignments`, `public.projects`, `public.sub_project_assignments`, `public.sub_projects`, `public.weekly_contract_codes` | po 1 |
+
+  Czyli **27 z 29 to `public` (TES/core), a tylko 2 to `dcs`** — polityki DC na
+  `dcs.dictionaries` z 1a.11, zapisane jako `(select auth.jwt() ->> 'aal')`,
+  którą to formę advisor mimo podzapytania nadal zgłasza
+  (`docs/deferred-tasks.md` (oo)). Ta rozpiska stoi tu, bo wcześniejsza wersja
+  tego punktu wymieniała wyłącznie `dcs.dictionaries` i dało się ją przeczytać
+  jako „to lint o słownikach DCS". Nie jest — jest o RLS Timesheeta.
 
 Uzasadnienie 0027/0029 zweryfikowano odczytem na prod (2026-08-31):
 `pg_policy` (wyrażenia polityk wołające te funkcje) oraz
