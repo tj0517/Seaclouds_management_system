@@ -48,6 +48,43 @@ export function ScrollableTable({ children }: { children: ReactNode }) {
   )
 }
 
+/**
+ * The MDR register's scroll container — ONE scroller, which ScrollableTable
+ * above is not.
+ *
+ * WHY THIS EXISTS RATHER THAN A PROP ON ScrollableTable. The register freezes
+ * its first five columns, and `position: sticky` resolves against the nearest
+ * scrolling ancestor — so "which element scrolls" stops being an
+ * implementation detail and becomes the thing the feature rests on. Measured
+ * in a browser on 2026-09-19, the register had TWO nested horizontal
+ * scrollers:
+ *
+ *   - ScrollableTable's own `overflow-x-auto`, which at 1440px never fires
+ *     (its child never outgrows it) but at 1024px does — 704px of content in
+ *     702px — and at 900px scrolls 126px;
+ *   - the div inside the shadcn `Table` primitive (components/ui/table.tsx,
+ *     `relative w-full overflow-auto`), which is the one actually carrying
+ *     the register's 2634px of columns.
+ *
+ * A column pinned to the inner one still slides away when the OUTER one
+ * scrolls, so below ~1030px a sticky column would come unstuck — silently,
+ * and only at the widths nobody screenshots. The register therefore renders a
+ * bare <table> inside this container and skips the `Table` primitive
+ * altogether (TableHeader/TableRow/TableCell are plain thead/tr/td and are
+ * still used); components/ui/table.tsx is untouched, which CLAUDE.md requires,
+ * and the four other screens keep ScrollableTable exactly as it was.
+ *
+ * The border and the rounded corners sit on the scroller itself, not on a
+ * wrapper around it, so the frozen band's edge lines up with the container's.
+ * `mdr-scroll` is defined in app/globals.css and does two things a Tailwind
+ * class cannot: it styles the scrollbar, and by styling it at all it opts the
+ * element out of the platform's OVERLAY scrollbar, which is what was painting
+ * the bar across the last row.
+ */
+export function RegisterScroll({ children }: { children: ReactNode }) {
+  return <div className="mdr-scroll w-full overflow-x-auto rounded-lg border bg-card">{children}</div>
+}
+
 const CALLOUT_TONES = {
   info: 'border-border bg-muted text-muted-foreground',
   warning: 'border-warning/25 bg-warning-bg text-warning',

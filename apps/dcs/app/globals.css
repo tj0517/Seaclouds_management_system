@@ -93,3 +93,81 @@
     @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
   }
 }
+
+/* DCS 1b.05 follow-up — the MDR register's scroll container and frozen band.
+ *
+ * Both rules below exist because a Tailwind utility cannot express them:
+ * ::-webkit-scrollbar has no utility at all, and the frozen cells need two
+ * background LAYERS rather than one background colour (see the hover rule).
+ *
+ * WHY STYLING THE SCROLLBAR IS THE FIX, NOT DECORATION. Measured on the
+ * deployed register: the scroll container's `offsetHeight - clientHeight` was
+ * 0 on an element that scrolls horizontally — i.e. the bar reserved no layout
+ * height and was painted OVER the last row. That is an overlay scrollbar, and
+ * `scrollbar-gutter: stable` has no effect on one (CSS Overflow 3, and
+ * confirmed here: setting it alone changed nothing). Declaring
+ * ::-webkit-scrollbar rules is what makes Chromium and WebKit fall back to a
+ * classic, space-taking bar; `scrollbar-gutter` and `scrollbar-width` below
+ * are the standards-track half, for Firefox. The bar stays visible and
+ * grabbable on purpose — 12px, with a thumb that has real contrast. Hiding it
+ * would trade one invisible-affordance bug for another.
+ */
+.mdr-scroll {
+  scrollbar-gutter: stable;
+}
+
+/* Firefox only, and the @supports guard is load-bearing, not tidiness.
+ * Chromium implements BOTH the standard properties and the ::-webkit-
+ * pseudo-elements, and when scrollbar-width or scrollbar-color is set it
+ * ignores the pseudo-elements entirely — so declaring them unconditionally
+ * silently disabled every rule below. Measured before the guard: the
+ * container still reserved 0px for its scrollbar, i.e. the original bug was
+ * still there behind a styled-looking stylesheet.
+ */
+@supports not selector(::-webkit-scrollbar) {
+  .mdr-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted-foreground) / 0.45) hsl(var(--muted));
+  }
+}
+
+.mdr-scroll::-webkit-scrollbar {
+  height: 12px;
+}
+
+.mdr-scroll::-webkit-scrollbar-track {
+  background-color: hsl(var(--muted));
+  border-top: 1px solid hsl(var(--border));
+}
+
+.mdr-scroll::-webkit-scrollbar-thumb {
+  background-color: hsl(var(--muted-foreground) / 0.45);
+  border: 3px solid hsl(var(--muted));
+  border-radius: 999px;
+}
+
+.mdr-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: hsl(var(--muted-foreground) / 0.7);
+}
+
+/* The frozen columns must be OPAQUE — scrolling content passes behind them,
+ * and a translucent cell shows the columns sliding underneath. That rules out
+ * inheriting the row's `hover:bg-muted/50`, which is 50% alpha: on a frozen
+ * cell it would let the moving text through. So the base colour is painted as
+ * a background-COLOR and the hover tint as a background-IMAGE — two layers,
+ * two properties, no alpha over open space.
+ */
+.mdr-frozen {
+  background-color: hsl(var(--card));
+}
+
+tbody tr:hover > .mdr-frozen {
+  background-image: linear-gradient(hsl(var(--muted) / 0.5), hsl(var(--muted) / 0.5));
+}
+
+/* The visible edge, so the band reads as being in front of the register
+ * rather than part of it. Paired with a right border on the same cells.
+ */
+.mdr-frozen-edge {
+  box-shadow: 6px 0 6px -4px hsl(var(--foreground) / 0.16);
+}

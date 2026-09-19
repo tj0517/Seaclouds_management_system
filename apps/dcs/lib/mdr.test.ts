@@ -8,14 +8,19 @@
 // that the page does its filtering in SQL rather than in JavaScript.
 import { describe, expect, it } from 'vitest'
 import {
+  MDR_CELL_PADDING_PX,
   MDR_COLUMN_COUNT,
   MDR_COLUMN_GROUPS,
   MDR_DEFAULT_SORT,
+  MDR_FROZEN_COLUMN_COUNT,
+  MDR_FROZEN_CONTENT_PX,
+  MDR_FROZEN_LEFT_PX,
   MDR_PAGE_SIZE,
   MDR_STATUS_COLORS,
   MDR_STATUS_COLOR_FALLBACK,
   escapeSearchTerm,
   hasActiveFilters,
+  isMdrFrozenColumn,
   listMdrPage,
   mdrHref,
   mdrStatusColor,
@@ -126,6 +131,60 @@ describe('MDR_COLUMN_GROUPS', () => {
       MDR_COLUMN_GROUPS.reduce((n, g) => n + g.columns.length, 0),
     )
     expect(MDR_COLUMN_COUNT).toBe(11 + 4 + 4 + 4 * 4)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// The frozen band
+// ---------------------------------------------------------------------------
+
+// WHAT THESE TESTS CANNOT DO, said here rather than implied: none of them
+// proves the column is visually pinned. That needs a layout engine — whether
+// a cell stays put is decided by Chromium, not by this module, and a unit
+// test asserting it would be asserting its own arithmetic. The visual proof
+// for this change is the before/after screenshots and the in-browser
+// measurements in the PR body (SCL header at a constant 233px from the
+// container's left edge at scroll 0, 50% and 100%).
+//
+// What they DO cover is the one thing that breaks silently and looks fine in
+// a screenshot taken with today's data: the left-offset ladder drifting from
+// the widths it is supposed to be the running total of. Get that wrong and
+// the frozen columns overlap each other by the difference, at some scroll
+// position nobody happened to screenshot, with no error anywhere.
+describe('the frozen band', () => {
+  it('ends on the SCL number, which is the whole reason it exists', () => {
+    const band = MDR_COLUMN_GROUPS[0].columns.slice(0, MDR_FROZEN_COLUMN_COUNT)
+    expect(band[band.length - 1].key).toBe('scl_doc_number')
+  })
+
+  it('lies inside DOCUMENT INFO, and leaves at least one column of it outside', () => {
+    // The page splits that group's header into a frozen cell and a scrolling
+    // one. Both colSpans must be >= 1 or the header row stops summing to 35.
+    expect(MDR_FROZEN_COLUMN_COUNT).toBeGreaterThan(0)
+    expect(MDR_FROZEN_COLUMN_COUNT).toBeLessThan(MDR_COLUMN_GROUPS[0].columns.length)
+  })
+
+  it('offsets each frozen column by the running total of the widths before it', () => {
+    expect(MDR_FROZEN_LEFT_PX).toHaveLength(MDR_FROZEN_COLUMN_COUNT)
+    expect(MDR_FROZEN_LEFT_PX[0]).toBe(0)
+    for (let i = 1; i < MDR_FROZEN_LEFT_PX.length; i += 1) {
+      expect(MDR_FROZEN_LEFT_PX[i], `offset ${i}`).toBe(
+        MDR_FROZEN_LEFT_PX[i - 1] + MDR_FROZEN_CONTENT_PX[i - 1] + MDR_CELL_PADDING_PX,
+      )
+    }
+  })
+
+  it('declares a width for every frozen column except the last', () => {
+    // The last one is free to grow, so a long SCL number is never truncated;
+    // it can be, because nothing is pinned to its right-hand edge.
+    expect(MDR_FROZEN_CONTENT_PX).toHaveLength(MDR_FROZEN_COLUMN_COUNT - 1)
+  })
+
+  it('knows where the band ends', () => {
+    expect(isMdrFrozenColumn(0)).toBe(true)
+    expect(isMdrFrozenColumn(MDR_FROZEN_COLUMN_COUNT - 1)).toBe(true)
+    expect(isMdrFrozenColumn(MDR_FROZEN_COLUMN_COUNT)).toBe(false)
+    expect(isMdrFrozenColumn(MDR_COLUMN_COUNT - 1)).toBe(false)
   })
 })
 

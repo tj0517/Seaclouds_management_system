@@ -197,6 +197,70 @@ export const MDR_COLUMN_GROUPS: readonly MdrColumnGroup[] = [
 export const MDR_COLUMN_COUNT = MDR_COLUMN_GROUPS.reduce((n, g) => n + g.columns.length, 0)
 
 // ---------------------------------------------------------------------------
+// The frozen band
+// ---------------------------------------------------------------------------
+
+/**
+ * The register's first five columns stay put while the other thirty scroll.
+ *
+ * WHY FIVE AND NOT ONE. The value a Document Controller navigates by is the
+ * SCL document number, and it is the FIFTH column, not the first — Process,
+ * Orig, Type and Seq come before it. Pinning the fifth alone would leave those
+ * four sliding underneath it and would split DOCUMENT INFO's group header into
+ * three pieces. Freezing through it instead is what Excel's freeze panes does
+ * (freezing at column E keeps A–E), and it lets the group header stay one
+ * cell over one contiguous block. Owner's decision, 2026-09-19.
+ *
+ * THE CONSTRAINT THAT MAKES THIS FILE THE RIGHT HOME. A sticky column needs a
+ * `left` offset, and that offset is the sum of the widths of the columns
+ * before it. Widths and offsets therefore cannot live in two places: the
+ * moment they disagree, the frozen columns overlap each other by the
+ * difference and nothing throws. Below, the widths are declared once and the
+ * offsets are derived from them.
+ */
+
+/** Horizontal padding a register cell adds around its content — `p-2`, both sides. */
+export const MDR_CELL_PADDING_PX = 16
+
+/**
+ * Content widths for the frozen columns that must NOT grow, in px.
+ *
+ * Four entries, not five: the fifth frozen column (the SCL number) is
+ * deliberately absent, because it is the last one in the band and nothing is
+ * pinned to its right-hand edge. It is left with NO declared width at all and
+ * sizes to its own content, so a longer-than-expected number — ORIG may be up
+ * to ten characters, and a project code may itself contain a hyphen
+ * (SCMS-IT) — is never truncated. It just makes the band wider, which costs
+ * nothing. The four here cannot have that freedom: each one's width is
+ * another column's offset.
+ *
+ * Sized from the headings, which are fixed strings, not from the data, which
+ * is not: measured in the browser at text-xs, "Process" is 47px, "Type" 45px
+ * with its sort icon, "Orig" 25px, "Seq" 23px. The four carry `truncate`, and
+ * that is safe precisely here — Orig, Type and Seq are the middle segments of
+ * the SCL number itself (SC2609-SCL-AA-0005-PL), which the next column shows
+ * in full, so a clipped code loses the reader nothing.
+ */
+export const MDR_FROZEN_CONTENT_PX = [48, 36, 48, 36] as const
+
+/** How many columns are frozen: the four widths above plus the SCL number. */
+export const MDR_FROZEN_COLUMN_COUNT = MDR_FROZEN_CONTENT_PX.length + 1
+
+/**
+ * The `left` offset of each frozen column — the sum of the widths before it.
+ * Derived, never written down: [0, 64, 116, 180, 232].
+ */
+export const MDR_FROZEN_LEFT_PX: readonly number[] = MDR_FROZEN_CONTENT_PX.reduce<number[]>(
+  (offsets, contentPx) => [...offsets, offsets[offsets.length - 1] + contentPx + MDR_CELL_PADDING_PX],
+  [0],
+)
+
+/** True for a column index inside the frozen band. */
+export function isMdrFrozenColumn(index: number): boolean {
+  return index < MDR_FROZEN_COLUMN_COUNT
+}
+
+// ---------------------------------------------------------------------------
 // searchParams
 // ---------------------------------------------------------------------------
 
