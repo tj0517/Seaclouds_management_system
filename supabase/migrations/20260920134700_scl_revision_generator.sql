@@ -135,6 +135,14 @@
 --    session-less caller are NOT validated: the import owns the format of what
 --    it carries, and a caller that can already write the table directly is not
 --    made safer by a check it can also bypass.
+--
+--    THE CHECK APPLIES AT INSERT ONLY. UNIQUE (document_id, scl_revision) would
+--    not catch 'A1' or '0', which is why the shape is checked at all — but after
+--    the row exists, revisions_numbering_dc_only (1b.01, deliberately untouched
+--    here) lets the project's DC at aal2 UPDATE scl_revision, and it checks WHO
+--    changes the column, not WHAT it is changed to. A DC can therefore move a
+--    code past this validation with an UPDATE. That is a known, logged gap
+--    (docs/deferred-tasks.md yy), not something this migration closes.
 
 -- ==================================================================
 -- 0. dcs.revision_series_pattern: the shape of a code, per step
@@ -388,7 +396,8 @@ begin
   end if;
 
   -- The DC's code has to be a code of the step's series (decision 6). Which
-  -- code within the series is theirs to choose.
+  -- code within the series is theirs to choose. INSERT only: the UPDATE path
+  -- (revisions_numbering_dc_only, 1b.01) does not run this check.
   v_pattern := dcs.revision_series_pattern(v_step_code);
   if v_pattern is null or new.scl_revision !~ v_pattern then
     raise exception

@@ -2368,22 +2368,45 @@ proved. None of them is started.
   server-side route writes `dcs.revisions` today (checked 2026-09-20: the only
   service-key modules are the Timesheet admin client and the DCS MDR export). The
   moment one is added, that is a decision to make on purpose.
-- **Saving the CPY number hangs on "Saving…" on a PRODUCTION build — found on
-  unmodified `origin/main`, not caused by 1b.08.** Measured while running
-  `e2e:profile` against `next start` on the local stack: the `setCpyNumber` action
-  POST returns 200, the `router.refresh()` RSC GET returns 200, the value IS stored,
-  and yet `CpyNumberField` stays on "Saving…" (button disabled) for as long as it was
-  watched (8 s+); a reload shows the saved value. Bisected by stashing this branch,
-  building `origin/main` and running the same script: the same hang, in every variant
-  tried (save at once, after a wait, after clicking Additional attributes — one variant
-  cleared in under a second on the branch, and hung on main, so it is timing-dependent
-  rather than absent). NOT seen on `next dev` (`e2e:profile` 36/36, which is what 1b.07
-  proved it on). Only this one call site of `usePendingAction().refresh()` was tried; the
-  others are unmeasured. Same family as 1a.25b (`router.refresh` / route cache on a
-  production build) is a guess, not a finding. Not investigated further and not fixed
-  (out of scope for 1b.08). It would reach production users the moment DCS has any:
-  `dcs.project_roles` is empty on prod today (read 2026-09-20), so nobody can reach a
-  profile there yet.
+- **HIGH PRIORITY, its own task — saving the CPY number hangs on "Saving…" on a
+  PRODUCTION build. A defect in shipped 1b.07 code, found while running 1b.08's
+  browser pass; not caused by 1b.08.** Everything known, measured 2026-09-20 on the
+  local stack with Playwright:
+  - **Reproduces on a production build of unmodified `origin/main`** (the tree at
+    `d379366`, before #77; this branch had no commits of its own then, and the build was
+    made after stashing its work): `pnpm --filter @scl/dcs build`, `next start --port 3001`.
+  - **The action POST returns 200** (`POST /documents/<id>` with `Next-Action`), **the
+    refresh RSC GET returns 200** (`GET /documents/<id>?_rsc=…`), **and the value IS stored**
+    (`cpy_doc_number = 'CPY-TEST-0042'`, read back with psql). A reload shows it.
+  - Yet `CpyNumberField` stays on **"Saving…" with its button disabled** for as long as it
+    was watched (8 s and more). No console error and no `pageerror` was logged.
+  - After the refresh GET, the browser fires a burst of prefetch `_rsc` GETs (`/`, `/mdr`,
+    `/admin/clients`, `/admin/dictionaries`, `/projects/<id>/documents`), twice; all return 200.
+    The same burst appears in the run that did NOT hang.
+  - **Not seen on `next dev`.** `e2e:profile` is 36/36 there, which is the proof 1b.07 was
+    accepted on.
+  - Measured variants. On the `origin/main` build all three hung: save at once, save after a
+    4 s wait, save after clicking "Additional attributes". On this branch's build: save at
+    once cleared in under a second (once); after a wait, after clicking "Additional attributes"
+    and after switching tabs all hung. `e2e:profile` against the production build fails at the
+    same step ("Saving…" never clears) on every run (4 of 4).
+  - **Only this call site of `usePendingAction().refresh()` was tried.** Whether the others
+    (every dialog and form in `apps/dcs` that uses it) hang the same way is unmeasured.
+  - **What I'd look at first:** `hooks/use-pending-action.ts`, `startRefresh(() => router.refresh())`.
+    In the failing run both responses arrive and the transition still never settles, and the
+    post-refresh prefetch burst is the thing that looks like it races it — so run the same
+    production build with (a) `router.refresh()` called outside the `useTransition`, and (b)
+    `prefetch={false}` on the sidebar links, and see which of the two stops it. Same family as
+    1a.25b (client router state on a production build) is a guess, not a finding.
+  - **What it says about the proof, which is the larger finding:** 1b.07 was accepted on a
+    `next dev` proof, and by the owner's count this is the third time that proof shape has
+    come up short. The one I can cite is 1a.25b/1a.25c (`next dev` did not reproduce the /mfa
+    hang; only a production build does — `docs/03-conventions.md`). Any browser proof of a
+    client-side transition should be run on a production build, and a run that cannot be is not
+    a full proof.
+  - Not fixed here (out of scope), and it would reach production users the moment DCS has any:
+    `dcs.project_roles` is empty on prod today (read 2026-09-20), so nobody can reach a
+    profile there yet.
 - **`created_by` on a revision is not enforced by the database.** The New Revision
   action sets it from the session, but no trigger does, so a caller writing to
   PostgREST directly could put another user's id there (the audit log, which reads
@@ -2397,6 +2420,11 @@ proved. None of them is started.
   SUPERSEDED by design, and filtering a display would hide a wrong state (see the
   API-writable status above). The DC's `/admin/dictionaries` screen lists every row,
   SUPERSEDED included, on purpose: it is where a DC manages the dictionary.
+- **Revisions tab width at 1280 px.** The table shows SCL revision, Status, Step, Date,
+  Author, Reason and CPY; the Acceptance column scrolls sideways. **1b.09 adds a files column
+  to this same table and should redo the width pass then**, not stack a ninth column on
+  the current one. (Columns are `COLUMNS` in `RevisionsTab.tsx`; cells carry the code, with
+  "CODE — label" in the tooltip, to make room.)
 - **E2E helpers are duplicated** between `document-profile.mjs` and `new-revision.mjs`
   (login, `toAal2`, TOTP, `psql`). Extract to `apps/dcs/e2e/support.mjs` when a third
   script needs them; done deliberately not to touch the 1b.07 script beyond the two
