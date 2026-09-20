@@ -1,9 +1,14 @@
 // DCS 1b.07: the document profile — Information / Additional attributes on the
 // left, the current revision on the right, History from the audit log.
+// DCS 1b.08 adds the Revisions tab and makes New Revision a live dialog.
 //
 // Third screen of the mock-ups (brief §9.3, PIMS annex D). Every tab and the
-// panel is its own component so 1b.08 (New Revision), 1b.09 (files) and 1b.11
-// (status / Void) each replace one piece instead of reshaping the page.
+// panel is its own component so 1b.09 (files) and 1b.11 (status / Void) each
+// replace one piece instead of reshaping the page.
+//
+// The tab shown comes from the URL (`?tab=revisions&open=<revisionId>`), because
+// the New Revision dialog lives in the panel beside the tabs and, once it has
+// saved, lands the user on the Revisions tab with the new row open.
 //
 // ACCESS IS RLS, NOT THIS FILE. Which documents this page can render is
 // decided by "Project members read documents": a non-member's read returns no
@@ -21,20 +26,17 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import CurrentRevisionPanel from '@/components/document-profile/CurrentRevisionPanel'
 import DocumentHistoryTab from '@/components/document-profile/DocumentHistoryTab'
 import DocumentInformationTab from '@/components/document-profile/DocumentInformationTab'
-import {
-  CommentsTab,
-  PlanTab,
-  ReferencesTab,
-  RevisionsTab,
-  TransmittalsTab,
-} from '@/components/document-profile/PlaceholderTabs'
+import { CommentsTab, PlanTab, ReferencesTab, TransmittalsTab } from '@/components/document-profile/PlaceholderTabs'
+import RevisionsTab from '@/components/document-profile/RevisionsTab'
 import { fetchUserProjectRoles, hasAnyRole } from '@/lib/auth-helpers'
+import { getActiveDictionary } from '@/lib/dictionaries'
 import {
   cpyFieldMode,
   dictionaryLabel,
   describeAuditRow,
   historyRecordIds,
   PLACEHOLDER_TABS,
+  resolveProfileTab,
 } from '@/lib/document-profile'
 import {
   getDocument,
@@ -43,19 +45,34 @@ import {
   getRevisionWithFiles,
   HISTORY_LIMIT,
   isUuid,
-  listRevisionIds,
 } from '@/lib/documents'
 import { mdrStatusColor } from '@/lib/mdr'
 import { getProfileDirectory } from '@/lib/profile-directory'
+import {
+  cpyRevisionField,
+  defaultRevisionStepId,
+  listRevisionsWithFiles,
+  newRevisionAccess,
+  revisionStepOptions,
+  sclCodeField,
+  toRevisionRows,
+} from '@/lib/revisions'
 import { cn } from '@/lib/utils'
 
 export default async function DocumentProfilePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ documentId: string }>
+  searchParams: Promise<{ tab?: string | string[]; open?: string | string[] }>
 }) {
   const { documentId } = await params
   if (!isUuid(documentId)) notFound()
+  const query = await searchParams
+  const tab = resolveProfileTab(query.tab)
+  // Which revision row arrives expanded. Only ever compared against the ids that
+  // were read, so a value that is not one of them opens nothing.
+  const openRevisionId = typeof query.open === 'string' ? query.open : null
 
   const supabase = await createClient()
 
@@ -76,8 +93,11 @@ export default async function DocumentProfilePage({
     cpyNumbering,
     rolesByProject,
     aal,
-    revisionIds,
+    revisions,
     current,
+    stepDictionary,
+    acceptanceCodes,
+    { data: sessionProfile },
   ] = await Promise.all([
     supabase.from('projects').select('name, project_code').eq('id', document.project_id).maybeSingle(),
     document.ctr_code
@@ -87,8 +107,11 @@ export default async function DocumentProfilePage({
     getProjectCpyNumbering(supabase, document.project_id),
     user ? fetchUserProjectRoles(supabase, user.id) : Promise.resolve(new Map()),
     supabase.auth.mfa.getAuthenticatorAssuranceLevel(),
-    listRevisionIds(supabase, document.id),
+    listRevisionsWithFiles(supabase, document.id),
     document.current_revision_id ? getRevisionWithFiles(supabase, document.current_revision_id) : Promise.resolve(null),
+    getActiveDictionary(supabase, 'workflow_step'),
+    getActiveDictionary(supabase, 'acceptance_code'),
+    user ? supabase.from('profiles').select('role').eq('id', user.id).maybeSingle() : Promise.resolve({ data: null }),
   ])
 
   // Roles come from lib/auth-helpers directly, not from the request-cached
@@ -99,7 +122,13 @@ export default async function DocumentProfilePage({
   // needs no cache anyway.
 
   // Second stage: the audit read needs the revision ids from the first.
-  const history = await getDocumentHistory(supabase, historyRecordIds(document.id, revisionIds))
+  const history = await getDocumentHistory(
+    supabase,
+    historyRecordIds(
+      document.id,
+      revisions.map((revision) => revision.id),
+    ),
+  )
 
   const nameById = new Map(directory.entries.map((entry) => [entry.id, entry.full_name]))
   const entries = history.map((row) => describeAuditRow(row, nameById))
@@ -110,6 +139,32 @@ export default async function DocumentProfilePage({
     isProjectDc: hasAnyRole(rolesByProject.get(document.project_id) ?? [], ['dc']),
     aal2: aal.data?.currentLevel === 'aal2',
   })
+
+  // The New Revision control. MIRRORS the database (newRevisionAccess, sclCodeField
+  // and cpyRevisionField say so): RLS and the triggers decide who may actually write.
+  const projectRoles = rolesByProject.get(document.project_id) ?? []
+  const isProjectDc = hasAnyRole(projectRoles, ['dc'])
+  const aal2 = aal.data?.currentLevel === 'aal2'
+  const stepOptions = revisionStepOptions(stepDictionary)
+  const newRevision = {
+    access: newRevisionAccess({
+      isAdmin: sessionProfile?.role === 'admin',
+      isOrig: hasAnyRole(projectRoles, ['orig']),
+      isDc: isProjectDc,
+      aal2,
+      documentStatusCode: document.workflow_status?.code,
+    }),
+    config: {
+      documentId: document.id,
+      documentNumber: document.scl_doc_number,
+      steps: stepOptions,
+      acceptanceCodes: acceptanceCodes.map(({ id, code, label }) => ({ id, code, label })),
+      defaultStepId: defaultRevisionStepId(stepOptions, current?.revision.step?.code),
+      scl: sclCodeField({ isProjectDc, aal2 }),
+      cpy: cpyRevisionField(cpyField),
+    },
+  }
+  const revisionRows = toRevisionRows(revisions, document.current_revision_id, nameById)
 
   const projectLabel = project ? `${project.project_code} — ${project.name}` : 'Project'
 
@@ -142,10 +197,14 @@ export default async function DocumentProfilePage({
 
       <PageBody className="max-w-6xl">
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
-          <Tabs defaultValue="information" className="min-w-0">
+          {/* `key`: the tab is chosen by the URL, and Tabs only reads defaultValue on mount — so a
+              navigation to ?tab=revisions&open=<id> (the New Revision dialog's last step) has to
+              remount it to switch tabs and re-read which row is open. */}
+          <Tabs key={`${tab}:${openRevisionId ?? ''}`} defaultValue={tab} className="min-w-0">
             {/* Seven tabs are wider than the left column; wrapping keeps every one visible instead of scrolling the active tab into view and clipping the first. */}
             <TabsList className="h-auto max-w-full flex-wrap justify-start">
               <TabsTrigger value="information">Information</TabsTrigger>
+              <TabsTrigger value="revisions">Revisions</TabsTrigger>
               {PLACEHOLDER_TABS.map((tab) => (
                 <TabsTrigger key={tab.value} value={tab.value}>
                   {tab.label}
@@ -165,7 +224,7 @@ export default async function DocumentProfilePage({
               />
             </TabsContent>
             <TabsContent value="revisions">
-              <RevisionsTab />
+              <RevisionsTab rows={revisionRows} openId={openRevisionId} />
             </TabsContent>
             <TabsContent value="plan">
               <PlanTab />
@@ -185,7 +244,7 @@ export default async function DocumentProfilePage({
           </Tabs>
 
           <div className="min-w-0">
-            <CurrentRevisionPanel current={current} />
+            <CurrentRevisionPanel current={current} newRevision={newRevision} />
           </div>
         </div>
       </PageBody>

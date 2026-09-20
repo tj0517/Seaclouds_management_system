@@ -1,4 +1,5 @@
-// DCS 1b.07: the tabs that arrive later. Each is its own component so the task
+// DCS 1b.07: the tabs that arrive later. (Revisions left this file in DCS 1b.08:
+// it is a real tab now, RevisionsTab.tsx.) Each is its own component so the task
 // that fills one replaces one file and nothing else on the profile moves; the
 // sentence and the task/phase it names live in PLACEHOLDER_TABS
 // (lib/document-profile.ts), where a test pins them.
@@ -15,9 +16,6 @@ function Placeholder({ tab }: { tab: PlaceholderTab }) {
   return <EmptyState title={`${tab.label} — not available yet`}>{tab.sentence}</EmptyState>
 }
 
-export function RevisionsTab() {
-  return <Placeholder tab={entry('revisions')} />
-}
 export function PlanTab() {
   return <Placeholder tab={entry('plan')} />
 }

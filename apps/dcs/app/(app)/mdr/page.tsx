@@ -33,7 +33,7 @@ import { EmptyState, PageBody, PageHeader, RegisterScroll } from '@/components/p
 // overflow container, and the frozen band needs exactly one scroller to pin
 // against. See RegisterScroll's comment. The rest are plain thead/tr/th/td.
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { getActiveDictionary } from '@/lib/dictionaries'
+import { documentStatusOptions, getActiveDictionary } from '@/lib/dictionaries'
 import { getProfileDirectory } from '@/lib/profile-directory'
 import {
   MDR_PAGE_SIZE,
@@ -176,7 +176,11 @@ export default async function MdrPage({
     getProfileDirectory(supabase),
     listUserViews(supabase),
   ])
-  const [docTypes, disciplines, statuses] = dictionaries
+  // SUPERSEDED is a status of a REVISION (DCS 1b.08), not of a document, so the
+  // status filter does not offer it: filtering the register by it could only
+  // ever return nothing.
+  const [docTypes, disciplines] = dictionaries
+  const statuses = documentStatusOptions(dictionaries[2])
 
   // Each saved view as the toolbar needs it: a name and the URL it restores.
   // The href is built here, on the server, by the same viewToQuery + mdrHref

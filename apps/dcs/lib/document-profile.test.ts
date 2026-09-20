@@ -9,6 +9,9 @@ import {
   HISTORY_EMPTY_MESSAGE,
   PANEL_ACTIONS,
   PLACEHOLDER_TABS,
+  PROFILE_TAB_VALUES,
+  resolveProfileTab,
+  toFileRows,
   cpyFieldHint,
   cpyFieldMode,
   describeAuditRow,
@@ -156,23 +159,24 @@ describe('fileDisplayName', () => {
   })
 })
 
-// Acceptance 6: every action present, with the tooltip the task specifies.
+// 1b.07 acceptance 6: every action present, with the tooltip the task specifies.
+// DCS 1b.08 turned New Revision into a live dialog, so it left this list: the
+// five below are what is still disabled.
 describe('PANEL_ACTIONS', () => {
   const byLabel = new Map(PANEL_ACTIONS.map((action) => [action.label, action.hint]))
 
-  it('renders the six actions', () => {
+  it('lists the five actions that are still disabled — New Revision is a live dialog now', () => {
     expect([...byLabel.keys()]).toEqual([
-      'New Revision',
       'Add File',
       'Distribute for IDC',
       'Initiate Review',
       'Initiate Approval',
       'Create Transmittal',
     ])
+    expect(byLabel.has('New Revision')).toBe(false)
   })
 
-  it('names 1b.08 and 1b.09 on the two that arrive next', () => {
-    expect(byLabel.get('New Revision')).toMatch(/1b\.08/)
+  it('names 1b.09 on Add File, which arrives next', () => {
     expect(byLabel.get('Add File')).toMatch(/1b\.09/)
   })
 
@@ -184,15 +188,8 @@ describe('PANEL_ACTIONS', () => {
 })
 
 describe('PLACEHOLDER_TABS', () => {
-  it('has the five tabs of the task, with Revisions pointing at 1b.08', () => {
-    expect(PLACEHOLDER_TABS.map((tab) => tab.label)).toEqual([
-      'Revisions',
-      'Plan',
-      'Comments',
-      'References',
-      'Transmittals',
-    ])
-    expect(PLACEHOLDER_TABS[0].sentence).toMatch(/1b\.08/)
+  it('has the four tabs still to come — Revisions is a real tab since DCS 1b.08', () => {
+    expect(PLACEHOLDER_TABS.map((tab) => tab.label)).toEqual(['Plan', 'Comments', 'References', 'Transmittals'])
   })
 
   // The owner's decision (1b.07 review), pinned so a reword cannot drop it.
@@ -205,6 +202,42 @@ describe('PLACEHOLDER_TABS', () => {
   it('has one sentence per tab and no duplicate values', () => {
     expect(new Set(PLACEHOLDER_TABS.map((tab) => tab.value)).size).toBe(PLACEHOLDER_TABS.length)
     expect(PLACEHOLDER_TABS.every((tab) => tab.sentence.length > 0)).toBe(true)
+  })
+})
+
+describe('resolveProfileTab', () => {
+  it('draws the tabs in the order Information, Revisions, the placeholders, History', () => {
+    expect([...PROFILE_TAB_VALUES]).toEqual([
+      'information',
+      'revisions',
+      'plan',
+      'comments',
+      'references',
+      'transmittals',
+      'history',
+    ])
+  })
+  it('accepts every tab that exists', () => {
+    for (const tab of PROFILE_TAB_VALUES) expect(resolveProfileTab(tab)).toBe(tab)
+  })
+  it('falls back to Information for anything else', () => {
+    expect(resolveProfileTab(undefined)).toBe('information')
+    expect(resolveProfileTab('nope')).toBe('information')
+    expect(resolveProfileTab(['revisions'])).toBe('information')
+    expect(resolveProfileTab('')).toBe('information')
+  })
+})
+
+describe('toFileRows', () => {
+  it('draws each file with a display name, a size and a UTC timestamp', () => {
+    expect(
+      toFileRows([
+        { id: 'f1', file_kind: 'original', file_name: 'doc.pdf', original_name: null, storage_path: null, size_bytes: 2048, uploaded_at: '2026-09-19T14:33:10Z' },
+      ]),
+    ).toEqual([{ id: 'f1', name: 'doc.pdf', kind: 'original', size: '2.0 KB', uploaded: '2026-09-19 14:33 UTC' }])
+  })
+  it('is empty for no files', () => {
+    expect(toFileRows([])).toEqual([])
   })
 })
 
