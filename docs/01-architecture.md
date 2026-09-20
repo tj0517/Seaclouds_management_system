@@ -11,7 +11,7 @@ pnpm workspace + Turborepo ([ADR-0002](adr/0002-monorepo-osobne-aplikacje.md)):
 scl-portal/
 ├── apps/
 │   ├── timesheet/      @scl/timesheet — SCL-TES, działa na produkcji (Vercel)
-│   └── dcs/            (planowana — część 2 zadania DCS 1a.00b)
+│   └── dcs/            @scl/dcs — SCL-DCS, w budowie (Next.js 16)
 ├── packages/
 │   └── db/             @scl/db — typy bazy + fabryki klientów Supabase
 ├── supabase/           JEDYNY katalog projektu Supabase (config, migrations, seed, tests)
@@ -20,6 +20,46 @@ scl-portal/
 ```
 
 CI pilnuje, że `supabase/` istnieje wyłącznie w rootcie repo.
+
+## Trasy `apps/dcs` (segment `(app)`)
+
+Stan z DCS 1b.07. Wszystkie trasy to async RSC czytające przez sesję
+użytkownika — dostęp rozstrzyga RLS, nie kod strony. Poza `/admin` żadna trasa
+nie wymaga aal2 (bramka w `proxy.ts` obejmuje wyłącznie prefiks `/admin`), więc
+to, czy pole można zapisać, rozstrzyga baza (polityki + triggery), a UI tylko to
+odzwierciedla.
+
+| Trasa | Zawartość |
+|---|---|
+| `/` | lista projektów |
+| `/mdr` | rejestr MDR (`dcs.v_mdr`), numer SCL linkuje do profilu |
+| `/projects/[projectId]/documents` | dokumenty jednego projektu, numer SCL linkuje do profilu |
+| `/documents/new` | formularz nowego dokumentu (1b.04) |
+| `/documents/[documentId]` | **profil dokumentu (1b.07)** — po lewej zakładki, po prawej panel bieżącej rewizji |
+| `/admin/*` | klienci, słowniki, projekty, użytkownicy (za bramką aal2) |
+
+**Profil dokumentu** (`app/(app)/documents/[documentId]/page.tsx`). Każda zakładka
+i panel to osobny komponent w `components/document-profile/`, żeby 1b.08 (New
+Revision), 1b.09 (pliki) i 1b.11 (status / Void) podmieniały po jednym pliku:
+
+- *Information* + zwijane *Additional attributes* — `DocumentInformationTab`;
+  jedyny interaktywny element to `CpyNumberField` (klient), zapis przez
+  `setCpyNumber` (`lib/documents.ts`, akcja w `app/data/actions/documents.ts`).
+  Edytowalne tylko dla DC projektu w sesji aal2 i tylko gdy
+  `mdr_settings.cpy_numbering = true` (`cpyFieldMode()` w
+  `lib/document-profile.ts` — lustro, nie egzekwowanie: reguły trzymają triggery
+  `documents_cpy_numbering` i `documents_numbering_dc_only` oraz polityka
+  „Doc controllers update documents”).
+- *Panel po prawej* — `CurrentRevisionPanel`: `current_revision_id` →
+  `dcs.revisions` + `dcs.files`, wyłącznie odczyt, bez linków do pobrania (1b.09).
+  Dokument bez rewizji pokazuje „No revision yet”. Przyciski akcji są wyłączone.
+- *History* — `DocumentHistoryTab`: wiersze `public.audit_log` dla dokumentu i
+  jego rewizji, tak jak zwraca je RLS (admin i DC projektu). Pusty wynik nie jest
+  błędem, więc stan pusty mówi, że wpisy mogą być niewidoczne dla roli czytającego.
+- *Revisions / Plan / Comments / References / Transmittals* — `PlaceholderTabs`.
+- Dokument, którego użytkownik nie może czytać (albo id niebędące uuid-em), daje
+  `notFound()` — ta sama odpowiedź co dla nieistniejącego, żeby nie dało się
+  sondować istnienia id na cudzym projekcie.
 
 ## `packages/db` — jedyne źródło typów
 

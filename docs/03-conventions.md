@@ -307,6 +307,54 @@ obu usterkach przechodził. Reguła praktyczna: zanim uznasz pomiar w przegląda
 za dowód, zmierz obok przypadek, który **musi** dać inny wynik. Jeżeli nie daje
 — mierzysz renderer, nie swoją zmianę.
 
+## Fixtury lokalne i testy przeglądarkowe
+
+Zapisane przy DCS 1b.07 (2026-09-20).
+
+- **`supabase/fixtures/`** to dane, które istnieją wyłącznie na lokalnym stacku,
+  do dowodu w przeglądarce — rzeczy, których nie ma na scl-dev, bo nic jeszcze
+  ich nie tworzy (dziś: wiersz rewizji i pliku, do 1b.08 / 1b.09). Nie jest to
+  migracja (leży poza `supabase/migrations/`, więc `db push` go nie wyśle), nie
+  jest częścią `seed.sql` (`db reset` zostaje bez zmian) i nie jest testem
+  pgTAP. Ładuje się ręcznie po `supabase db reset`:
+  `docker exec -i -e PGOPTIONS='-c app.local_fixture=yes'
+  supabase_db_Seaclouds_management_system psql -U postgres -v ON_ERROR_STOP=1
+  < supabase/fixtures/<plik>.sql`.
+- **Bezpiecznik:** plik odmawia uruchomienia bez `app.local_fixture=yes`.
+  Konsola SQL w dashboardzie ani MCP `execute_sql` go nie ustawią. To pas
+  bezpieczeństwa, nie granica — ktoś, kto ustawi zmienną, może go uruchomić
+  gdziekolwiek.
+- **`supabase test db` i CI go nie ładują — sprawdzone, nie założone.**
+  `[db.seed] sql_paths` w `supabase/config.toml` to wyłącznie `./seed.sql`;
+  `ci.yml` robi `supabase db reset` i `supabase test db`; `grep -rn fixtures
+  .github/workflows supabase/config.toml package.json` niczego nie znajduje;
+  a pełny przebieg `supabase test db` przy fixturze leżącej na dysku uruchomił
+  26 plików, wszystkie z `supabase/tests/`. Fixturę ładuj **po** `supabase test
+  db`, na czystym `db reset`: testy robią gołe `count(*)` po `dcs.documents`,
+  a fixtura dodaje wiersze (nie sprawdzałem, które asercje by się wywróciły).
+- **Testy przeglądarkowe: Playwright, uruchamiany lokalnie, nie w CI.** Skrypt
+  `apps/dcs/e2e/document-profile.mjs`, `devDependency` `playwright` w
+  `@scl/dcs`. **To świadoma decyzja z 1b.07, obok notatki 1a.12** (brak
+  jsdom/RTL, `apps/dcs/vitest.config.ts`): drugie narzędzie, nie odstępstwo od
+  pierwszego. Logika czysta — vitest. To, co robi STRONA (RLS decydujące, co
+  widzą trzy sesje; akcja serwerowa zapisująca; wpis audytu w History) — tylko
+  przeglądarka. Koszt zapisany wprost: zależność dev zmienia `pnpm-lock.yaml`,
+  wspólny z Timesheetem.
+- **Jak uruchomić** (wszystko lokalnie): `supabase start` i `supabase db reset`;
+  fixtura jak wyżej; `pnpm --filter @scl/dcs dev` (port 3001, `.env.local` na
+  lokalny stack); przeglądarka: `pnpm --filter @scl/dcs exec playwright install
+  chromium` (sam `pnpm add` przeglądarek nie pobiera; na Linuksie bez
+  bibliotek systemowych — u nas brakowało `libnspr4`, `libnss3`, `libasound2` —
+  potrzebne `--with-deps` z sudo albo rozpakowane lokalnie paczki `.deb` i
+  `LD_LIBRARY_PATH`); potem `pnpm --filter @scl/dcs e2e:profile`. Skrypt
+  zapisuje do lokalnej bazy, więc odmawia uruchomienia przeciw czemukolwiek
+  poza `localhost`; kończy się kodem 1, gdy którakolwiek asercja padnie, i
+  zapisuje zrzuty ekranu do `E2E_SHOTS` (domyślnie katalog tymczasowy).
+- **Dlaczego nie w CI:** CI stawia stack tylko z bazą (`supabase start -x
+  gotrue,…,kong,postgrest,…`) — nie ma Auth ani API, więc nie ma sesji do
+  zalogowania. e2e w CI wymagałoby pełnego stacku i uruchomionej aplikacji i
+  jest poza zakresem 1b.07.
+
 ## Nazewnictwo
 
 - Baza: snake_case; tabele w liczbie mnogiej (`documents`, `revisions`);

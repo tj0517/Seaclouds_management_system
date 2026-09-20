@@ -3,15 +3,21 @@
 // Postgres in supabase/tests/documents_originator_not_checker.test.sql and
 // supabase/tests/documents_require_mdr_settings.test.sql; these cover the
 // app-side duplicates that decide what the user is told.
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import type { SupabaseClient } from '@supabase/supabase-js'
+import type { Database } from '@scl/db'
 import {
   DEFAULT_LANGUAGE_CODE,
   budgetHoursFromMeta,
   creatableProjects,
   defaultLanguageId,
+  isUuid,
+  mapCpyDbError,
   mapDbError,
   originatorIsChecker,
   parseCreateDocumentInput,
+  parseSetCpyNumberInput,
+  setCpyNumber,
 } from './documents'
 import type { ProjectRole } from './auth-helpers'
 
@@ -286,5 +292,155 @@ describe('mapDbError', () => {
     expect(mapDbError('23503', 'violates foreign key constraint "documents_originator_id_fkey"')).toMatchObject({
       error: 'unknown_reference',
     })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// DCS 1b.07 — the profile's route guard and setCpyNumber
+// ---------------------------------------------------------------------------
+
+describe('isUuid', () => {
+  it('accepts a uuid and refuses anything else, so /documents/abc is a 404 and not a 22P02', () => {
+    expect(isUuid(A)).toBe(true)
+    expect(isUuid('abc')).toBe(false)
+    expect(isUuid('')).toBe(false)
+    expect(isUuid(`${A}0`)).toBe(false)
+  })
+})
+
+describe('parseSetCpyNumberInput', () => {
+  it('trims the number and keeps the document id', () => {
+    expect(parseSetCpyNumberInput({ documentId: A, cpyNumber: '  CPY-0042 ' })).toEqual({
+      ok: true,
+      data: { documentId: A, cpyNumber: 'CPY-0042' },
+    })
+  })
+
+  // Clearing the number is a legal write (the trigger still restricts it to the DC).
+  it('turns an empty, blank or missing number into null', () => {
+    for (const cpyNumber of ['', '   ', null, undefined]) {
+      expect(parseSetCpyNumberInput({ documentId: A, cpyNumber })).toEqual({
+        ok: true,
+        data: { documentId: A, cpyNumber: null },
+      })
+    }
+  })
+
+  it('invents no format rule: any non-empty text is passed through as the client wrote it', () => {
+    const parsed = parseSetCpyNumberInput({ documentId: A, cpyNumber: 'PL/2026/RA-0012 rev.B' })
+    expect(parsed).toEqual({ ok: true, data: { documentId: A, cpyNumber: 'PL/2026/RA-0012 rev.B' } })
+  })
+
+  it('refuses a payload that is not the right shape', () => {
+    expect(parseSetCpyNumberInput(null).ok).toBe(false)
+    expect(parseSetCpyNumberInput({ cpyNumber: 'x' }).ok).toBe(false)
+    expect(parseSetCpyNumberInput({ documentId: 'nope', cpyNumber: 'x' }).ok).toBe(false)
+    expect(parseSetCpyNumberInput({ documentId: A, cpyNumber: 42 }).ok).toBe(false)
+  })
+
+  // The action may touch ONE column. Nothing else on the payload may reach it.
+  it('returns only documentId and cpyNumber, dropping anything else a caller adds', () => {
+    const parsed = parseSetCpyNumberInput({ documentId: A, cpyNumber: 'x', scl_doc_number: 'FORGED', title: 'T' })
+    expect(parsed.ok && Object.keys(parsed.data).sort()).toEqual(['cpyNumber', 'documentId'])
+  })
+})
+
+describe('mapCpyDbError', () => {
+  it('words the aal1 refusal and the non-DC refusal differently, because the fix differs', () => {
+    const aal1 = mapCpyDbError('42501', 'dcs.documents.cpy_doc_number may be changed only in a session with a verified second factor (aal2). Current assurance level: aal1.')
+    const notDc = mapCpyDbError('42501', 'dcs.documents.cpy_doc_number may be changed only by the Document Controller of this project (dcs.project_roles role \'dc\'). Caller: x.')
+    expect(aal1).toMatchObject({ ok: false, error: 'forbidden' })
+    expect(notDc).toMatchObject({ ok: false, error: 'forbidden' })
+    expect(aal1.message).toMatch(/second factor/)
+    expect(notDc.message).toMatch(/Document Controller/)
+    expect(notDc.message).not.toBe(aal1.message)
+  })
+
+  it('does not reuse the create-form wording for 42501', () => {
+    expect(mapCpyDbError('42501', 'x').message).not.toMatch(/create a document/)
+  })
+
+  it('maps the no-CPY-track trigger and the unique constraint', () => {
+    expect(mapCpyDbError('23514', 'dcs.documents.cpy_doc_number cannot be set on this project: ... The CPY track is the client\'s numbering')).toMatchObject({
+      error: 'invalid_input',
+    })
+    expect(mapCpyDbError('23505', 'duplicate key value violates unique constraint')).toMatchObject({
+      error: 'duplicate_number',
+    })
+  })
+
+  it('leaves an unrecognised error as db_error with the raw message attached', () => {
+    expect(mapCpyDbError('XX000', 'boom')).toEqual({ ok: false, error: 'db_error', message: 'boom' })
+    expect(mapCpyDbError('23514', 'something else')).toEqual({ ok: false, error: 'db_error', message: 'something else' })
+  })
+})
+
+// A fake of just the chain setCpyNumber uses: auth.getUser() and
+// schema().from().update().eq().select().maybeSingle().
+function cpyClient(result: { data: unknown; error: { code?: string; message: string } | null }, user: object | null = { id: A }) {
+  const update = vi.fn()
+  const chain = {
+    update: (payload: unknown) => {
+      update(payload)
+      return chain
+    },
+    eq: () => chain,
+    select: () => chain,
+    maybeSingle: () => Promise.resolve(result),
+  }
+  const client = {
+    auth: { getUser: () => Promise.resolve({ data: { user } }) },
+    schema: () => ({ from: () => chain }),
+  }
+  return { client: client as unknown as SupabaseClient<Database>, update }
+}
+
+describe('setCpyNumber', () => {
+  it('writes ONE column, cpy_doc_number, and returns what was stored', async () => {
+    const { client, update } = cpyClient({ data: { id: B, cpy_doc_number: 'CPY-0042' }, error: null })
+    const result = await setCpyNumber(client, { documentId: B, cpyNumber: ' CPY-0042 ', scl_doc_number: 'FORGED' })
+    expect(update).toHaveBeenCalledWith({ cpy_doc_number: 'CPY-0042' })
+    expect(result).toEqual({ ok: true, data: { documentId: B, cpyNumber: 'CPY-0042' } })
+  })
+
+  it('sends null to clear the number', async () => {
+    const { client, update } = cpyClient({ data: { id: B, cpy_doc_number: null }, error: null })
+    await setCpyNumber(client, { documentId: B, cpyNumber: '' })
+    expect(update).toHaveBeenCalledWith({ cpy_doc_number: null })
+  })
+
+  // RED PROOF (app half of acceptance 3): an UPDATE that RLS filters away is a
+  // success with zero rows in PostgREST — a plain member, or a DC at aal1.
+  // It must come back as a refusal, never as a silent "saved".
+  it('reports a filtered-away update (zero rows) as forbidden, not as success', async () => {
+    const { client } = cpyClient({ data: null, error: null })
+    const result = await setCpyNumber(client, { documentId: B, cpyNumber: 'CPY-1' })
+    expect(result).toMatchObject({ ok: false, error: 'forbidden' })
+  })
+
+  it('translates the trigger refusal an ORIG member gets', async () => {
+    const { client } = cpyClient({
+      data: null,
+      error: { code: '42501', message: 'dcs.documents.cpy_doc_number may be changed only by the Document Controller of this project' },
+    })
+    expect(await setCpyNumber(client, { documentId: B, cpyNumber: 'CPY-1' })).toMatchObject({
+      ok: false,
+      error: 'forbidden',
+    })
+  })
+
+  it('refuses without a session and without touching the table', async () => {
+    const { client, update } = cpyClient({ data: null, error: null }, null)
+    expect(await setCpyNumber(client, { documentId: B, cpyNumber: 'CPY-1' })).toMatchObject({
+      ok: false,
+      error: 'unauthenticated',
+    })
+    expect(update).not.toHaveBeenCalled()
+  })
+
+  it('refuses a malformed payload before any write', async () => {
+    const { client, update } = cpyClient({ data: null, error: null })
+    expect(await setCpyNumber(client, { documentId: 'nope' })).toMatchObject({ ok: false, error: 'invalid_input' })
+    expect(update).not.toHaveBeenCalled()
   })
 })
