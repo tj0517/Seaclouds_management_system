@@ -2262,3 +2262,14 @@ here.
 - **Noticed, not fixed:** `proxy.ts` writes only `request.nextUrl.pathname` into
   `next`, so a gated URL with a query (`/admin/reports?from=…&to=…`) loses its
   query on the way through `/mfa`.
+- **`/mfa` exists twice, and a fix to one does not reach the other.**
+  `apps/dcs/app/mfa` and `apps/timesheet/app/mfa` are separate copies (with a
+  duplicated `lib/mfa-factor-state.ts` and `lib/mfa-navigation.ts`); 1a.25 fixed
+  the DCS one and the same hang surfaced on the Timesheet Preview three days
+  later. The target is a single MFA page, which needs the portal to become its
+  own app — see [ADR-0014](adr/0014-portal-admin.md) (`proposed / deferred`,
+  Phase 4 or 5, not Phase 1). That ADR also records why ADR-0010 rejected this
+  for 1a.23 and what a cross-host `next` would cost.
+- **One login timed out once after a fresh `next start` and passed on the very
+  next run** (browser walk, first mode of the first "after" run). Not
+  investigated; recorded so it is not read as a regression in the fix.
