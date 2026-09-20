@@ -39,8 +39,9 @@ odzwierciedla.
 | `/admin/*` | klienci, słowniki, projekty, użytkownicy (za bramką aal2) |
 
 **Profil dokumentu** (`app/(app)/documents/[documentId]/page.tsx`). Każda zakładka
-i panel to osobny komponent w `components/document-profile/`, żeby 1b.08 (New
-Revision), 1b.09 (pliki) i 1b.11 (status / Void) podmieniały po jednym pliku:
+i panel to osobny komponent w `components/document-profile/`, żeby 1b.09 (pliki)
+i 1b.11 (status / Void) podmieniały po jednym pliku (1b.08 zrobiło tak z New
+Revision i zakładką Revisions):
 
 - *Information* + zwijane *Additional attributes* — `DocumentInformationTab`;
   jedyny interaktywny element to `CpyNumberField` (klient), zapis przez
@@ -52,11 +53,27 @@ Revision), 1b.09 (pliki) i 1b.11 (status / Void) podmieniały po jednym pliku:
   „Doc controllers update documents”).
 - *Panel po prawej* — `CurrentRevisionPanel`: `current_revision_id` →
   `dcs.revisions` + `dcs.files`, wyłącznie odczyt, bez linków do pobrania (1b.09).
-  Dokument bez rewizji pokazuje „No revision yet”. Przyciski akcji są wyłączone.
+  Dokument bez rewizji pokazuje „No revision yet”. **New Revision jest żywym
+  dialogiem (1b.08)** dla czytelników, którym baza pozwala (Originator, DC w aal2,
+  admin; `newRevisionAccess()` w `lib/revisions.ts` — lustro, nie egzekwowanie);
+  dla pozostałych jest wyłączony i mówi dlaczego (dokument Void, brak drugiego
+  składnika, brak roli). Pozostałe pięć przycisków jest wyłączone.
+- *Revisions* (1b.08) — `RevisionsTab`: historia rewizji dokumentu, najnowsza
+  pierwsza (SCL, CPY, krok, powód, data, autor, kod akceptacji, status); wiersz
+  rozwija listę plików rewizji (dziś pustą — pliki to 1b.09). Zakładka wybierana
+  z URL-a (`?tab=revisions&open=<id>`), bo dialog leży w panelu obok zakładek, a
+  po zapisie ląduje się na niej z nowym wierszem rozwiniętym.
+- *New Revision* — `NewRevisionDialog` + akcje `proposeRevisionCode` /
+  `createRevision` (`app/data/actions/revisions.ts`, logika w `lib/revisions.ts`).
+  Kod SCL proponuje baza (`dcs.next_revision_code`); dialog **pomija** kolumnę
+  `scl_revision` w INSERT, więc numer nadaje trigger. Wysyła ją wyłącznie DC w aal2,
+  który nadpisał propozycję. Pole CPY revision widzi tylko DC (zgodnie z triggerem
+  1b.03). Bieżąca rewizja, `NOT_STARTED` → `STARTED` i `SUPERSEDED` na poprzedniej
+  to sprawa triggera `revisions_promote_current`, nie akcji.
 - *History* — `DocumentHistoryTab`: wiersze `public.audit_log` dla dokumentu i
   jego rewizji, tak jak zwraca je RLS (admin i DC projektu). Pusty wynik nie jest
   błędem, więc stan pusty mówi, że wpisy mogą być niewidoczne dla roli czytającego.
-- *Revisions / Plan / Comments / References / Transmittals* — `PlaceholderTabs`.
+- *Plan / Comments / References / Transmittals* — `PlaceholderTabs`.
 - Dokument, którego użytkownik nie może czytać (albo id niebędące uuid-em), daje
   `notFound()` — ta sama odpowiedź co dla nieistniejącego, żeby nie dało się
   sondować istnienia id na cudzym projekcie.
