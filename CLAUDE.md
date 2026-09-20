@@ -74,7 +74,7 @@ Supabase, prod ref `tfbzivfsqsgebegcvfah`.
 - Oba projekty startują przy każdym pushu i każdym merge'u, ale Vercel bywa,
   że **auto-pomija** build: w checkach PR-a widać to jako
   `Skipped - Not affected`, w dashboardzie jako `CANCELED`. **Kiedy dokładnie
-  pomija — nie wiemy.** **Dziewięć obserwacji** (dziesięć punktów danych — #66
+  pomija — nie wiemy.** **Dziesięć obserwacji** (jedenaście punktów danych — #66
   i #71 wnoszą po dwa commity), wszystkie z tego repo, których nie da się
   złożyć w jedną regułę — a od #71 **nie da się ich już nawet uzgodnić między
   sobą**:
@@ -170,6 +170,17 @@ Supabase, prod ref `tfbzivfsqsgebegcvfah`.
     commit różni się od nich tym, że rusza też `pnpm-lock.yaml` i
     `apps/dcs/package.json`. Żadnej teorii pod to nie podstawiam;
     obserwacja dochodzi do listy. (Zastrzeżenie do odczytu: dotyczy
+    PIERWSZEGO commita. Commit dopisujący tę obserwację rusza `CLAUDE.md`,
+    więc kolejny run tego PR-a nie jest już tym samym kształtem.)
+  - **PR #76** (Timesheet 1a.25b, 20.09) — nowa gałąź, pierwszy commit
+    `683d17e`: `apps/timesheet/` (`app/mfa/page.tsx`, `lib/mfa-navigation.ts`,
+    nowy plik testowy) + `docs/deferred-tasks.md`; **bez** `apps/dcs/`, **bez**
+    `packages/`, bez `supabase/`, bez `pnpm-lock.yaml` →
+    `seaclouds-management-system` **zbudował** (`Deployment has completed`),
+    `dcs` **pominięty** (`Skipped - Not affected`). Odczytane z
+    `gh api .../commits/683d17e/status` (2026-09-20), nie z `gh pr checks`.
+    Ten sam kształt co #67 z odwróconymi rolami aplikacji; obserwacja
+    dochodzi do listy, bez wniosku. (Zastrzeżenie do odczytu: dotyczy
     PIERWSZEGO commita. Commit dopisujący tę obserwację rusza `CLAUDE.md`,
     więc kolejny run tego PR-a nie jest już tym samym kształtem.)
 
