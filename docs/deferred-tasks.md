@@ -2273,3 +2273,25 @@ here.
 - **One login timed out once after a fresh `next start` and passed on the very
   next run** (browser walk, first mode of the first "after" run). Not
   investigated; recorded so it is not read as a regression in the fix.
+
+## xx) Timesheet 1a.25c — coverage gaps in the `/mfa` browser guard
+
+`apps/timesheet/e2e/mfa-navigation.mjs` (1a.25c) proves the post-verify
+navigation in three factor states (verified / enrolment / pending). It does
+**not** cover the following, on purpose — they were left out of that PR by the
+owner and are recorded here so a green run is not read as covering them:
+
+- **Only the admin path is exercised.** `proxy.ts`'s aal2 gate has two ways in:
+  `profiles.role = 'admin'` and a `dcs.project_roles` row with role `dc`
+  (`isAdmin || isDocController`). The e2e users are admins; a Document
+  Controller reaching `/mfa` from a gated `/admin*` URL is not walked.
+- **The target is always `/admin`.** A deeper `next` (`/admin/users`,
+  `/admin/projects/<id>`) is not tested end to end. Relevant because the route
+  cache entry that caused the hang is keyed by the target href. The related,
+  already recorded `proxy.ts` behaviour — only `pathname` goes into `next`, so a
+  query is lost (see (ww)) — is a separate issue and stays there.
+
+**Pick this up with the next task that touches the aal2 gate** (`proxy.ts`, the
+`/admin` layout guard, or a shared `/mfa` per
+[ADR-0014](adr/0014-portal-admin.md)). Not to be started without the owner's
+go-ahead.
