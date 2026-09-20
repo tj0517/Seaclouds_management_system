@@ -2248,11 +2248,15 @@ here.
   to the three rules quoted in DCS's test), all three modes, plus a control that
   the model reproduces the hang when handed the old `router.push`. Its red is
   weak on its own (the function did not exist: 6 failed before, 33/33 after);
-  the real red/green is the browser walk above. That walk was a throwaway
-  Playwright script and is **not in the repo**: adding `playwright` to
+  the real red/green is the browser walk above. At 1a.25b that walk was a
+  throwaway Playwright script, kept out of the repo because `playwright` in
   `@scl/timesheet` would change `pnpm-lock.yaml`, shared with DCS and the
-  production Timesheet (owner's decision, 2026-09-20). To repeat it, follow the
-  local-run recipe in `docs/03-conventions.md` ("Testy przeglądarkowe").
+  production Timesheet. **Superseded by 1a.25c (PR #77):** the walk is now in
+  the repo as `apps/timesheet/e2e/mfa-navigation.mjs`, `playwright` is a
+  devDependency of `@scl/timesheet` (3 lines in `pnpm-lock.yaml`), and the
+  Vercel build of `seaclouds-management-system` on `941201d` completed with that
+  change. To repeat it, follow the local-run recipe in `docs/03-conventions.md`
+  ("Testy przeglądarkowe"); coverage gaps are in (xx).
 - **Local run deviated from the toolchain:** Node 22.23.2 instead of `.nvmrc`'s
   20.20.0 (not installed on this machine).
 - **Timesheet has no middleware or guard tests.** `app/(app)/admin/guards.test.ts`
