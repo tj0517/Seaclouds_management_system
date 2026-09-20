@@ -367,6 +367,63 @@ Zapisane przy DCS 1b.07 (2026-09-20).
   gotrue,…,kong,postgrest,…`) — nie ma Auth ani API, więc nie ma sesji do
   zalogowania. e2e w CI wymagałoby pełnego stacku i uruchomionej aplikacji i
   jest poza zakresem 1b.07.
+- **Timesheet: strona `/mfa` (1a.25c, 2026-09-20) — ta sama decyzja, drugi
+  skrypt.** `apps/timesheet/e2e/mfa-navigation.mjs`, `devDependency`
+  `playwright` w `@scl/timesheet` (koszt z 1b.07 zapłacony drugi raz:
+  `pnpm-lock.yaml` zyskał jeden wpis importera, 3 linie). Pilnuje błędu, który
+  wyszedł dwa razy (DCS 1a.25, Timesheet 1a.25b): po poprawnym kodzie strona
+  wisi na „Verifying…". Trzy przypadki — factor zweryfikowany, brak factora
+  (enrolment), factor niezweryfikowany (pending) — i w każdym asercja na
+  **kształt** nawigacji: pierwsze żądanie do aplikacji po submicie ma być
+  `DOCUMENT GET /admin`, nie `RSC`. Sam końcowy URL nie wystarcza: na `next dev`
+  wersja ze zwykłym `router.push` też kończy na `/admin` (zmierzone), a wisi
+  dopiero na buildzie produkcyjnym. Każdy console error i błąd hydracji wywala
+  przebieg. To rzeczywista przeglądarka dla modelu z
+  `lib/mfa-verify-navigation.test.ts`.
+- **Jak uruchomić oba zestawy Timesheeta** (wszystko lokalnie):
+  - vitest — `pnpm --filter @scl/timesheet test:unit` (33 testy).
+    `safeNextPath` ma tu swój zestaw od 1a.26: `lib/mfa-navigation.test.ts`.
+  - przeglądarka, **domyślnie na buildzie produkcyjnym** — `supabase start` i
+    `supabase db reset` (fixtura DCS nie jest potrzebna: skrypt sam zakłada
+    trzech adminów `e2e.mfa.*@local.test` i ustawia ich factory); w
+    `apps/timesheet/.env.local` lokalny stack; `pnpm --filter @scl/timesheet
+    exec next build`, potem `pnpm --filter @scl/timesheet exec next start -p
+    3100`; przeglądarka i biblioteki jak w wpisie 1b.07 (`pnpm --filter
+    @scl/timesheet exec playwright install chromium`); potem
+    `E2E_BASE_URL=http://localhost:3100 pnpm --filter @scl/timesheet
+    e2e:mfa`. Kod 1, gdy którakolwiek asercja padnie; zrzuty do `E2E_SHOTS`.
+    **Dlaczego build, a nie `dev`:** na `next dev` zrewertowana strona i tak
+    kończy na `/admin`, więc dev łapie regresję wyłącznie po kształcie żądania,
+    a samo zawieszenie odtwarza tylko build. `dev` zatrzymaj przed buildem
+    (nie sprawdzałem, czy dzielą `.next`).
+  - **Wariant szybki: `next dev`** — `pnpm --filter @scl/timesheet dev` (port
+    3000), potem `pnpm --filter @scl/timesheet e2e:mfa` bez `E2E_BASE_URL`.
+    Wystarcza na co dzień do sprawdzenia kształtu nawigacji; nie odtwarza
+    zawieszenia (patrz wyżej).
+  - **Nie osłabiaj asercji do samego URL-a.** Sprawdzenie „kończy na `/admin`"
+    przechodzi także ze zrewertowaną stroną na `dev` — test, który je zastępuje
+    kształtu żądania (`DOCUMENT`, nie `RSC`), przestaje cokolwiek chronić.
+- **Zabezpieczenia skryptu `/mfa`.** Zapisuje do bazy (zakłada użytkowników,
+  podmienia factory i sesje **tylko tych trzech**; nie rusza
+  `tjezionekspam@gmail.com` ani factora fixtury `dc.profile@local.test`), więc
+  odmawia pracy przeciw hostowi innemu niż localhost — i **przerywa każde
+  żądanie przeglądarki do hosta nie-lokalnego**, a takie żądanie kończy
+  przebieg kodem 1. To drugie jest potrzebne, bo adres Supabase bierze
+  aplikacja z `.env.local`, nie skrypt: dev server wskazujący na scl-dev albo
+  prod zakładałby i weryfikował factory tam.
+- **Kontrola czerwona** (bez niej zielony przebieg niczego nie dowodzi):
+  przywróć lokalnie stronę sprzed poprawki — `git show
+  683d17e^:apps/timesheet/app/mfa/page.tsx` (`router.push(safeNextPath(next));
+  router.refresh()`) — i uruchom skrypt: pada w trzech przypadkach (pierwsze
+  żądanie to `RSC`, nie `DOCUMENT`). Na buildzie produkcyjnym widać dodatkowo
+  samo zawieszenie: przycisk „Verifying…" i jedyne żądanie
+  `RSC GET /mfa?next=%2Fadmin`. Nie commituj tego.
+- **Pułapka: zrzut ekranu potrafi wywołać „błąd hydracji".** Domyślne
+  `page.screenshot()` wpisuje inline `caret-color: transparent` w każdy
+  `<input>`; zrobiony w trakcie hydracji strony wygląda dla Reacta jak
+  niezgodność atrybutów serwera i klienta. Skrypt robi zrzuty z `caret:
+  'initial'`. Złapane przy pisaniu — fałszywy alarm skakał między przypadkami
+  z przebiegu na przebieg.
 
 ## Nazewnictwo
 
