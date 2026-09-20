@@ -74,7 +74,7 @@ Supabase, prod ref `tfbzivfsqsgebegcvfah`.
 - Oba projekty startują przy każdym pushu i każdym merge'u, ale Vercel bywa,
   że **auto-pomija** build: w checkach PR-a widać to jako
   `Skipped - Not affected`, w dashboardzie jako `CANCELED`. **Kiedy dokładnie
-  pomija — nie wiemy.** **Osiem obserwacji** (dziewięć punktów danych — #66
+  pomija — nie wiemy.** **Dziewięć obserwacji** (dziesięć punktów danych — #66
   i #71 wnoszą po dwa commity), wszystkie z tego repo, których nie da się
   złożyć w jedną regułę — a od #71 **nie da się ich już nawet uzgodnić między
   sobą**:
@@ -158,6 +158,20 @@ Supabase, prod ref `tfbzivfsqsgebegcvfah`.
     z przeciwnymi wynikami, a `CLAUDE.md` nie należy do żadnego pakietu
     workspace, więc hipoteza o członkostwie tłumaczyłaby tu pominięcie, nie
     build. Obserwacja dochodzi do listy, **pytanie zostaje otwarte**.
+
+  - **PR #75** (DCS 1b.07, 20.09) — nowa gałąź, pierwszy commit `f741a5b`:
+    `apps/dcs/` (15 plików, w tym `apps/dcs/package.json`) + `docs/` (3 pliki)
+    + `supabase/fixtures/` + `pnpm-lock.yaml` w rootcie; **bez**
+    `apps/timesheet/`, **bez** `packages/`, bez migracji → **oba projekty
+    zbudowały się** (`Deployment has completed`). Odczytane z
+    `gh api .../commits/f741a5b/status` (2026-09-20), nie z `gh pr checks`.
+    Do zestawienia, bez wniosku: #67 i `7c6a55e` z #66 ruszyły `apps/dcs/`
+    bez `apps/timesheet/` i bez `packages/` — i pominęły Timesheeta. Ten
+    commit różni się od nich tym, że rusza też `pnpm-lock.yaml` i
+    `apps/dcs/package.json`. Żadnej teorii pod to nie podstawiam;
+    obserwacja dochodzi do listy. (Zastrzeżenie do odczytu: dotyczy
+    PIERWSZEGO commita. Commit dopisujący tę obserwację rusza `CLAUDE.md`,
+    więc kolejny run tego PR-a nie jest już tym samym kształtem.)
 
   Sama „nowa gałąź" więc builda nie wymusza (to zdanie stało tu wcześniej jako
   reguła i jest nieprawdziwe), ale i „mniej zmienionych plików = pominięty

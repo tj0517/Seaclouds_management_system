@@ -2188,3 +2188,30 @@ that merely discuss the key. That is the right direction to be wrong in — it
 over-asks rather than under-asks — and tightening it to skip comments would
 make it parse TypeScript, which is a worse trade for a guard whose value is
 that it is three lines of `grep`. Left as is, deliberately.
+
+## vv) Follow-ups noted during DCS 1b.07 (document profile)
+
+Recorded 2026-09-20. Each is a known gap left on purpose; none blocks 1b.07.
+
+- **`apps/dcs/app/data/actions/auth-helpers.ts` cannot be evaluated.** It is a
+  `'use server'` module that also exports a class and a type (`:50-51`,
+  `export { ProjectRoleAuthorizationError }` / `export type { ProjectRole }`),
+  which a server-action file may not. Turbopack fails at module evaluation with
+  `ReferenceError: ProjectRole is not defined`. It has gone unnoticed because its
+  only consumer, `components/IfRole.tsx:11`, is used by no page — `IfRole` would
+  fail on first use. The profile page avoids it by calling `fetchUserProjectRoles`
+  from `lib/auth-helpers.ts` directly. Fix: drop the two non-async exports.
+- **Raw uuids in History.** `formatAuditValue` (`lib/document-profile.ts:242`)
+  resolves only the person columns (`PERSON_FIELDS`, `:232`); `current_revision_id`
+  and every dictionary-id change (`doc_type_id`, `workflow_status_id`, …) print as
+  uuids. Needs a label lookup over `dcs.dictionaries` for the ids in the result.
+- **`dcs.files` audit rows are not shown in History.** `HISTORY_TABLES`
+  (`lib/document-profile.ts:224`) is `dcs.documents` + `dcs.revisions`, and
+  `getDocumentHistory` matches document and revision ids only, although
+  `audit_files` writes rows for file changes. Belongs with **1b.09**, which is the
+  first task that creates files.
+- **Not-found responses return HTTP 200.** `apps/dcs/app/(app)/loading.tsx`
+  streams the shell before the page resolves, so `notFound()` renders the 404 page
+  with status 200 — on the profile and on the 1b.04 stub alike. The visible 404
+  is what acceptance 5 asks for; revisit when an HTTP consumer (an API,
+  monitoring, a crawler) appears.

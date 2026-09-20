@@ -1,33 +1,53 @@
-// DCS 1b.04: just enough document profile to land on after creating one.
+// DCS 1b.07: the document profile — Information / Additional attributes on the
+// left, the current revision on the right, History from the audit log.
 //
-// The FULL profile — Information / Additional attributes / the current
-// revision panel — is 1b.07, and the Revisions tab and the working New
-// Revision window are 1b.08. This page is deliberately the minimum the
-// acceptance criterion names: the assigned SCL number, what was saved, and a
-// "New Revision" action that is a visible stub.
+// Third screen of the mock-ups (brief §9.3, PIMS annex D). Every tab and the
+// panel is its own component so 1b.08 (New Revision), 1b.09 (files) and 1b.11
+// (status / Void) each replace one piece instead of reshaping the page.
 //
-// No ownership check in code. Which documents this page can render is decided
-// by "Project members read documents" (RLS): a non-member's read returns no
-// row and they get notFound(), which is the same answer as a document that
-// does not exist — deliberately, so the page cannot be used to probe whether
-// an id exists on a project the caller cannot see.
+// ACCESS IS RLS, NOT THIS FILE. Which documents this page can render is
+// decided by "Project members read documents": a non-member's read returns no
+// row and they get notFound(), the same answer as a document that does not
+// exist — deliberately, so the page cannot be used to probe whether an id
+// exists on a project the caller cannot see. No service-role client, no
+// ownership check in code. The same holds for every other read below: the
+// revision, its files and the audit rows come through the caller's session, so
+// what the reader sees is what their policies return.
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { createClient } from '@scl/db/server'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Callout, PageBody, PageHeader } from '@/components/page-chrome'
+import { PageBody, PageHeader } from '@/components/page-chrome'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import CurrentRevisionPanel from '@/components/document-profile/CurrentRevisionPanel'
+import DocumentHistoryTab from '@/components/document-profile/DocumentHistoryTab'
+import DocumentInformationTab from '@/components/document-profile/DocumentInformationTab'
+import {
+  CommentsTab,
+  PlanTab,
+  ReferencesTab,
+  RevisionsTab,
+  TransmittalsTab,
+} from '@/components/document-profile/PlaceholderTabs'
+import { fetchUserProjectRoles, hasAnyRole } from '@/lib/auth-helpers'
+import {
+  cpyFieldMode,
+  dictionaryLabel,
+  describeAuditRow,
+  historyRecordIds,
+  PLACEHOLDER_TABS,
+} from '@/lib/document-profile'
+import {
+  getDocument,
+  getDocumentHistory,
+  getProjectCpyNumbering,
+  getRevisionWithFiles,
+  HISTORY_LIMIT,
+  isUuid,
+  listRevisionIds,
+} from '@/lib/documents'
+import { mdrStatusColor } from '@/lib/mdr'
 import { getProfileDirectory } from '@/lib/profile-directory'
-import { getDocument } from '@/lib/documents'
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="space-y-0.5">
-      <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className="text-sm">{children}</dd>
-    </div>
-  )
-}
+import { cn } from '@/lib/utils'
 
 export default async function DocumentProfilePage({
   params,
@@ -35,71 +55,138 @@ export default async function DocumentProfilePage({
   params: Promise<{ documentId: string }>
 }) {
   const { documentId } = await params
+  if (!isUuid(documentId)) notFound()
+
   const supabase = await createClient()
 
   const document = await getDocument(supabase, documentId)
   if (!document) notFound()
 
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
   // The CTR code is read separately rather than embedded: its foreign key
   // crosses schemas (dcs.documents -> public.sub_projects) and cross-schema
   // relationships are not in the generated types — see getDocument().
-  const [{ data: project }, { data: ctr }, directory] = await Promise.all([
+  const [
+    { data: project },
+    { data: ctr },
+    directory,
+    cpyNumbering,
+    rolesByProject,
+    aal,
+    revisionIds,
+    current,
+  ] = await Promise.all([
     supabase.from('projects').select('name, project_code').eq('id', document.project_id).maybeSingle(),
     document.ctr_code
       ? supabase.from('sub_projects').select('code, description').eq('id', document.ctr_code).maybeSingle()
       : Promise.resolve({ data: null }),
     getProfileDirectory(supabase),
+    getProjectCpyNumbering(supabase, document.project_id),
+    user ? fetchUserProjectRoles(supabase, user.id) : Promise.resolve(new Map()),
+    supabase.auth.mfa.getAuthenticatorAssuranceLevel(),
+    listRevisionIds(supabase, document.id),
+    document.current_revision_id ? getRevisionWithFiles(supabase, document.current_revision_id) : Promise.resolve(null),
   ])
+
+  // Roles come from lib/auth-helpers directly, not from the request-cached
+  // wrapper in app/data/actions/auth-helpers.ts: that 'use server' module also
+  // exports a class and a type, which a server-action file may not, and
+  // Turbopack fails to evaluate it (ReferenceError: ProjectRole is not defined).
+  // Nothing had imported it at runtime before this page. One call per render
+  // needs no cache anyway.
+
+  // Second stage: the audit read needs the revision ids from the first.
+  const history = await getDocumentHistory(supabase, historyRecordIds(document.id, revisionIds))
+
   const nameById = new Map(directory.entries.map((entry) => [entry.id, entry.full_name]))
-  const person = (id: string | null) => (id === null ? '—' : (nameById.get(id) ?? `${id.slice(0, 8)}…`))
+  const entries = history.map((row) => describeAuditRow(row, nameById))
+
+  // Mirrors the database, does not enforce it — see cpyFieldMode().
+  const cpyField = cpyFieldMode({
+    cpyNumbering,
+    isProjectDc: hasAnyRole(rolesByProject.get(document.project_id) ?? [], ['dc']),
+    aal2: aal.data?.currentLevel === 'aal2',
+  })
+
+  const projectLabel = project ? `${project.project_code} — ${project.name}` : 'Project'
 
   return (
     <>
+      <nav aria-label="Breadcrumb" className="mx-auto mb-3 w-full max-w-6xl text-sm text-muted-foreground">
+        <Link href={`/projects/${document.project_id}/documents`} className="underline underline-offset-4">
+          {projectLabel} — documents
+        </Link>
+        <span aria-hidden className="px-1.5">
+          /
+        </span>
+        <span className="font-mono text-[13px]">{document.scl_doc_number}</span>
+      </nav>
+
       <PageHeader
         title={document.scl_doc_number}
         description={document.title}
-      />
-      <PageBody>
-        <div className="mb-4 flex flex-wrap items-center gap-2">
-          <Badge>{document.workflow_status?.label ?? '—'}</Badge>
-          <Link
-            href={`/projects/${document.project_id}/documents`}
-            className="text-sm text-muted-foreground underline underline-offset-4"
+        actions={
+          <span
+            className={cn(
+              'inline-flex items-center rounded-md border px-2.5 py-0.5 text-xs font-medium',
+              mdrStatusColor(document.workflow_status?.code),
+            )}
           >
-            {project?.project_code ?? 'Project'} — all documents
-          </Link>
-        </div>
+            {dictionaryLabel(document.workflow_status)}
+          </span>
+        }
+      />
 
-        <dl className="grid max-w-3xl gap-4 rounded-lg border bg-card p-4 sm:grid-cols-3">
-          <Field label="Document type">
-            {document.doc_type ? `${document.doc_type.code} — ${document.doc_type.label}` : '—'}
-          </Field>
-          <Field label="Discipline">
-            {document.discipline ? `${document.discipline.code} — ${document.discipline.label}` : '—'}
-          </Field>
-          <Field label="Area">{document.area ? `${document.area.code} — ${document.area.label}` : '—'}</Field>
-          <Field label="Language">{document.language?.code ?? '—'}</Field>
-          <Field label="CTR code">{ctr ? ctr.code : "—"}</Field>
-          <Field label="Budget hours">{document.budget_hours ?? '—'}</Field>
-          <Field label="Originator">{person(document.originator_id)}</Field>
-          <Field label="Checker">{person(document.checker_id)}</Field>
-          <Field label="Approver">{person(document.approver_id)}</Field>
-          {/* The CPY number is shown but not editable here: setCpyNumber and the
-              editable field belong to 1b.07, and writing it needs the project's
-              DC at aal2 (trigger documents_numbering_dc_only, 1b.03). */}
-          <Field label="Client (CPY) number">{document.cpy_doc_number ?? '—'}</Field>
-        </dl>
+      <PageBody className="max-w-6xl">
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
+          <Tabs defaultValue="information" className="min-w-0">
+            {/* Seven tabs are wider than the left column; wrapping keeps every one visible instead of scrolling the active tab into view and clipping the first. */}
+            <TabsList className="h-auto max-w-full flex-wrap justify-start">
+              <TabsTrigger value="information">Information</TabsTrigger>
+              {PLACEHOLDER_TABS.map((tab) => (
+                <TabsTrigger key={tab.value} value={tab.value}>
+                  {tab.label}
+                </TabsTrigger>
+              ))}
+              <TabsTrigger value="history">History</TabsTrigger>
+            </TabsList>
 
-        <div className="mt-6">
-          {/* 1b.08 owns the New Revision window. Rendered disabled rather than
-              omitted so the profile shows where the next step will be, and
-              disabled rather than wired to a placeholder because a button that
-              half-works is worse than one that says it is not ready. */}
-          <Button disabled>New Revision</Button>
-          <Callout tone="info">
-            This document has no revision yet. The New Revision window arrives with DCS 1b.08 — until then a document
-            is created, numbered and staffed, and nothing is issued.
-          </Callout>
+            <TabsContent value="information">
+              <DocumentInformationTab
+                document={document}
+                project={project}
+                ctr={ctr}
+                nameById={nameById}
+                cpyField={cpyField}
+                currentRevisionLabel={current ? current.revision.scl_revision : null}
+              />
+            </TabsContent>
+            <TabsContent value="revisions">
+              <RevisionsTab />
+            </TabsContent>
+            <TabsContent value="plan">
+              <PlanTab />
+            </TabsContent>
+            <TabsContent value="comments">
+              <CommentsTab />
+            </TabsContent>
+            <TabsContent value="references">
+              <ReferencesTab />
+            </TabsContent>
+            <TabsContent value="transmittals">
+              <TransmittalsTab />
+            </TabsContent>
+            <TabsContent value="history">
+              <DocumentHistoryTab entries={entries} truncatedAt={history.length >= HISTORY_LIMIT ? HISTORY_LIMIT : null} />
+            </TabsContent>
+          </Tabs>
+
+          <div className="min-w-0">
+            <CurrentRevisionPanel current={current} />
+          </div>
         </div>
       </PageBody>
     </>

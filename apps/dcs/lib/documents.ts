@@ -25,6 +25,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database, Json, Tables, TablesInsert } from '@scl/db'
 import type { ProjectRole } from './auth-helpers'
 import type { DictionaryRow } from './dictionaries'
+import { HISTORY_TABLES } from './document-profile'
 
 export type DocumentRow = Tables<{ schema: 'dcs' }, 'documents'>
 type DocumentInsert = TablesInsert<{ schema: 'dcs' }, 'documents'>
@@ -32,6 +33,16 @@ type DocumentInsert = TablesInsert<{ schema: 'dcs' }, 'documents'>
 type DbClient = SupabaseClient<Database>
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/**
+ * Whether a route segment is shaped like a uuid. The profile page checks it
+ * before reading: PostgREST answers a non-uuid `id` filter with 22P02, which
+ * getDocument would throw as a 500, and "/documents/abc" should be the same 404
+ * as "/documents/<a uuid that is not there>".
+ */
+export function isUuid(value: string): boolean {
+  return UUID_RE.test(value)
+}
 
 /**
  * The workflow_status a new document starts in. A dictionary CODE, resolved to
@@ -466,7 +477,7 @@ export async function getDocument(supabase: DbClient, documentId: string) {
     // embed — all three reasons are spelled out on listProjectDocuments above.
     .select(
       `id, project_id, scl_doc_number, cpy_doc_number, title, budget_hours,
-       originator_id, checker_id, approver_id, ctr_code, current_revision_id, created_at,
+       originator_id, checker_id, approver_id, ctr_code, current_revision_id, created_at, updated_at,
        doc_type:dictionaries!documents_doc_type_id_fkey(code, label),
        discipline:dictionaries!documents_discipline_id_fkey(code, label),
        area:dictionaries!documents_area_id_fkey(code, label),
@@ -477,6 +488,106 @@ export async function getDocument(supabase: DbClient, documentId: string) {
     .maybeSingle()
   if (error) throw new Error(`getDocument: ${error.message}`)
   return data
+}
+
+// ---------------------------------------------------------------------------
+// Profile reads (DCS 1b.07)
+//
+// Every read below is a plain session-client read and adds no filter that
+// widens anything: what a reader sees is what RLS returns. None of them
+// proves anything about a policy on its own (each carries an .eq()/.in(), see
+// the RLS note on listProjectDocuments) — the proofs are the pgTAP files and
+// the three browser sessions in the PR.
+// ---------------------------------------------------------------------------
+
+/**
+ * Whether this project runs a CPY numbering track (dcs.mdr_settings
+ * .cpy_numbering). A project with no mdr_settings row reads as false, which is
+ * exactly how the database treats it (enforce_cpy_numbering_enabled coalesces
+ * an absent row to false). "Authenticated users can read mdr settings" makes
+ * this readable for every signed-in user.
+ */
+export async function getProjectCpyNumbering(supabase: DbClient, projectId: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .schema('dcs')
+    .from('mdr_settings')
+    .select('cpy_numbering')
+    .eq('project_id', projectId)
+    .maybeSingle()
+  if (error) throw new Error(`getProjectCpyNumbering: ${error.message}`)
+  return data?.cpy_numbering ?? false
+}
+
+/**
+ * One revision with its step and status labels, and its files.
+ *
+ * The files are a second query rather than an embed: files -> revisions is a
+ * composite foreign key ((revision_id, project_id) -> (id, project_id)), and
+ * the constraint-named embed used for the dictionaries above is one more thing
+ * to get wrong for no gain. Two indexed reads cost the same as one join here.
+ *
+ * Returns null when the revision cannot be read — a current_revision_id that
+ * points at a row RLS hides — so the panel renders its empty state instead of
+ * failing the page. Files are read-only metadata: no storage_path is turned
+ * into a link here, that is 1b.09.
+ */
+export async function getRevisionWithFiles(supabase: DbClient, revisionId: string) {
+  const [revision, files] = await Promise.all([
+    supabase
+      .schema('dcs')
+      .from('revisions')
+      .select(
+        `id, document_id, scl_revision, cpy_revision, reason_for_issue, revision_date, created_at,
+         step:dictionaries!revisions_step_id_fkey(code, label),
+         status:dictionaries!revisions_status_id_fkey(code, label)`,
+      )
+      .eq('id', revisionId)
+      .maybeSingle(),
+    supabase
+      .schema('dcs')
+      .from('files')
+      .select('id, file_kind, file_name, original_name, storage_path, size_bytes, uploaded_at, uploaded_by')
+      .eq('revision_id', revisionId)
+      .order('sort_order', { ascending: true })
+      .order('uploaded_at', { ascending: true }),
+  ])
+  if (revision.error) throw new Error(`getRevisionWithFiles: ${revision.error.message}`)
+  if (files.error) throw new Error(`getRevisionWithFiles: ${files.error.message}`)
+  if (!revision.data) return null
+  return { revision: revision.data, files: files.data ?? [] }
+}
+
+/** Every revision id of one document — the History tab reads their audit rows too. */
+export async function listRevisionIds(supabase: DbClient, documentId: string): Promise<string[]> {
+  const { data, error } = await supabase.schema('dcs').from('revisions').select('id').eq('document_id', documentId)
+  if (error) throw new Error(`listRevisionIds: ${error.message}`)
+  return (data ?? []).map((row) => row.id)
+}
+
+/** How many audit rows the History tab reads at most; the tab says so when it hits the cap. */
+export const HISTORY_LIMIT = 200
+
+/**
+ * The audit trail of one document, newest first.
+ *
+ * The table_name filter is not a security measure: it lets Postgres use
+ * audit_log_table_name_record_id_occurred_at_idx, whose leading column is
+ * table_name. What the reader may see is decided by the two SELECT policies on
+ * public.audit_log ("Admins read audit log", "Doc controllers read own project
+ * audit log") — for anyone else this returns an empty array, NOT an error,
+ * which is why the tab's empty state has to name that possibility.
+ */
+export async function getDocumentHistory(supabase: DbClient, recordIds: readonly string[]) {
+  const { data, error } = await supabase
+    .from('audit_log')
+    .select('id, occurred_at, user_id, table_name, record_id, action, field_name, old_value, new_value')
+    .in('table_name', [...HISTORY_TABLES])
+    .in('record_id', [...recordIds])
+    .order('occurred_at', { ascending: false })
+    .order('id', { ascending: false })
+    .limit(HISTORY_LIMIT)
+  if (error) throw new Error(`getDocumentHistory: ${error.message}`)
+  return data ?? []
 }
 
 // ---------------------------------------------------------------------------
@@ -572,4 +683,127 @@ export async function createDocument(supabase: DbClient, rawInput: unknown): Pro
 
   if (error) return mapDbError(error.code, error.message)
   return { ok: true, data: data.id }
+}
+
+// ---------------------------------------------------------------------------
+// Set the CPY number (DCS 1b.07)
+//
+// 1b.03 guarded this column in the database and named this action as not done
+// ("the setCpyNumber() server action ... 1b.07", migration
+// 20260918092728). It is written here, and it is deliberately thin: it parses
+// the payload, updates ONE column, and translates what Postgres said. Whether
+// the caller may is decided entirely by the database:
+//
+//   the project has no CPY track  -> trigger documents_cpy_numbering      (1b.01)
+//   the caller is not its DC      -> trigger documents_numbering_dc_only  (1b.03)
+//   the session is not aal2       -> the same trigger, and RLS "Doc controllers update documents"
+//   another document has the number -> UNIQUE (project_id, cpy_doc_number) (1b.01)
+//
+// No requireProjectRole here, on purpose: a guard in front would be a second
+// copy of the trigger that can drift from it, and the trigger already says why
+// in a sentence. The only thing this function adds is that sentence, phrased
+// for the person at the field.
+// ---------------------------------------------------------------------------
+
+export type SetCpyNumberInput = {
+  documentId: string
+  /** null clears the number; the empty string is the same thing. */
+  cpyNumber: string | null
+}
+
+/**
+ * Validates whatever an untrusted caller sends the server action.
+ *
+ * The CPY number has no format rule anywhere in the schema or the docs — it is
+ * the client's own numbering (docs/00-glossary.md: "Tor CPY to numeracja
+ * prowadzona przez klienta") and the column is plain text — so the only
+ * things checked are that it is a string and that surrounding whitespace is
+ * not stored. Inventing a pattern here would reject numbers a client actually
+ * uses.
+ */
+export function parseSetCpyNumberInput(raw: unknown): ActionResult<SetCpyNumberInput> {
+  if (typeof raw !== 'object' || raw === null) return fail('invalid_input', 'payload is not an object')
+  const r = raw as Record<string, unknown>
+  if (typeof r.documentId !== 'string' || !UUID_RE.test(r.documentId)) {
+    return fail('invalid_input', 'documentId is required and must be a uuid')
+  }
+  if (r.cpyNumber !== null && r.cpyNumber !== undefined && typeof r.cpyNumber !== 'string') {
+    return fail('invalid_input', 'cpyNumber must be a string or null')
+  }
+  const trimmed = typeof r.cpyNumber === 'string' ? r.cpyNumber.trim() : ''
+  return { ok: true, data: { documentId: r.documentId, cpyNumber: trimmed === '' ? null : trimmed } }
+}
+
+/**
+ * The CPY-specific translation of a PostgREST error.
+ *
+ * Not mapDbError: that one words 42501 as "you cannot CREATE a document", which
+ * is the wrong sentence at this field. The two 42501 texts the DC trigger can
+ * raise are told apart by message — "verified second factor" for aal1, the
+ * other for a non-DC — because the fix differs.
+ */
+export function mapCpyDbError(
+  code: string | undefined,
+  message: string,
+): { ok: false; error: DocumentError; message?: string } {
+  switch (code) {
+    case '42501':
+      if (message.includes('verified second factor')) {
+        return fail(
+          'forbidden',
+          'Setting the CPY number needs a session with a verified second factor. Sign in again and complete the second-factor challenge.',
+        )
+      }
+      return fail('forbidden', 'Only the Document Controller of this project can set the CPY number.')
+    case '23514':
+      if (message.includes('CPY track')) {
+        return fail('invalid_input', 'This project does not run a client (CPY) numbering track, so a CPY number cannot be set.')
+      }
+      return fail('db_error', message)
+    case '23505':
+      return fail('duplicate_number', 'Another document in this project already has this CPY number.')
+    default:
+      return fail('db_error', message)
+  }
+}
+
+/**
+ * Sets (or clears) one document's CPY number and returns what was stored.
+ *
+ * An UPDATE that RLS filters away is NOT an error in PostgREST — it succeeds
+ * with zero rows. That happens for a plain member (no update policy) and for a
+ * DC at aal1 (the policy's aal2 conjunct), so a missing row after the update
+ * is reported as 'forbidden' rather than swallowed. It also covers a document
+ * id that does not exist, which is indistinguishable by design (the same
+ * "does not reveal whether an id exists" rule the profile page follows).
+ */
+export async function setCpyNumber(
+  supabase: DbClient,
+  rawInput: unknown,
+): Promise<ActionResult<{ documentId: string; cpyNumber: string | null }>> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return fail('unauthenticated')
+
+  const parsed = parseSetCpyNumberInput(rawInput)
+  if (!parsed.ok) return parsed
+  const input = parsed.data
+
+  const { data, error } = await supabase
+    .schema('dcs')
+    .from('documents')
+    .update({ cpy_doc_number: input.cpyNumber })
+    .eq('id', input.documentId)
+    .select('id, cpy_doc_number')
+    .maybeSingle()
+
+  if (error) return mapCpyDbError(error.code, error.message)
+  if (!data) {
+    return fail(
+      'forbidden',
+      'The CPY number was not changed: this document is not visible to you, or your session may not change it. Only the Document Controller of the project can, with a verified second factor.',
+    )
+  }
+  return { ok: true, data: { documentId: data.id, cpyNumber: data.cpy_doc_number } }
 }

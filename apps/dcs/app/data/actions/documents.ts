@@ -6,7 +6,7 @@
 // Same split as app/data/actions/project-mdr.ts.
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@scl/db/server'
-import { createDocument as createWith, type ActionResult } from '@/lib/documents'
+import { createDocument as createWith, setCpyNumber as setCpyNumberWith, type ActionResult } from '@/lib/documents'
 
 export async function createDocument(input: unknown): Promise<ActionResult<string>> {
   const supabase = await createClient()
@@ -19,6 +19,28 @@ export async function createDocument(input: unknown): Promise<ActionResult<strin
     // project just to name one path.
     revalidatePath('/projects/[projectId]/documents', 'page')
     revalidatePath(`/documents/${result.data}`)
+  }
+  return result
+}
+
+/**
+ * DCS 1b.07: set (or clear) a document's CPY number from the profile.
+ *
+ * The authorization is the database's (trigger documents_numbering_dc_only,
+ * 1b.03, and RLS "Doc controllers update documents"); see setCpyNumber in
+ * lib/documents.ts. What this wrapper adds is revalidation: the profile
+ * itself, so the field and the History tab re-read (the audit_log row the
+ * trigger wrote is what the tab lists), and /mdr, whose CPY column reads the
+ * same value through dcs.v_mdr.
+ */
+export async function setCpyNumber(
+  input: unknown,
+): Promise<ActionResult<{ documentId: string; cpyNumber: string | null }>> {
+  const supabase = await createClient()
+  const result = await setCpyNumberWith(supabase, input)
+  if (result.ok) {
+    revalidatePath(`/documents/${result.data.documentId}`)
+    revalidatePath('/mdr')
   }
   return result
 }
