@@ -1,4 +1,4 @@
-// DCS 1b.07: the right-hand panel — the document's current revision and its
+// DCS 1b.07 / 1b.08: the right-hand panel — the document's current revision and its
 // files, read-only.
 //
 // Built against the schema, not against dev data: on scl-dev every
@@ -9,11 +9,11 @@
 // No download link and no signed URL anywhere in here: the file rows are
 // metadata only. Turning storage_path into something a person can open is
 // 1b.09.
-import { Badge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/page-chrome'
-import RevisionPanelActions from './RevisionPanelActions'
+import RevisionPanelActions, { type NewRevisionControl } from './RevisionPanelActions'
 import { mdrStatusColor } from '@/lib/mdr'
-import { dictionaryLabel, fileDisplayName, formatFileSize, formatTimestamp } from '@/lib/document-profile'
+import RevisionFileList from './RevisionFileList'
+import { dictionaryLabel, toFileRows } from '@/lib/document-profile'
 import type { getRevisionWithFiles } from '@/lib/documents'
 import { cn } from '@/lib/utils'
 
@@ -28,7 +28,13 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   )
 }
 
-export default function CurrentRevisionPanel({ current }: { current: RevisionWithFiles | null }) {
+export default function CurrentRevisionPanel({
+  current,
+  newRevision,
+}: {
+  current: RevisionWithFiles | null
+  newRevision: NewRevisionControl
+}) {
   return (
     <aside aria-label="Current revision" className="space-y-5 rounded-lg border bg-card p-4">
       <section className="space-y-3">
@@ -38,7 +44,7 @@ export default function CurrentRevisionPanel({ current }: { current: RevisionWit
 
       <section className="space-y-2 border-t pt-4">
         <h2 className="text-sm font-semibold">Actions</h2>
-        <RevisionPanelActions />
+        <RevisionPanelActions newRevision={newRevision} />
       </section>
     </aside>
   )
@@ -47,8 +53,8 @@ export default function CurrentRevisionPanel({ current }: { current: RevisionWit
 function NoRevision() {
   return (
     <EmptyState title="No revision yet">
-      This document has been registered and numbered, but nothing has been issued. Revisions and files arrive with DCS
-      1b.08 and 1b.09.
+      This document has been registered and numbered, but nothing has been issued. Use New Revision below to issue the
+      first one; files arrive with DCS 1b.09.
     </EmptyState>
   )
 }
@@ -77,26 +83,7 @@ function RevisionDetails({ current }: { current: RevisionWithFiles }) {
 
       <div className="space-y-2">
         <h3 className="text-xs font-medium text-muted-foreground">Files ({files.length})</h3>
-        {files.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No files on this revision.</p>
-        ) : (
-          <ul className="divide-y rounded-md border">
-            {files.map((file) => (
-              <li key={file.id} className="space-y-1 px-3 py-2">
-                <p className="break-all text-sm font-medium">{fileDisplayName(file)}</p>
-                {/* A <div>, not a <p>: Badge renders a <div>, and a <div> inside a <p> is invalid
-                    HTML that React reports as a hydration error. */}
-                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-                  <Badge variant="outline" className="px-1.5 py-0 text-[11px] font-medium">
-                    {file.file_kind}
-                  </Badge>
-                  <span>{formatFileSize(file.size_bytes)}</span>
-                  <span>{formatTimestamp(file.uploaded_at)}</span>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
+        <RevisionFileList files={toFileRows(files)} />
       </div>
     </>
   )

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@scl/db'
-import { getActiveDictionary, type DictionaryRow } from './dictionaries'
+import { REVISION_ONLY_STATUS_CODES, documentStatusOptions, getActiveDictionary, type DictionaryRow } from './dictionaries'
 
 function makeRow(overrides: Partial<DictionaryRow>): DictionaryRow {
   return {
@@ -93,5 +93,43 @@ describe('getActiveDictionary', () => {
     } as unknown as SupabaseClient<Database>
 
     await expect(getActiveDictionary(client, 'discipline')).rejects.toThrow(/getActiveDictionary\(discipline\)/)
+  })
+})
+
+// DCS 1b.08: SUPERSEDED is a row of the workflow_status dictionary because
+// dcs.revisions.status_id points there, but it is a status of a REVISION.
+describe('documentStatusOptions', () => {
+  const statuses = ['NOT_STARTED', 'STARTED', 'IDC', 'IFR', 'RETCOM', 'IFC', 'IFI', 'IFB', 'VOID', 'SUPERSEDED'].map((code, i) => ({
+    id: `id-${i}`,
+    code,
+  }))
+
+  it('drops SUPERSEDED and keeps the nine document states in their order', () => {
+    expect(documentStatusOptions(statuses).map((status) => status.code)).toEqual([
+      'NOT_STARTED',
+      'STARTED',
+      'IDC',
+      'IFR',
+      'RETCOM',
+      'IFC',
+      'IFI',
+      'IFB',
+      'VOID',
+    ])
+  })
+
+  it('does not drop a status just because it looks like one — only the named revision-only codes', () => {
+    expect(documentStatusOptions([{ code: 'SUPERSEDED_X' }, { code: 'VOID' }]).map((status) => status.code)).toEqual([
+      'SUPERSEDED_X',
+      'VOID',
+    ])
+  })
+
+  it('names exactly one revision-only status today', () => {
+    expect([...REVISION_ONLY_STATUS_CODES]).toEqual(['SUPERSEDED'])
+  })
+
+  it('returns an empty list rather than throwing for an empty dictionary', () => {
+    expect(documentStatusOptions([])).toEqual([])
   })
 })

@@ -1860,6 +1860,12 @@ nazwana także w komentarzu migracji
 
 ## pp) Walidacja formatu `scl_revision` — przeniesiona z 1b.02 do 1b.08
 
+**ZAMKNIĘTE w DCS 1b.08** (2026-09-20, migracje
+`20260920134700_scl_revision_generator` i pokrewne). Generator, odrzucenie
+ręcznego kodu i seria per krok są w bazie; opis i decyzje w
+`docs/02-data-model.md`, „Numeracja rewizji i bieżąca rewizja”. Poniżej treść
+z chwili zgłoszenia, zostawiona dla historii; **nowe luki z 1b.08** — w (yy).
+
 Zgłoszone przy DCS 1b.02 (2026-09-18). `dcs.revisions.scl_revision` jest
 `NOT NULL` i unikalny w obrębie dokumentu (`UNIQUE (document_id,
 scl_revision)`), ale **żadna reguła nie pilnuje jego formatu**: dziś przejdzie
@@ -1933,6 +1939,19 @@ numbers across a 107-test file, for a file whose subject is 1b.01. If it is
 ever done, the cheaper shape is a second file per role in the manner of the
 Originator one, not an edit to that one. Whoever adds the DC case should also
 check whether `dc_only_numbering_on_insert.test.sql` has the same shape.
+
+**Update, DCS 1b.08 (2026-09-20) — the `dc_only_numbering_on_insert` half is
+closed, the rest is not.** That last sentence turned out to be right: on the
+revision side the file's `add_rev` helper supplied `scl_revision` itself ('B',
+'C', 'D') while acting as a signed-in user, so no insert in it went through a
+generator either. 1b.08 makes a signed-in user supplying that column illegal, and
+the helper was changed to pass NULL, so **that file now exercises the revision
+generator (`revisions_assign_scl_revision`) on every signed-in insert**, as the
+New Revision dialog will. What stays open, unchanged: `rls_document_register`
+still runs under `dcs.import_mode = 'on'` for its whole transaction (its revision
+inserts still supply codes through the hatch, and the revision generator's own
+paths are asserted in `scl_revision_generator.test.sql` instead), and the DC's
+real-path *document* insert is still asserted nowhere.
 
 ## rr) `supabase db reset` can abort mid-run and leave a database that still answers
 
@@ -2299,3 +2318,124 @@ owner and are recorded here so a green run is not read as covering them:
 `/admin` layout guard, or a shared `/mfa` per
 [ADR-0014](adr/0014-portal-admin.md)). Not to be started without the owner's
 go-ahead.
+
+## yy) Follow-ups noted during DCS 1b.08 (New Revision)
+
+Recorded 2026-09-20. Nothing here is broken; each item is a decision that was
+made, or a gap that was found, while the database half of 1b.08 was built and
+proved. None of them is started.
+
+- **The SUPERSEDED row can be deactivated or deleted by a DC.** It is a system
+  value (the promotion trigger looks it up by code), and the 1a.15 screen lets a
+  DC switch a dictionary row off, or delete one nothing references. This is the
+  O-15 risk (oo) already records for the step codes, now with a second row the
+  system depends on (`STARTED` is in the same position). Deliberately **not
+  settled and not guarded** in 1b.08 — the trigger raises a named error when the
+  row is missing instead of skipping the supersede, so it fails loudly, not
+  quietly. Deactivation (`is_active = false`) does not break the trigger; it only
+  hides the row from pickers.
+- **A document can be given the SUPERSEDED status through the API.** It is a
+  revision status; nothing in the database stops `dcs.documents.workflow_status_id`
+  pointing at it. The document-status pickers and filters in `apps/dcs` leave it
+  out, which is a UI convention, not a rule. Belongs with manual status changes
+  (1b.11).
+- **1b.10 must let the promotion trigger through.** Marking an IFC/IFI/IFB
+  revision SUPERSEDED is a change to a locked row, and it is the one change the
+  system itself makes when the next revision arrives. The lock trigger has to
+  allow `status_id` -> SUPERSEDED, or creating a revision on a document whose
+  current revision is final will start failing.
+- **Turning `cpy_numbering` off strands a document.** If the previous current
+  revision carries a `cpy_revision` and the project has since set
+  `dcs.mdr_settings.cpy_numbering = false`, the supersede UPDATE is refused by
+  `revisions_cpy_numbering` (23514) — and with it the new revision. The same
+  trigger already refuses every other edit of that row today; 1b.08 only makes it
+  reachable from "create a revision". Not reproduced on a real project.
+- **An imported RETCOM row cannot carry its IFR's number.** `import_mode` lifts
+  the trigger's refusal of a RETCOM step, but `UNIQUE (document_id,
+  scl_revision)` still holds, and the register's RETCOM row carries the number of
+  the IFR it returns. 1b.13 has to choose a convention for the code a historical
+  RETCOM row is stored under; this task does not.
+- **`scl_revision` is still changeable after INSERT by the DC at aal2, without a
+  shape check.** On INSERT the DC's code is checked against the step's series
+  (1b.08); 1b.01's `revisions_numbering_dc_only` lets the same DC change the
+  value later, and nothing on that path checks the shape or that the value still
+  belongs to its step's series. `scl_doc_number`, by contrast, is immutable for
+  every role. Candidate: run the same `dcs.revision_series_pattern` check on
+  UPDATE, or an immutability trigger in the shape of `forbid_scl_doc_number_change()`.
+  Not done, because it changes what the DC can do today.
+- **Session-less writers can set `scl_revision`** (postgres, psql, `service_role`),
+  by decision, and the migration comment names `service_role` explicitly. No
+  server-side route writes `dcs.revisions` today (checked 2026-09-20: the only
+  service-key modules are the Timesheet admin client and the DCS MDR export). The
+  moment one is added, that is a decision to make on purpose.
+- **HIGH PRIORITY, its own task — saving the CPY number hangs on "Saving…" on a
+  PRODUCTION build. A defect in shipped 1b.07 code, found while running 1b.08's
+  browser pass; not caused by 1b.08.** Everything known, measured 2026-09-20 on the
+  local stack with Playwright:
+  - **Reproduces on a production build of unmodified `origin/main`** (the tree at
+    `d379366`, before #77; this branch had no commits of its own then, and the build was
+    made after stashing its work): `pnpm --filter @scl/dcs build`, `next start --port 3001`.
+  - **The action POST returns 200** (`POST /documents/<id>` with `Next-Action`), **the
+    refresh RSC GET returns 200** (`GET /documents/<id>?_rsc=…`), **and the value IS stored**
+    (`cpy_doc_number = 'CPY-TEST-0042'`, read back with psql). A reload shows it.
+  - Yet `CpyNumberField` stays on **"Saving…" with its button disabled** for as long as it
+    was watched (8 s and more). No console error and no `pageerror` was logged.
+  - After the refresh GET, the browser fires a burst of prefetch `_rsc` GETs (`/`, `/mdr`,
+    `/admin/clients`, `/admin/dictionaries`, `/projects/<id>/documents`), twice; all return 200.
+    The same burst appears in the run that did NOT hang.
+  - **Not seen on `next dev`.** `e2e:profile` is 36/36 there, which is the proof 1b.07 was
+    accepted on.
+  - Measured variants. On the `origin/main` build all three hung: save at once, save after a
+    4 s wait, save after clicking "Additional attributes". On this branch's build: save at
+    once cleared in under a second (once); after a wait, after clicking "Additional attributes"
+    and after switching tabs all hung. `e2e:profile` against the production build fails at the
+    same step ("Saving…" never clears) on every run (4 of 4).
+  - **Only this call site of `usePendingAction().refresh()` was tried.** Whether the others
+    (every dialog and form in `apps/dcs` that uses it) hang the same way is unmeasured.
+  - **What I'd look at first:** `hooks/use-pending-action.ts`, `startRefresh(() => router.refresh())`.
+    In the failing run both responses arrive and the transition still never settles, and the
+    post-refresh prefetch burst is the thing that looks like it races it — so run the same
+    production build with (a) `router.refresh()` called outside the `useTransition`, and (b)
+    `prefetch={false}` on the sidebar links, and see which of the two stops it. Same family as
+    1a.25b (client router state on a production build) is a guess, not a finding.
+  - **What it says about the proof, which is the larger finding:** 1b.07 was accepted on a
+    `next dev` proof, and by the owner's count this is the third time that proof shape has
+    come up short. The one I can cite is 1a.25b/1a.25c (`next dev` did not reproduce the /mfa
+    hang; only a production build does — `docs/03-conventions.md`). Any browser proof of a
+    client-side transition should be run on a production build, and a run that cannot be is not
+    a full proof.
+  - Not fixed here (out of scope), and it would reach production users the moment DCS has any:
+    `dcs.project_roles` is empty on prod today (read 2026-09-20), so nobody can reach a
+    profile there yet.
+- **`created_by` on a revision is not enforced by the database.** The New Revision
+  action sets it from the session, but no trigger does, so a caller writing to
+  PostgREST directly could put another user's id there (the audit log, which reads
+  `auth.uid()`, is the record that cannot be forged). Same is true of every
+  `created_by` in `dcs`; not specific to revisions.
+- **The MDR status filter was the only list that needed SUPERSEDED filtered out.** Five
+  files read `workflow_status` (`lib/dictionaries.ts`, `lib/mdr.ts`, `app/(app)/mdr/page.tsx`,
+  `projects/[projectId]/documents/page.tsx`, `DocumentInformationTab.tsx`); one of them
+  builds a picker (`/mdr`'s status filter, now `documentStatusOptions()`). The other
+  four display a stored status or read the dictionary generically — a document is never
+  SUPERSEDED by design, and filtering a display would hide a wrong state (see the
+  API-writable status above). The DC's `/admin/dictionaries` screen lists every row,
+  SUPERSEDED included, on purpose: it is where a DC manages the dictionary.
+- **Revisions tab width at 1280 px.** The table shows SCL revision, Status, Step, Date,
+  Author, Reason and CPY; the Acceptance column scrolls sideways. **1b.09 adds a files column
+  to this same table and should redo the width pass then**, not stack a ninth column on
+  the current one. (Columns are `COLUMNS` in `RevisionsTab.tsx`; cells carry the code, with
+  "CODE — label" in the tooltip, to make room.)
+- **E2E helpers are duplicated** between `document-profile.mjs` and `new-revision.mjs`
+  (login, `toAal2`, TOTP, `psql`). Extract to `apps/dcs/e2e/support.mjs` when a third
+  script needs them; done deliberately not to touch the 1b.07 script beyond the two
+  assertions the New Revision dialog made stale.
+- **`dc_only_numbering_on_insert.test.sql` was changed, not just re-run.** Its
+  `add_rev` helper supplied `scl_revision` as a signed-in user, which 1b.08
+  refuses by design, so it now passes NULL, and the assertion that pins the
+  BEFORE INSERT trigger list of `dcs.revisions` lists the two new triggers. Owner's
+  decision 2026-09-20; the "do not edit the existing inserts" instruction of
+  decision 5b concerned the session-less ones, which are untouched. Effect on (qq)
+  is recorded there.
+- **`rls_document_register.test.sql` still never runs the number generators**
+  (qq): it runs under `dcs.import_mode = 'on'` throughout, so the revision
+  generator is exercised by `scl_revision_generator.test.sql` alone.

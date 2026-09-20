@@ -445,7 +445,9 @@ Utworzona migracją `20260904081501` (DCS 1a.07) jako pusta; treść
 z załączników A/B briefu wgrywa migracja `20260916094843_seed_dcs_dictionaries`
 (DCS 1a.18, **77 wierszy**: `doc_type` 23, `discipline` 29, `workflow_status` 9,
 `workflow_step` 6, `area` 4, `acceptance_code` 4, `language` 2 — wszystkie
-`is_active = true`). Ekran administracyjny 1a.15.
+`is_active = true`). **DCS 1b.08 dodaje jeden wiersz, `SUPERSEDED`
+(`workflow_status` 10, razem 78)** — migracja
+`20260920134648_workflow_status_superseded`. Ekran administracyjny 1a.15.
 Decyzje 1a.07:
 - Jedna generyczna tabela zamiast siedmiu (`doc_types`, `disciplines`, …):
   brief §5.8 wymaga edycji słowników z panelu bez deployu; jeden ekran
@@ -537,7 +539,8 @@ Decyzje 1a.18 (seed):
   o zdefiniowanym znaczeniu, wyżej). Obowiązkowy komentarz przy kodzie
   akceptacji `3` trafia do `description`, bo klucza `comment_required`
   nikt jeszcze nie zdefiniował; `colour` dla `workflow_status` to nadal O-05.
-- `workflow_status` ma **9 wierszy — IFC/IFI/IFB są rozbite na trzy kody**,
+- `workflow_status` miał **9 wierszy — IFC/IFI/IFB są rozbite na trzy kody**
+  (od 1b.08 jest ich 10, patrz niżej),
   zgodnie z listą stanów `dcs.documents.workflow_status` wyżej. Kody są
   WIELKIMI literami (`NOT_STARTED`, `STARTED`, `IDC`, `IFR`, `RETCOM`, `IFC`,
   `IFI`, `IFB`, `VOID`): sześć z dziewięciu to akronimy z glosariusza, pisane
@@ -545,6 +548,13 @@ Decyzje 1a.18 (seed):
   `docs/03-conventions.md` dotyczy identyfikatorów bazy, nie wartości
   słownikowych. Gdyby O-15 rozstrzygnął się na enuma, jego etykiety są
   małymi literami z listy wyżej, a te kody zostają.
+- **`SUPERSEDED` (1b.08, `sort_order` 100, po `VOID`) jest statusem REWIZJI, nie
+  dokumentu.** Ustawia go trigger bazy na rewizji, którą wyparła nowsza;
+  człowiek go nie wybiera, a listy statusów dokumentu w `apps/dcs` go pomijają.
+  Trigger szuka wiersza po kodzie i przy jego braku **rzuca nazwany błąd**,
+  zamiast po cichu pominąć — bo DC może dziś dezaktywować lub (gdy nieużywany)
+  skasować wiersz słownika z ekranu 1a.15. To ryzyko O-15 z `docs/deferred-tasks.md`
+  (oo); **nie jest tu rozstrzygnięte**, żadnej blokady nie dodano.
 - **`description` jest po angielsku i nie niesie ścieżek z repo** —
   poprawka z 2026-09-16, migracja
   `20260916104238_dcs_dictionaries_english_descriptions`: 1a.18 zaseedowało
@@ -813,8 +823,11 @@ FK próbowałby wyzerować `id` dokumentu.
 Triggery: `revisions_numbering_dc_only` (`BEFORE UPDATE`, `scl_revision`
 + `cpy_revision`), **`revisions_numbering_dc_only_insert` (`BEFORE INSERT`,
 `cpy_revision` — 1b.03)**, `revisions_cpy_numbering` (`cpy_revision`),
-`set_updated_at`, `audit_revisions`. RLS: sześć polityk, identycznie jak
-`documents`.
+`set_updated_at`, `audit_revisions` — oraz, **od 1b.08**,
+**`revisions_assign_scl_revision`** (`BEFORE INSERT`, numer rewizji),
+**`revisions_refuse_void_document`** (`BEFORE INSERT`) i
+**`revisions_promote_current`** (`AFTER INSERT`) — opisane niżej. RLS: sześć
+polityk, identycznie jak `documents`.
 
 Dwa triggery na jedną funkcję, a nie jeden `BEFORE INSERT OR UPDATE` jak na
 `documents`, bo **zestaw pilnowanych kolumn zależy tu od operacji**:
@@ -828,7 +841,9 @@ tego bez wpisywania nazwy kolumny do ciała funkcji. Nazwa sortuje się po
 `revisions_cpy_numbering`, więc wartość CPY na projekcie bez toru CPY nadal
 dostaje 23514, nie 42501.
 
-Walidacja formatu `scl_revision` (A,B,… / 00,01,… / 1,2,…) **nie jest** w
+~~Walidacja formatu `scl_revision`~~ — **zamknięta w DCS 1b.08, patrz „Numeracja
+rewizji i bieżąca rewizja” niżej.** Stan z 1b.01 dla porządku: walidacja
+formatu `scl_revision` (A,B,… / 00,01,… / 1,2,…) **nie jest** w
 1b.01: która seria obowiązuje, zależy od kroku, więc nie da się jej zapisać
 CHECK-iem, który by się z maszyną stanów nie rozjechał. **Należy do 1b.08**
 (okno New Revision) — tam wybierany jest krok, a więc i seria. Do 1b.02 to
@@ -837,6 +852,75 @@ nadaje numer **dokumentu**, a `scl_revision` jest numerem **rewizji** —
 inny obiekt, inna reguła, inny ekran (`docs/deferred-tasks.md` pp).
 Niemodyfikowalność rewizji finalnych (IFC/IFI/IFB) egzekwowana triggerem
 w bazie — **1b.10**, nie tutaj.
+
+#### Numeracja rewizji i bieżąca rewizja (DCS 1b.08)
+
+Migracje `20260920134648_workflow_status_superseded`,
+`20260920134700_scl_revision_generator`,
+`20260920134800_revisions_promote_current`. Wzorzec skopiowany z generatora
+numeru dokumentu (1b.02), bo `CLAUDE.md` wymaga, żeby ręczny wpis numeru SCL był
+niemożliwy w każdym formularzu i akcji.
+
+**Serie** (brief §6.5) wynikają z kroku: `IDC` → `A, B, C…` (litery, do `Z`);
+`IFR` → `00, 01…` (dwie cyfry, do `99`); `IFC`/`IFI`/`IFB` → `1, 2, 3…`,
+**jeden wspólny licznik na trzy kroki** (liczenie osobno na krok dałoby IFC `1`
+i IFI `1` na tym samym dokumencie, a `UNIQUE (document_id, scl_revision)`
+odrzuciłby drugi). Licznik = najwyższy kod już użyty przez kroki tej serii **na
+tym dokumencie**, plus jeden; czyta krok, a nie samą wartość (finalne „10”
+i IFR „10” wyglądają tak samo). Wartość w innym formacie niż seria (np. z importu)
+niczego nie liczy — `UNIQUE` jest siatką bezpieczeństwa (głośne `23505`, nigdy
+cichy duplikat). Przekroczenie `Z` / `99` **rzuca** (`22003`), nie poszerza formatu.
+
+**`RETCOM` nie ma serii — celowo, nie przeoczenie.** RETCOM to klient zwracający
+dokument, nie SCL wydający rewizję; w rejestrze niesie numer rewizji IFR, którą
+zwraca, a `UNIQUE (document_id, scl_revision)` nie potrafi tego utrzymać, i Faza 1
+nie ma silnika obiegu, z którego dałoby się wyprowadzić coś lepszego. Dlatego
+`dcs.next_revision_code` rzuca nazwany błąd (`22023`), a trigger odrzuca INSERT
+z krokiem RETCOM (`23514`). Historyczne wiersze RETCOM niesie import SMDR
+(`dcs.import_mode = 'on'`) — **z kodem, który nie koliduje z `UNIQUE`**, więc nie
+z numerem IFR (`docs/deferred-tasks.md` yy).
+
+- **`dcs.revision_series_pattern(step_code) → text`** — `IMMUTABLE`, `SECURITY INVOKER`;
+  jedyne miejsce, które mówi, jak wygląda poprawny kod kroku (`NULL` dla RETCOM i kroku
+  bez serii). Czytają je i licznik, i walidacja kodu podanego przez DC, żeby się nie
+  rozjechały.
+- **`dcs.next_revision_code(p_document_id, p_step_id) → text`** — `SECURITY
+  INVOKER`, `search_path = ''`, `EXECUTE` dla `authenticated` (dialog New Revision
+  proponuje nim kod). RLS pokazuje wywołującemu rewizje dokumentu, do którego
+  należy; nie-członek nie widzi dokumentu i dostaje błąd, nie kod. Atomowość:
+  `pg_advisory_xact_lock` po `DOKUMENT + SERIA`, wzięty **przed** odczytem
+  maksimum. Nie podnosi lintu 0029 (nie jest definerem).
+- **`revisions_assign_scl_revision`** (`BEFORE INSERT`, `SECURITY DEFINER`,
+  `EXECUTE` cofnięte) — `NULL` → kod z generatora. Kod podany przez zalogowanego
+  użytkownika: **przyjęty od DC tego projektu w aal2 i sprawdzony z kształtem serii
+  kroku** (`dcs.revision_series_pattern`: `^[A-Z]$` / `^[0-9]{2}$` /
+  `^[1-9][0-9]{0,5}$`; `23514`, gdy nie pasuje; zderzenie z istniejącym łapie `UNIQUE`),
+  **każdy inny → `42501`** (dwa sformułowania jak w `enforce_dc_only_numbering`: nie-DC /
+  brak drugiego składnika). **Wyjątki, nazwane:** `dcs.import_mode = 'on'` (import SMDR,
+  bez sprawdzania kształtu); **sesja bez użytkownika**
+  (`auth.uid() IS NULL`: migracja, seed, psql, `service_role`) — ten sam bypass,
+  co w `enforce_dc_only_numbering()`, i **`service_role` też w niego wpada**: trasa
+  serwerowa zapisująca `dcs.revisions` kluczem serwisowym może ustawić
+  `scl_revision` dowolnie (sprawdzone przy 1b.08: żadna taka trasa nie istnieje);
+  oraz krok `RETCOM`, którego odrzucenie znosi tylko import.
+- **`revisions_refuse_void_document`** (`BEFORE INSERT`, `SECURITY DEFINER`) —
+  rewizja na dokumencie ze statusem `VOID` → `23514`. Bez bypassu dla sesji bez
+  użytkownika (to fakt o dokumencie, nie pytanie o uprawnienia); import go znosi,
+  bo historyczny dokument Void ma rewizje sprzed unieważnienia.
+- **`revisions_promote_current`** (`AFTER INSERT`, `SECURITY DEFINER`) — po każdej
+  nowej rewizji: (1) blokada wiersza dokumentu, (2) `documents.current_revision_id`
+  = nowa rewizja, (3) dokument `NOT_STARTED` → `STARTED` — **i żadna inna zmiana
+  statusu** (ręczne zmiany to 1b.11), (4) poprzednia bieżąca rewizja → `SUPERSEDED`.
+  Nowa rewizja zachowuje status, z którym ją wstawiono; dialog wstawia wiersz
+  `workflow_status` o kodzie równym kodowi wybranego kroku. Blokada to **`FOR NO KEY
+  UPDATE` na samym `dcs.documents`, bez joina** — obie decyzje zmierzone: `FOR UPDATE`
+  daje `deadlock detected` przy dwóch równoległych rewizjach (kontrola FK już trzyma
+  `FOR KEY SHARE` na tym wierszu), a join po `workflow_status_id` gubi wiersz po
+  oczekiwaniu na blokadę.
+
+Widok `dcs.v_mdr` **nie zmienia się**: `LEFT JOIN dcs.revisions rev ON rev.id =
+d.current_revision_id` sam podnosi `scl_revision`, `cpy_revision` i `issue_date`
+(= `revision_date`), gdy trigger przestawi wskaźnik.
 
 ### ✅ `dcs.files`
 `id`, `revision_id`, `project_id`, `file_name`, `original_name`,

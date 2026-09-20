@@ -138,6 +138,33 @@ export function fileDisplayName(file: {
   return file.file_name || file.original_name || file.storage_path?.split('/').pop() || '(unnamed file)'
 }
 
+export type FileRowView = { id: string; name: string; kind: string; size: string; uploaded: string }
+
+/**
+ * A revision's files as the two places that list them draw them — the current-
+ * revision panel and each expanded row of the Revisions tab (DCS 1b.08) — every
+ * cell already a string, so both render the same thing from the same function.
+ */
+export function toFileRows(
+  files: readonly {
+    id: string
+    file_kind: string
+    file_name: string | null
+    original_name: string | null
+    storage_path: string | null
+    size_bytes: number | null
+    uploaded_at: string | null
+  }[],
+): FileRowView[] {
+  return files.map((file) => ({
+    id: file.id,
+    name: fileDisplayName(file),
+    kind: file.file_kind,
+    size: formatFileSize(file.size_bytes),
+    uploaded: formatTimestamp(file.uploaded_at),
+  }))
+}
+
 // ---------------------------------------------------------------------------
 // Panel actions and placeholder tabs
 // ---------------------------------------------------------------------------
@@ -145,13 +172,16 @@ export function fileDisplayName(file: {
 export type PanelAction = { key: string; label: string; hint: string }
 
 /**
- * The buttons of the current-revision panel. All disabled in 1b.07: none of
- * them may write to dcs.revisions or dcs.files (acceptance 6). The hint is
- * what the tooltip and the visible caption say, and it names the task that
- * turns the button on — kept here, not in JSX, so a test can pin it.
+ * The buttons of the current-revision panel that are still disabled. All of them:
+ * none may write to dcs.revisions or dcs.files from here. The hint is what the
+ * tooltip and the visible caption say, and it names the task that turns the
+ * button on — kept here, not in JSX, so a test can pin it.
+ *
+ * New Revision is not in this list any more: DCS 1b.08 made it a live dialog
+ * (components/document-profile/NewRevisionDialog.tsx), rendered above these by
+ * RevisionPanelActions.
  */
 export const PANEL_ACTIONS: readonly PanelAction[] = [
-  { key: 'new-revision', label: 'New Revision', hint: 'Arrives with DCS 1b.08' },
   { key: 'add-file', label: 'Add File', hint: 'Arrives with DCS 1b.09' },
   { key: 'distribute-idc', label: 'Distribute for IDC', hint: 'Phase 2/3' },
   { key: 'initiate-review', label: 'Initiate Review', hint: 'Phase 2/3' },
@@ -171,11 +201,6 @@ export type PlaceholderTab = { value: string; label: string; sentence: string }
  * recorded here as decided, not derived; do not build a data model from them.
  */
 export const PLACEHOLDER_TABS: readonly PlaceholderTab[] = [
-  {
-    value: 'revisions',
-    label: 'Revisions',
-    sentence: 'Every revision of this document, with its step, status and files, arrives with DCS 1b.08 (New Revision).',
-  },
   {
     value: 'plan',
     label: 'Plan',
@@ -198,6 +223,32 @@ export const PLACEHOLDER_TABS: readonly PlaceholderTab[] = [
     sentence: 'The transmittals this document was sent in arrive with the transmittal module in Phase 3 (M11).',
   },
 ]
+
+/**
+ * Every tab of the profile, in the order they are drawn: Information, the real
+ * Revisions tab (DCS 1b.08), the placeholders, History.
+ */
+export const PROFILE_TAB_VALUES = [
+  'information',
+  'revisions',
+  ...PLACEHOLDER_TABS.map((tab) => tab.value),
+  'history',
+] as const
+
+export type ProfileTab = string
+
+/**
+ * The tab the URL asks for (`?tab=revisions`), or 'information'.
+ *
+ * After New Revision saves, the dialog navigates to the Revisions tab with the
+ * new row open; the tab is a query parameter because the profile is a server
+ * page and the dialog lives in the panel beside the tabs, not inside them. An
+ * unknown value — a stale link, someone typing — falls back rather than
+ * rendering an empty tab area.
+ */
+export function resolveProfileTab(value: unknown): ProfileTab {
+  return typeof value === 'string' && (PROFILE_TAB_VALUES as readonly string[]).includes(value) ? value : 'information'
+}
 
 // ---------------------------------------------------------------------------
 // History (public.audit_log)

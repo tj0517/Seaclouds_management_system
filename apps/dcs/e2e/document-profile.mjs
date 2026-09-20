@@ -177,9 +177,16 @@ const browser = await chromium.launch()
   rec('a/2: the file row shows kind and size', /original/.test(t) && /2\.3 MB/.test(t))
   rec('a/6: no download link in the panel', (await page.locator(`${PANEL} a`).count()) === 0)
 
-  // Acceptance 6: six actions, disabled, each with its tooltip (title on the wrapper) AND the same
-  // sentence printed under the button and tied to it with aria-describedby.
-  const actions = await page.locator(`${PANEL} li:has(button)`).evaluateAll((items) =>
+  // 1b.07 acceptance 6, as amended by DCS 1b.08: New Revision is a LIVE dialog now (the DC at aal2 gets
+  // an enabled button; new-revision.mjs proves what it does), so the disabled actions are the other
+  // five — each with its tooltip (title on the wrapper) AND the same sentence printed under the
+  // button and tied to it with aria-describedby.
+  rec(
+    'a/6 (1b.08): New Revision is an ENABLED button for the DC at aal2',
+    (await page.locator(`${PANEL} button:has-text("New Revision")`).count()) === 1 &&
+      (await page.locator(`${PANEL} button:has-text("New Revision")`).isEnabled()),
+  )
+  const actions = await page.locator(`${PANEL} li:has(span[title])`).evaluateAll((items) =>
     items.map((li) => {
       const button = li.querySelector('button')
       const caption = li.querySelector('p')
@@ -193,7 +200,6 @@ const browser = await chromium.launch()
     }),
   )
   const expected = [
-    ['New Revision', 'Arrives with DCS 1b.08'],
     ['Add File', 'Arrives with DCS 1b.09'],
     ['Distribute for IDC', 'Phase 2/3'],
     ['Initiate Review', 'Phase 2/3'],
@@ -201,8 +207,8 @@ const browser = await chromium.launch()
     ['Create Transmittal', 'Phase 2/3'],
   ]
   rec(
-    'a/6: six disabled actions, each with its tooltip, its caption and aria-describedby',
-    actions.length === 6 &&
+    'a/6: five disabled actions, each with its tooltip, its caption and aria-describedby',
+    actions.length === 5 &&
       expected.every(([label, hint], i) => {
         const a = actions[i]
         return a.label === label && a.disabled && a.title === hint && a.caption === hint && a.described
@@ -254,8 +260,8 @@ const browser = await chromium.launch()
   await shot(page, 'a3b-dc-duplicate-refused', { fullPage: true })
   psql(`update dcs.documents set cpy_doc_number = null where id = '${DOC_B}'`)
 
+  // Revisions is a real tab since 1b.08 (new-revision.mjs); these four are still placeholders.
   for (const [name, needle] of [
-    ['Revisions', '1b.08'],
     ['Plan', 'Phase 2'],
     ['Comments', 'DCS 2.09 · Phase 2'],
     ['References', 'no task number yet'],

@@ -12,12 +12,20 @@
 -- policy at aal1, so no policy stands between them and a row with a CPY number
 -- on it. Only the trigger does. Sections 3 and 4 assert that directly.
 --
--- What is deliberately NOT asserted as guarded: scl_revision on INSERT. The
--- column is NOT NULL, so every INSERT supplies one; locking it would mean only
--- a DC at aal2 could create a revision, against docs/00-glossary.md (the
--- Originator creates documents AND revisions). Section 5 asserts the opposite —
--- that an Originator still creates revisions at aal1 — so the decision is a
--- test, not a silence. Its UPDATE guard is untouched and asserted too.
+-- What is deliberately NOT asserted as a DC lock: scl_revision on INSERT.
+-- Locking it would mean only a DC at aal2 could create a revision, against
+-- docs/00-glossary.md (the Originator creates documents AND revisions). Section
+-- 5 asserts the opposite — that an Originator still creates revisions at aal1 —
+-- so the decision is a test, not a silence. Its UPDATE guard is untouched and
+-- asserted too.
+--
+-- DCS 1b.08 changed how the column is filled, not who may create a revision: the
+-- code is now GENERATED on INSERT (revisions_assign_scl_revision) and a
+-- signed-in user who supplies one is refused (scl_revision_generator.test.sql).
+-- So the add_rev helper below passes NULL, exactly as the New Revision dialog
+-- does, and this file goes through the generator instead of around it. Before
+-- 1b.08 it supplied 'B', 'C', 'D' itself; that was the pre-1b.08 rule and is no
+-- longer a thing a signed-in user may do.
 --
 -- Seed projects (fixed UUIDs): PEJ = 6c0909ce-… (project_code SC2602) has an
 -- mdr_settings row with cpy_numbering = false, flipped to true below because a
@@ -48,7 +56,7 @@ select is(
   (select pg_get_triggerdef(oid) from pg_trigger
     where tgrelid = 'dcs.revisions'::regclass and tgname = 'revisions_numbering_dc_only_insert'),
   'CREATE TRIGGER revisions_numbering_dc_only_insert BEFORE INSERT ON dcs.revisions FOR EACH ROW EXECUTE FUNCTION enforce_dc_only_numbering(''cpy_revision'')',
-  'it guards cpy_revision ALONE: scl_revision is NOT NULL, so guarding it on INSERT would mean only a DC could create a revision (1b.08 owns that column''s INSERT side)');
+  'it guards cpy_revision ALONE: scl_revision is NOT NULL, so guarding it on INSERT would mean only a DC could create a revision (1b.08 gave that column a generator on INSERT instead, revisions_assign_scl_revision)');
 
 -- BEFORE triggers fire in name order. The CPY-numbering-enabled check must
 -- still come first, so a value on a project that runs no CPY track is 23514
@@ -57,8 +65,9 @@ select is(
   (select array_agg(tgname::text order by tgname) from pg_trigger
     where tgrelid = 'dcs.revisions'::regclass and not tgisinternal
       and (tgtype & 2) = 2 and (tgtype & 4) = 4),   -- BEFORE, INSERT
-  array['revisions_cpy_numbering', 'revisions_numbering_dc_only_insert'],
-  'revisions_cpy_numbering still sorts before the new trigger');
+  array['revisions_assign_scl_revision', 'revisions_cpy_numbering',
+        'revisions_numbering_dc_only_insert', 'revisions_refuse_void_document'],
+  'revisions_cpy_numbering still sorts before revisions_numbering_dc_only_insert — and DCS 1b.08''s two BEFORE INSERT triggers sit around them, the generator first and the Void guard last');
 select is(
   (select tgname::text from pg_trigger
     where tgrelid = 'dcs.documents'::regclass and not tgisinternal
@@ -158,10 +167,10 @@ create function pg_temp.add_doc(p_cpy text, p_title text) returns text
   select pej_id, p_cpy, p_title, ra_id, disc_id, area_id, en_id, st_id from t
   returning scl_doc_number;
 $$;
-create function pg_temp.add_rev(p_scl text, p_cpy text) returns text
+create function pg_temp.add_rev(p_cpy text) returns text
   language sql as $$
-  insert into dcs.revisions (document_id, project_id, scl_revision, cpy_revision, step_id, status_id)
-  select host_doc_id, pej_id, p_scl, p_cpy, step_id, st_id from t
+  insert into dcs.revisions (document_id, project_id, cpy_revision, step_id, status_id)
+  select host_doc_id, pej_id, p_cpy, step_id, st_id from t
   returning scl_revision;
 $$;
 
@@ -229,7 +238,7 @@ select throws_ok(
 select set_config('request.jwt.claims',
   json_build_object('sub', (select orig_id from t), 'role', 'authenticated', 'aal', 'aal1')::text, true);
 select throws_ok(
-  $$select pg_temp.add_rev('B', 'CLIENT-REV-B')$$,
+  $$select pg_temp.add_rev('CLIENT-REV-B')$$,
   '42501', null,
   'RED: a non-DC member INSERTing a revision with cpy_revision filled is refused (42501)');
 select is(
@@ -237,20 +246,20 @@ select is(
   0::bigint,
   'and that revision was not written');
 select lives_ok(
-  $$select pg_temp.add_rev('B', null)$$,
+  $$select pg_temp.add_rev(null)$$,
   'GREEN: the same member creates the revision with cpy_revision NULL');
 
 select set_config('request.jwt.claims',
   json_build_object('sub', (select dc_id from t), 'role', 'authenticated', 'aal', 'aal1')::text, true);
 select throws_ok(
-  $$select pg_temp.add_rev('C', 'CLIENT-REV-C')$$,
+  $$select pg_temp.add_rev('CLIENT-REV-C')$$,
   '42501', null,
   'RED: the DC without aal2 is refused on the revision too');
 
 select set_config('request.jwt.claims',
   json_build_object('sub', (select dc_id from t), 'role', 'authenticated', 'aal', 'aal2')::text, true);
 select lives_ok(
-  $$select pg_temp.add_rev('C', 'CLIENT-REV-C')$$,
+  $$select pg_temp.add_rev('CLIENT-REV-C')$$,
   'GREEN: the DC at aal2 may create a revision carrying the client''s revision marker');
 select is(
   (select cpy_revision from dcs.revisions where scl_revision = 'C'),
@@ -258,16 +267,17 @@ select is(
   'and it is stored');
 
 -- ============================================================
--- 5. scl_revision: INSERT deliberately open, UPDATE deliberately closed
+-- 5. scl_revision: INSERT is not a DC lock, UPDATE deliberately closed
 --
--- This section is the decision of this task written down as assertions rather
--- than as a comment. scl_revision is NOT NULL: every INSERT supplies one.
+-- This section is the decision of 1b.03 written down as assertions rather than
+-- as a comment: creating a revision is not a DC-only act. Since 1b.08 the
+-- Originator gets the code from the generator rather than typing it.
 -- ============================================================
 select set_config('request.jwt.claims',
   json_build_object('sub', (select orig_id from t), 'role', 'authenticated', 'aal', 'aal1')::text, true);
 select lives_ok(
-  $$select pg_temp.add_rev('D', null)$$,
-  'GREEN, by decision: an Originator at aal1 still creates revisions, supplying the NOT NULL scl_revision — guarding it on INSERT would make revision creation a DC-only act (docs/00-glossary.md: the Originator creates documents and revisions)');
+  $$select pg_temp.add_rev(null)$$,
+  'GREEN, by decision: an Originator at aal1 still creates revisions, leaving scl_revision to the generator — a DC lock on INSERT would make revision creation a DC-only act (docs/00-glossary.md: the Originator creates documents and revisions)');
 select throws_ok(
   $$update dcs.revisions set scl_revision = 'D2' where scl_revision = 'D'$$,
   '42501', null,
@@ -336,7 +346,7 @@ select is(
   'SEED-CLIENT-001',
   'and the value went in verbatim');
 select lives_ok(
-  $$select pg_temp.add_rev('E', 'SEED-CLIENT-REV')$$,
+  $$select pg_temp.add_rev('SEED-CLIENT-REV')$$,
   'GREEN: the same holds for a revision');
 select is(
   (select count(*) from public.audit_log

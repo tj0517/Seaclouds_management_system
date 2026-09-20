@@ -482,6 +482,14 @@ export type Database = {
         }
         Returns: string
       }
+      next_revision_code: {
+        Args: { p_document_id: string; p_step_id: string }
+        Returns: string
+      }
+      revision_series_pattern: {
+        Args: { p_step_code: string }
+        Returns: string
+      }
     }
     Enums: {
       mdr_status: "active" | "closed"

@@ -14,12 +14,14 @@ select plan(18);
 -- ============================================================
 -- 1. Counts per dictionary — the acceptance criteria of 1a.18.
 -- discipline is 29 (brief table B.2), not the 32 the planning note quotes;
--- workflow_status is 9 because IFC/IFI/IFB are three states, not one.
+-- workflow_status is 10: nine because IFC/IFI/IFB are three states, not one,
+-- plus SUPERSEDED, which DCS 1b.08 adds for a revision that a newer one has
+-- replaced (a revision status, not a state a document is in).
 -- ============================================================
 select bag_eq(
   $$select dict_type, count(*) from dcs.dictionaries where is_active group by 1$$,
   $$values ('acceptance_code', 4::bigint), ('area', 4::bigint), ('discipline', 29::bigint),
-           ('doc_type', 23::bigint), ('language', 2::bigint), ('workflow_status', 9::bigint),
+           ('doc_type', 23::bigint), ('language', 2::bigint), ('workflow_status', 10::bigint),
            ('workflow_step', 6::bigint)$$,
   'every dictionary holds exactly the number of active entries 1a.18 seeds');
 
@@ -34,8 +36,8 @@ select results_eq(
 select results_eq(
   $$select code from dcs.dictionaries where dict_type = 'workflow_status' order by sort_order$$,
   $$values ('NOT_STARTED'), ('STARTED'), ('IDC'), ('IFR'), ('RETCOM'),
-           ('IFC'), ('IFI'), ('IFB'), ('VOID')$$,
-  'workflow_status is in lifecycle order, with IFC/IFI/IFB split into three codes');
+           ('IFC'), ('IFI'), ('IFB'), ('VOID'), ('SUPERSEDED')$$,
+  'workflow_status is in lifecycle order, with IFC/IFI/IFB split into three codes, and SUPERSEDED (1b.08) last');
 
 select is(
   (select label from dcs.dictionaries where dict_type = 'workflow_step' and code = 'IFB'),

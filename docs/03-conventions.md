@@ -313,7 +313,8 @@ Zapisane przy DCS 1b.07 (2026-09-20).
 
 - **`supabase/fixtures/`** to dane, które istnieją wyłącznie na lokalnym stacku,
   do dowodu w przeglądarce — rzeczy, których nie ma na scl-dev, bo nic jeszcze
-  ich nie tworzy (dziś: wiersz rewizji i pliku, do 1b.08 / 1b.09). Nie jest to
+  ich nie tworzy (dziś: plik; od 1b.08 rewizję tworzy okno New Revision, ale fixtura
+  nadal ładuje jedną, żeby panel miał co pokazać bez klikania). Nie jest to
   migracja (leży poza `supabase/migrations/`, więc `db push` go nie wyśle), nie
   jest częścią `seed.sql` (`db reset` zostaje bez zmian) i nie jest testem
   pgTAP. Ładuje się ręcznie po `supabase db reset`:
@@ -350,6 +351,20 @@ Zapisane przy DCS 1b.07 (2026-09-20).
   zapisuje do lokalnej bazy, więc odmawia uruchomienia przeciw czemukolwiek
   poza `localhost`; kończy się kodem 1, gdy którakolwiek asercja padnie, i
   zapisuje zrzuty ekranu do `E2E_SHOTS` (domyślnie katalog tymczasowy).
+- **Drugi skrypt, `e2e:revision` (DCS 1b.08):** `apps/dcs/e2e/new-revision.mjs`,
+  te same wymagania i ta sama fixtura; tworzy własne dokumenty (stałe id) i sprząta
+  je na początku i na końcu, więc nie zużywa fixtury. Pokrywa okno New Revision i
+  zakładkę Revisions (A, potem B, krok IFR → `00`, nadpisanie kodu przez DC,
+  odmowy: Void, kod podany przez ORIG wprost do PostgREST). **`e2e:profile` da się dziś
+  uruchomić tylko przeciw `next dev`, i to jest DEFEKT, nie konwencja:** zapis numeru
+  CPY zawiesza się na buildzie produkcyjnym na „Saving…” — także na niezmienionym
+  `origin/main` (`docs/deferred-tasks.md` yy, zadanie priorytetowe). Zielony wynik na
+  `next dev` jest niepełnym dowodem dla przejść po stronie klienta (por. 1a.25b).
+  `e2e:revision` przechodzi na obu.
+- **Dowody, których nie da się zrobić w pgTAP: `scripts/revision-proofs.py`
+  (DCS 1b.08).** Wyścigi (dwa zamki, równoległe sesje psql) i „zepsuj każdą
+  kontrolę po kolei i pokaż, że jej test czerwienieje”. Też lokalnie, też poza CI;
+  `concurrency` COMMITUJE wiersze, więc po nim `supabase db reset`.
 - **Dlaczego nie w CI:** CI stawia stack tylko z bazą (`supabase start -x
   gotrue,…,kong,postgrest,…`) — nie ma Auth ani API, więc nie ma sesji do
   zalogowania. e2e w CI wymagałoby pełnego stacku i uruchomionej aplikacji i
