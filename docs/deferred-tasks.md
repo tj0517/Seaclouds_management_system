@@ -1673,7 +1673,8 @@ wystawia je wszystkie publicznie, a raz rozesłanych URL-i się nie cofa.
   looked. That PR is DCS 1a.26 (#59), and it closes **defect 2 only**; defect
   1 is still open below. Both defects:
 
-  1. **The frozen navigation.** Line 113 is the same `router.push(next)` /
+  1. ~~**The frozen navigation.**~~ — **closed 2026-09-20 by DCS 1a.25b,
+     see (ww); it did bite on Timesheet.** Original text kept. Line 113 is the same `router.push(next)` /
      `router.refresh()` pair that froze DCS's demo step 1, reached through the
      same aal2 gate in `apps/timesheet/proxy.ts`. Whether it actually bites
      there depends on whether a Timesheet admin reaches `/mfa` by a
@@ -2215,3 +2216,49 @@ Recorded 2026-09-20. Each is a known gap left on purpose; none blocks 1b.07.
   with status 200 — on the profile and on the 1b.04 stub alike. The visible 404
   is what acceptance 5 asks for; revisit when an HTTP consumer (an API,
   monitoring, a crawler) appears.
+
+## ww) DCS 1a.25b — Timesheet `/mfa` "Verifying…" hang (fixed in code 2026-09-20)
+
+Ports DCS 1a.25 ((mm), PR #56) to `apps/timesheet`. It closes (nn) defect 1; (nn)
+defect 2 (`next` validation) was already closed by 1a.26 and is untouched.
+Confirmation on the Timesheet Preview by the owner is recorded in the PR, not
+here.
+
+- **Symptom, seen 2026-09-20 on the Timesheet Preview:** after a correct TOTP
+  code `/mfa` stays on "Verifying…"; after F5 the user is in without a second
+  code, because the session is already aal2. Only the client navigation after
+  `verify` fails.
+- **Cause, measured on Timesheet and not only inferred from DCS.** (nn) left it
+  open whether a Timesheet admin reaches the gate by a client-side click. They
+  do: portal `/` → TES tile → `/tes` → the `Admin` link (`<Link href="/admin">`)
+  → `proxy.ts` sends an aal1 admin to `/mfa?next=%2Fadmin`. On a production
+  build (`next build && next start`) against the local stack, entering a correct
+  code with the unchanged page left the button on "Verifying…" for all three
+  entry modes (verified factor / no factor / unverified factor): 0/3. The only
+  request after submit was `RSC /mfa?next=%2Fadmin&_rsc=…` (the
+  `router.refresh()`); **no request for `/admin` was made at all**, which is the
+  cached-`canonicalUrl` mechanism of (mm), read out of next@16.1.1 there.
+- **Fix:** `navigateAfterMfaVerify` in `apps/timesheet/lib/mfa-navigation.ts`,
+  copied from DCS and composed with the existing `safeNextPath`; `app/mfa/page.tsx`
+  calls it instead of `router.push(...)` + `router.refresh()`. Same build, same
+  walk: 3/3 reach `/admin` in 0.4–1.4 s, and the first request after submit is
+  `DOCUMENT /admin` — a full document load. `proxy.ts` is byte-identical.
+- **Tests:** `apps/timesheet/lib/mfa-verify-navigation.test.ts`, a vitest model
+  in the style of 1a.25 (gate transcribed from `proxy.ts`, route cache narrowed
+  to the three rules quoted in DCS's test), all three modes, plus a control that
+  the model reproduces the hang when handed the old `router.push`. Its red is
+  weak on its own (the function did not exist: 6 failed before, 33/33 after);
+  the real red/green is the browser walk above. That walk was a throwaway
+  Playwright script and is **not in the repo**: adding `playwright` to
+  `@scl/timesheet` would change `pnpm-lock.yaml`, shared with DCS and the
+  production Timesheet (owner's decision, 2026-09-20). To repeat it, follow the
+  local-run recipe in `docs/03-conventions.md` ("Testy przeglądarkowe").
+- **Local run deviated from the toolchain:** Node 22.23.2 instead of `.nvmrc`'s
+  20.20.0 (not installed on this machine).
+- **Timesheet has no middleware or guard tests.** `app/(app)/admin/guards.test.ts`
+  is DCS's. Timesheet's tests are `project-update`, `mfa-factor-state`,
+  `mfa-navigation` and the new file; none loads `proxy.ts` (see (nn), second
+  bullet).
+- **Noticed, not fixed:** `proxy.ts` writes only `request.nextUrl.pathname` into
+  `next`, so a gated URL with a query (`/admin/reports?from=…&to=…`) loses its
+  query on the way through `/mfa`.

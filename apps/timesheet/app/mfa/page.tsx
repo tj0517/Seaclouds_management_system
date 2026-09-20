@@ -7,7 +7,7 @@
 // (code only). Employees never reach this route (proxy.ts only redirects
 // admin/DC paths).
 import { Suspense, useEffect, useRef, useState } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import { createClient } from '@scl/db/client'
 import { Loader2, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -15,7 +15,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { resolveMfaFactorState } from '@/lib/mfa-factor-state'
-import { safeNextPath } from '@/lib/mfa-navigation'
+import { navigateAfterMfaVerify } from '@/lib/mfa-navigation'
 
 export default function MfaPage() {
   return (
@@ -34,7 +34,6 @@ export default function MfaPage() {
 // useSearchParams() opts the page out of static generation unless wrapped in
 // its own Suspense boundary (Next.js requirement for the production build).
 function MfaPageInner() {
-  const router = useRouter()
   const searchParams = useSearchParams()
   const next = searchParams.get('next') ?? '/'
 
@@ -113,9 +112,10 @@ function MfaPageInner() {
 
     // `next` is attacker-controllable: /mfa is excluded from the aal2 gate's
     // own check, so anyone signed in can be sent to /mfa?next=<anything>.
-    // See lib/mfa-navigation.ts — DCS 1a.26 / deferred-tasks (nn).
-    router.push(safeNextPath(next))
-    router.refresh()
+    // navigateAfterMfaVerify validates it (DCS 1a.26) and leaves with a full
+    // document load, not router.push — see lib/mfa-navigation.ts for why a
+    // client-side push cannot leave this page (DCS 1a.25b).
+    navigateAfterMfaVerify({ assign: (href) => window.location.assign(href) }, next)
   }
 
   // Discarding a stale, unfinished enrolment is a deliberate user choice, not

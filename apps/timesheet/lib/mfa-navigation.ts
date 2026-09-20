@@ -5,11 +5,16 @@
 // is already duplicated per app, and a leaf on @scl/db would make a
 // production Timesheet fix wait on a package both apps consume.
 //
-// Only the guard is copied. DCS's `navigateAfterMfaVerify` — the full
-// document load that unfroze its demo step 1 — is NOT here: whether
-// Timesheet's aal2 gate is reached by a client-side click (and so hits the
-// same poisoned route-cache entry) is still unmeasured, and is a separate
-// task. See docs/deferred-tasks.md (nn), first bullet, defect 1.
+// DCS 1a.25b added `navigateAfterMfaVerify`, the full document load that
+// unfroze DCS's demo step 1 (1a.25). It must be a full load, not router.push():
+// the click on the "Admin" link that sent the user here left a route-cache
+// entry under the TARGET href whose canonicalUrl is /mfa?next=…, because that
+// is where proxy.ts's aal2 gate resolved it — so pushing to the target
+// resolves straight back to /mfa and the button sits on "Verifying…" for
+// ever. Measured on a production build of this app (docs/deferred-tasks.md
+// (ww)): after a correct code the browser made no request for /admin at all.
+// The mechanism, read out of next@16.1.1, is written up in full in
+// apps/dcs/lib/mfa-navigation.ts and is not repeated here.
 //
 // Lives in lib/ rather than inline in app/mfa/page.tsx because that page is
 // a client component and this repo's vitest runs in a node environment with
@@ -65,4 +70,13 @@ export function safeNextPath(next: unknown): string {
   // Return what was PARSED, not what arrived, so the value that was judged is
   // the value that gets navigated to.
   return url.pathname + url.search + url.hash
+}
+
+export type PostVerifyNavigation = {
+  /** window.location.assign — a full document load, no client cache involved. */
+  assign: (href: string) => void
+}
+
+export function navigateAfterMfaVerify(nav: PostVerifyNavigation, next: string): void {
+  nav.assign(safeNextPath(next))
 }
