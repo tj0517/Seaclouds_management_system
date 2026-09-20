@@ -2248,11 +2248,15 @@ here.
   to the three rules quoted in DCS's test), all three modes, plus a control that
   the model reproduces the hang when handed the old `router.push`. Its red is
   weak on its own (the function did not exist: 6 failed before, 33/33 after);
-  the real red/green is the browser walk above. That walk was a throwaway
-  Playwright script and is **not in the repo**: adding `playwright` to
+  the real red/green is the browser walk above. At 1a.25b that walk was a
+  throwaway Playwright script, kept out of the repo because `playwright` in
   `@scl/timesheet` would change `pnpm-lock.yaml`, shared with DCS and the
-  production Timesheet (owner's decision, 2026-09-20). To repeat it, follow the
-  local-run recipe in `docs/03-conventions.md` ("Testy przeglądarkowe").
+  production Timesheet. **Superseded by 1a.25c (PR #77):** the walk is now in
+  the repo as `apps/timesheet/e2e/mfa-navigation.mjs`, `playwright` is a
+  devDependency of `@scl/timesheet` (3 lines in `pnpm-lock.yaml`), and the
+  Vercel build of `seaclouds-management-system` on `941201d` completed with that
+  change. To repeat it, follow the local-run recipe in `docs/03-conventions.md`
+  ("Testy przeglądarkowe"); coverage gaps are in (xx).
 - **Local run deviated from the toolchain:** Node 22.23.2 instead of `.nvmrc`'s
   20.20.0 (not installed on this machine).
 - **Timesheet has no middleware or guard tests.** `app/(app)/admin/guards.test.ts`
@@ -2273,3 +2277,25 @@ here.
 - **One login timed out once after a fresh `next start` and passed on the very
   next run** (browser walk, first mode of the first "after" run). Not
   investigated; recorded so it is not read as a regression in the fix.
+
+## xx) Timesheet 1a.25c — coverage gaps in the `/mfa` browser guard
+
+`apps/timesheet/e2e/mfa-navigation.mjs` (1a.25c) proves the post-verify
+navigation in three factor states (verified / enrolment / pending). It does
+**not** cover the following, on purpose — they were left out of that PR by the
+owner and are recorded here so a green run is not read as covering them:
+
+- **Only the admin path is exercised.** `proxy.ts`'s aal2 gate has two ways in:
+  `profiles.role = 'admin'` and a `dcs.project_roles` row with role `dc`
+  (`isAdmin || isDocController`). The e2e users are admins; a Document
+  Controller reaching `/mfa` from a gated `/admin*` URL is not walked.
+- **The target is always `/admin`.** A deeper `next` (`/admin/users`,
+  `/admin/projects/<id>`) is not tested end to end. Relevant because the route
+  cache entry that caused the hang is keyed by the target href. The related,
+  already recorded `proxy.ts` behaviour — only `pathname` goes into `next`, so a
+  query is lost (see (ww)) — is a separate issue and stays there.
+
+**Pick this up with the next task that touches the aal2 gate** (`proxy.ts`, the
+`/admin` layout guard, or a shared `/mfa` per
+[ADR-0014](adr/0014-portal-admin.md)). Not to be started without the owner's
+go-ahead.
