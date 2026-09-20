@@ -12,6 +12,7 @@ attributed to a package rather than counting as a global change — see
 |---|---|
 | `check-dict-types.sh` | CI guard: the `DICT_TYPES` list in TypeScript must match the `dict_type` CHECK in the database. |
 | `mdr-export-fidelity.sql` | Fixtures for the MDR export fidelity proof (DCS 1b.06). Run by `apps/dcs/lib/mdr-export.fidelity.ts`, never on its own, and never against anything but the local stack. |
+| `revision-proofs.py` | Manual proofs for the 1b.08 revision generator and promotion trigger that pgTAP cannot give: `red` breaks each control on purpose and shows its test go red; `concurrency` races real parallel sessions against the two locks. Local stack only, not in CI. `concurrency` commits rows — run `supabase db reset` after. See its docstring. |
 | `validate-xlsx.py` | Validates a generated `.xlsx` as an OPC package. See below. |
 
 ---
