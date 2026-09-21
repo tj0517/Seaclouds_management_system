@@ -417,8 +417,17 @@ Zapisane przy DCS 1b.07 (2026-09-20).
   `view` pobiera, nie wgrywa; członek TES bez roli widzi wiersze `dcs.files`, nie dostaje bajtów
   (O-16); outsider 404 i 0 wierszy; DC na aal1 odmowa, na aal2 wgrywa; kolizja NN = 409
   `Duplicate` przy podpisywaniu, a obiekt-sierota w folderze (bez wiersza) nie blokuje numeru,
-  bo NN czyta się z wierszy **i** z listingu folderu. Przypadek `DownloadFileButton` nie używa
-  hooka (`useTransition`), więc nie ma go w tabeli wyżej; jego dowód to `e2e:files`.
+  bo NN czyta się z wierszy **i** z listingu folderu. Sekcja (h) (PR #81, runda 3) to UX wgrywania
+  na rewizji A: podwójny klik w „Upload" i dwa `form.requestSubmit()` w jednym tasku dają **dokładnie
+  jeden** obiekt i jeden wiersz (liczone `count(*)` w `dcs.files` i `storage.objects`); plik 50 MiB
+  (zapisywany do katalogu tymczasowego OS, upload dławiony przez CDP do 16 MiB/s, żeby pasek miał
+  wartości pośrednie) — `MutationObserver` w stronie loguje każdą zmianę `aria-valuenow` razem ze
+  stanem przycisku: pasek startuje od 0, ma wartości między, dochodzi do 100, a przy każdej z nich
+  (dopóki dialog ma `data-state="open"`) przycisk jest `disabled` i pokazuje „Adding…"; PUT
+  przerwany przez `page.route` → zdanie o sieci zamiast paska, przycisk wraca do „Upload", nic nie
+  zapisane, ten sam plik z tego samego dialogu ląduje przy ponownym kliknięciu. Przypadek
+  `DownloadFileButton` nie używa hooka (`useTransition`), więc nie ma go w tabeli wyżej; jego dowód
+  to `e2e:files`.
 - **`e2e:profile` bywa czerwone na ostatniej asercji („no console or hydration errors") z powodu
   niezależnego od zmiany pod testem: przerywanego hydrowania panelu (React #418), zmierzonego i
   nierozstrzygniętego w `docs/deferred-tasks.md` (ccc) — ok. 3 na 100 ładowań w sekwencji RED 3,

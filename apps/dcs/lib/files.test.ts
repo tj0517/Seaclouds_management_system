@@ -23,6 +23,8 @@ import {
   revisionFolder,
   TOO_LARGE_MESSAGE,
   UPLOAD_FORBIDDEN_MESSAGE,
+  UPLOAD_NETWORK_MESSAGE,
+  uploadNetworkError,
 } from './files'
 
 const REV = '33333333-3333-4333-8333-333333333333'
@@ -194,6 +196,13 @@ describe('mapUploadHttpError', () => {
   it('turns 403 into the policy sentence and keeps an unknown status readable', () => {
     expect(mapUploadHttpError(403, '')).toMatchObject({ error: 'forbidden', message: UPLOAD_FORBIDDEN_MESSAGE })
     expect(mapUploadHttpError(500, 'boom')).toMatchObject({ error: 'storage_error', message: 'The upload was refused (HTTP 500): boom' })
+  })
+
+  // PR #81 review round 3: a PUT that ends without a status (network, abort, timeout) is a sentence too,
+  // and one that says the file can be tried again — nothing was stored.
+  it('gives a PUT that got no HTTP answer its own sentence, which invites a retry', () => {
+    expect(uploadNetworkError()).toEqual({ ok: false, error: 'storage_error', message: UPLOAD_NETWORK_MESSAGE })
+    expect(UPLOAD_NETWORK_MESSAGE).toMatch(/try again/)
   })
 })
 

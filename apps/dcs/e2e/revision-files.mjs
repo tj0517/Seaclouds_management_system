@@ -27,9 +27,18 @@
 // local only). The bytes on the local storage volume are overwritten on the
 // next run. It WRITES to the local database and refuses any host but localhost.
 //
+// Section (h) (PR #81 review round 3) is the upload UX: a double click stores
+// exactly one object and one row; a 50 MiB file shows a progress bar that
+// reaches 100% while the submit button is disabled and reads "Adding…"; a PUT
+// that never gets an answer gives way to a sentence and can be retried. The
+// 50 MiB file is written to the OS temp directory and removed at the end.
+//
 // Optional environment: E2E_BASE_URL, E2E_SUPABASE_URL, E2E_ANON_KEY, E2E_DB_CONTAINER,
 // E2E_SHOTS, E2E_SKIP_EXPIRY=1 (skips the 61 s wait for the expired-URL check).
-/* global document */
+/* global document, window, MutationObserver */
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 import { API, BASE, IDS, accessToken, anonKey, guardLocal, go, holds, launch, psql, session, shot, toAal2 } from './support.mjs'
 
 guardLocal()
@@ -90,14 +99,16 @@ const objectRow = (path) => psql(`select name || '|' || coalesce(metadata->>'siz
  * file list carries `expectedName` — the server-rendered row, not the cleared
  * spinner, is what "done" means (docs/03-conventions.md).
  */
-async function uploadVia(page, trigger, { name, mimeType, content, kind }, expectedName) {
+async function uploadVia(page, trigger, { name, mimeType, content, kind, filePath }, expectedName, { submit, timeout = 15000 } = {}) {
   await trigger.click()
   const dialog = page.getByRole('dialog')
   await dialog.waitFor()
-  await dialog.locator('input[type=file]').setInputFiles({ name, mimeType, buffer: Buffer.from(content) })
+  // A path is handed to the browser as-is (a 50 MiB file is not pushed through the protocol as a buffer).
+  await dialog.locator('input[type=file]').setInputFiles(filePath ?? { name, mimeType, buffer: Buffer.from(content) })
   if (kind) await dialog.locator('#add-file-kind').selectOption(kind)
-  await dialog.getByRole('button', { name: 'Upload' }).click()
-  const landed = await holds(page, (n) => !!document.querySelector(`[data-file-row="${n}"]`), expectedName, 15000)
+  if (submit) await submit(dialog)
+  else await dialog.getByRole('button', { name: 'Upload' }).click()
+  const landed = await holds(page, (n) => !!document.querySelector(`[data-file-row="${n}"]`), expectedName, timeout)
   const pendingGone = landed && (await holds(page, () => !document.querySelector('.animate-spin') && !/Adding…/.test(document.body.innerText), null, 5000))
   return { landed, pendingGone, alert: landed ? '' : await dialog.locator('[role=alert]').innerText().catch(() => '') }
 }
@@ -308,6 +319,107 @@ let firstSignedAt = 0
   const NAME_6 = `${SCL}_B_IDC_${todayUtc}_06.pdf`
   const up = await uploadVia(page, page.locator('[data-revision-files="B"] button[data-add-file="B"]'), { name: 'after-orphan.pdf', mimeType: 'application/pdf', content: 'six', kind: 'original' }, NAME_6)
   rec('f: the next upload through the dialog skips the orphaned 05 and lands as 06 — the folder listing counts, not only the rows', up.landed && fileRow(NAME_6).startsWith(`${NAME_6}|after-orphan.pdf|${FOLDER_B}/${NAME_6}|`), up.alert || fileRow(NAME_6))
+  await ctx.close()
+}
+
+// =================================================================
+// (h) The upload UX (PR #81 review round 3): one upload per double click,
+//     a progress bar that reaches 100% under a disabled "Adding…" button,
+//     and a PUT with no answer that gives way to a sentence
+// =================================================================
+{
+  const { ctx, page } = await session(browser, 'orig.profile@local.test', errors)
+  await go(page, `${BASE}/documents/${DOC}?tab=revisions&open=${REV_A}`)
+  const trigger = page.locator('[data-revision-files="A"] button[data-add-file="A"]')
+  const rowsA = () => Number(psql(`select count(*) from dcs.files where revision_id = '${REV_A}'`))
+  const objectsA = () => Number(psql(`select count(*) from storage.objects where bucket_id = 'dcs-documents' and name like '${FOLDER_A}/%'`))
+  rec('h: setup — revision A carries one row and one object (a/4)', rowsA() === 1 && objectsA() === 1, `${rowsA()} rows, ${objectsA()} objects`)
+
+  // ---- 1. a real double click on Upload: the second click meets a disabled button ----
+  const NAME_A2 = `${SCL}_A_IDC_2026-09-19_02.pdf`
+  const big = Buffer.alloc(4 * 1024 * 1024, 1) // 4 MiB: the first upload is still in flight when the second click lands
+  const dbl = await uploadVia(page, trigger, { name: 'double-click.pdf', mimeType: 'application/pdf', content: big, kind: 'original' }, NAME_A2, {
+    submit: (dialog) => dialog.getByRole('button', { name: 'Upload' }).dblclick(),
+  })
+  // Give a second upload, had one started, time to finish before counting.
+  await page.waitForTimeout(1500)
+  rec('h/1: a double click on Upload stores exactly one row and one object (NN 02, no 03)', dbl.landed && dbl.pendingGone && rowsA() === 2 && objectsA() === 2 && fileRow(`${SCL}_A_IDC_2026-09-19_03.pdf`) === '', `${rowsA()} rows, ${objectsA()} objects`)
+
+  // ---- 2. two submits in one task (Enter held down, a flaky trackpad): the latch, not the disabled attribute ----
+  // form.requestSubmit() ignores a disabled submit button, so this is the hook's latch alone being tested.
+  const NAME_A3 = `${SCL}_A_IDC_2026-09-19_03.pdf`
+  const twice = await uploadVia(page, trigger, { name: 'two-submits.pdf', mimeType: 'application/pdf', content: big, kind: 'original' }, NAME_A3, {
+    submit: (dialog) => dialog.locator('form').evaluate((form) => { form.requestSubmit(); form.requestSubmit() }),
+  })
+  await page.waitForTimeout(1500)
+  rec('h/2: two synchronous submits store exactly one row and one object (NN 03, no 04) — the single-flight latch', twice.landed && twice.pendingGone && rowsA() === 3 && objectsA() === 3 && fileRow(`${SCL}_A_IDC_2026-09-19_04.pdf`) === '', `${rowsA()} rows, ${objectsA()} objects`)
+
+  // ---- 3. a 50 MiB file: the bar, the percent, the disabled button, the stored row ----
+  const LARGE_BYTES = 50 * 1024 * 1024
+  const largePath = path.join(os.tmpdir(), 'dcs-e2e-large-upload.bin')
+  fs.writeFileSync(largePath, Buffer.alloc(LARGE_BYTES, 7))
+  const NAME_A4 = `${SCL}_A_IDC_2026-09-19_04.bin`
+  // Every change of the bar (and its appearance) is logged in the page together with what the submit
+  // button showed at that moment — a polling loop from here could miss a fast local upload.
+  await page.evaluate(() => {
+    window.__uploadLog = []
+    const snap = () => {
+      const dialog = document.querySelector('[role=dialog]')
+      const bar = document.querySelector('[role=dialog] [role=progressbar]')
+      const button = document.querySelector('[role=dialog] button[type=submit]')
+      window.__uploadLog.push({
+        // Radix keeps the closing dialog in the DOM for its exit animation (data-state="closed"); by then
+        // the list may already be refreshed and the button back to "Upload" — that is after "done".
+        open: dialog?.getAttribute('data-state') === 'open',
+        value: bar ? Number(bar.getAttribute('aria-valuenow')) : null,
+        text: bar?.parentElement?.querySelector('p')?.textContent ?? '',
+        label: button?.textContent?.trim() ?? '',
+        disabled: button ? button.disabled : null,
+      })
+    }
+    new MutationObserver(snap).observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['aria-valuenow', 'disabled'] })
+  })
+  // Localhost takes 50 MiB in well under a second, which leaves the bar no time to show a value between 0
+  // and 100. Chromium's network emulation (CDP) caps the upload at 16 MiB/s for this one case: ~3 s.
+  const cdp = await ctx.newCDPSession(page)
+  await cdp.send('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: 16 * 1024 * 1024 })
+  const large = await uploadVia(page, trigger, { filePath: largePath, kind: 'attachment' }, NAME_A4, { timeout: 90000 })
+  await cdp.send('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 })
+  await cdp.detach()
+  const log = (await page.evaluate(() => window.__uploadLog)).filter((e) => e.value !== null && e.open)
+  const values = log.map((e) => e.value)
+  const maxSeen = values.length ? Math.max(...values) : -1
+  const idle = log.filter((e) => !(e.disabled === true && e.label === 'Adding…'))
+  const percentShown = log.some((e) => /Uploading… \d+%/.test(e.text)) && log.some((e) => /100%/.test(e.text))
+  // The browser names the MIME type of a .bin as it likes (Chromium: application/macbinary), so the row is
+  // checked around it.
+  const row4 = fileRow(NAME_A4)
+  rec('h/3: a 50 MiB file lands: the row carries size_bytes 52428800 and the object has the bytes', large.landed && large.pendingGone && row4.startsWith(`${NAME_A4}|dcs-e2e-large-upload.bin|${FOLDER_A}/${NAME_A4}|${LARGE_BYTES}|`) && row4.endsWith(`|attachment|4|${IDS.ORIG}`) && objectRow(`${FOLDER_A}/${NAME_A4}`) === `${FOLDER_A}/${NAME_A4}|${LARGE_BYTES}`, large.alert || `${row4} / ${objectRow(`${FOLDER_A}/${NAME_A4}`)}`)
+  const between = values.filter((v) => v > 0 && v < 100)
+  rec('h/3: the progress bar appears at 0, shows values between, and reaches 100% (aria-valuenow), with the percent as text', values[0] === 0 && between.length > 0 && maxSeen === 100 && percentShown, `values seen: ${[...new Set(values)].join(',')}`)
+  rec('h/3: while the dialog is open, at every value of the bar (0 to 100) the submit button is disabled and reads "Adding…"', log.length >= 2 && idle.length === 0, idle.length ? `not busy at: ${JSON.stringify(idle)}` : `${log.length} samples, values ${[...new Set(values)].join(',')}`)
+  fs.rmSync(largePath, { force: true })
+
+  // ---- 4. the PUT never gets an answer: the sentence replaces the bar, nothing is stored, the same file can be retried ----
+  const NAME_A5 = `${SCL}_A_IDC_2026-09-19_05.pdf`
+  const isSignedPut = (request) => request.method() === 'PUT' && /\/storage\/v1\/object\/upload\/sign\//.test(request.url())
+  const signedUrlMatcher = (url) => url.pathname.includes('/storage/v1/object/upload/sign/')
+  await page.route(signedUrlMatcher, (route) => (isSignedPut(route.request()) ? route.abort('failed') : route.continue()))
+  await trigger.click()
+  const dialog = page.getByRole('dialog')
+  await dialog.waitFor()
+  await dialog.locator('input[type=file]').setInputFiles({ name: 'retry-me.pdf', mimeType: 'application/pdf', buffer: Buffer.from('retry') })
+  await dialog.getByRole('button', { name: 'Upload' }).click()
+  const alertShown = await holds(page, () => /did not reach the document store/.test(document.querySelector('[role=dialog] [role=alert]')?.textContent ?? ''), null, 10000)
+  const barGone = alertShown && (await dialog.locator('[role=progressbar]').count()) === 0
+  const uploadEnabled = alertShown && (await holds(page, () => { const b = document.querySelector('[role=dialog] button[type=submit]'); return !!b && !b.disabled && b.textContent.trim() === 'Upload' }, null, 5000))
+  rec('h/4: a PUT with no answer (aborted in flight) gives way to the network sentence; the bar is gone and Upload is enabled again', alertShown && barGone && uploadEnabled, await dialog.locator('[role=alert]').innerText().catch(() => '(no alert)'))
+  rec('h/4: nothing was stored by the failed attempt (still 4 rows, 4 objects on A)', rowsA() === 4 && objectsA() === 4 && fileRow(NAME_A5) === '', `${rowsA()} rows, ${objectsA()} objects`)
+  await shot(page, 'files-h4-network-sentence')
+  await page.unroute(signedUrlMatcher)
+  await dialog.getByRole('button', { name: 'Upload' }).click()
+  const retried = await holds(page, (n) => !!document.querySelector(`[data-file-row="${n}"]`), NAME_A5, 15000)
+  rec('h/4: the same file, submitted again from the same dialog, lands as NN 05 (a fresh URL, NN recomputed)', retried && fileRow(NAME_A5).startsWith(`${NAME_A5}|retry-me.pdf|${FOLDER_A}/${NAME_A5}|5|`), fileRow(NAME_A5))
   await ctx.close()
 }
 

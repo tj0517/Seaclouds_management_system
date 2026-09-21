@@ -984,6 +984,18 @@ użytkownika trafia do `original_name` i jest podpowiedzią. Klucz obiektu
 action generuje nazwę i podpisuje URL wgrania **na sesji użytkownika**
 (`createSignedUploadUrl`), przeglądarka robi PUT prosto do Storage, potem
 server action wstawia wiersz (`sort_order` = NN, `uploaded_by` z sesji).
+PUT to `XMLHttpRequest` na ten sam podpisany URL, z tymi samymi dwoma
+nagłówkami (`content-type`, `x-upsert: false`) — nie `fetch`, bo tylko XHR
+ma `upload.onprogress`, z którego dialog rysuje pasek procentów (PR #81,
+runda 3); bez TUS/resumable. Ciałem żądania jest sam obiekt `File`, więc
+przeglądarka strumieniuje bajty z dysku — kod nigdy nie czyta zawartości
+pliku (żadnego `arrayBuffer()`, `FileReader`, hashowania ani kopii `Blob`;
+czytane są tylko `name`, `size`, `type`). PUT bez odpowiedzi HTTP (zerwane
+połączenie, abort) to osobne zdanie z zachętą do ponowienia
+(`UPLOAD_NETWORK_MESSAGE`) — nic nie zostało zapisane, następna próba
+podpisuje nowy URL i liczy NN od nowa. Od kliknięcia do odświeżonej listy
+przycisk jest wyłączony i pokazuje „Adding…", a drugi klik w tym oknie
+odrzuca zatrzask hooka (`lib/single-flight.ts`).
 Pobranie: server action sprawdza dostęp odczytem (`dcs.files` pod RLS,
 `createSignedUrl(path, 60, { download: file_name })` na sesji użytkownika),
 odmowa i „nie ma obiektu" to jedno zdanie, sukces to `redirect()` na URL.

@@ -192,6 +192,19 @@ export const COLLISION_MESSAGE =
 
 export const TOO_LARGE_MESSAGE = 'The file is larger than the 100 MiB limit of the document store.'
 
+/**
+ * The PUT to the signed URL never got an HTTP answer (the connection dropped,
+ * the request was aborted or timed out). Nothing was stored — the storage-api
+ * writes an object only on a completed body — so the same upload can be tried
+ * again; the next attempt signs a fresh URL and recomputes NN.
+ */
+export const UPLOAD_NETWORK_MESSAGE = 'The upload did not reach the document store. Check the connection and try again.'
+
+/** The refusal shown when the browser's PUT ended without a status: a network error, an abort, a timeout. */
+export function uploadNetworkError(): { ok: false; error: FileError; message?: string } {
+  return fail('storage_error', UPLOAD_NETWORK_MESSAGE)
+}
+
 export function isFileKind(value: unknown): value is FileKind {
   return typeof value === 'string' && (FILE_KINDS as readonly string[]).includes(value)
 }

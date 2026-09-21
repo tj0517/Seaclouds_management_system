@@ -18,11 +18,23 @@
 // shown as a sentence (mapUploadHttpError) — a check here would hide which
 // limit refused the file.
 //
+// The bytes are never read here. The File the input handed over is given to the
+// request as the body itself, so the browser streams it from disk; only its
+// name, size and type (metadata, no content) are looked at. The PUT is an
+// XMLHttpRequest rather than fetch for one reason — `upload.onprogress`, which
+// fetch does not have — to the same signed URL, with the same two headers the
+// URL requires (content-type, x-upsert: false). Nothing else changed: no TUS,
+// no resumable protocol, the server actions and the policies are as they were.
+//
 // Rendered twice: in the current-revision panel (for the current revision) and
 // in each expanded row of the Revisions tab (for that row's revision). Both
 // finish the same way: the dialog closes and the page tree is refreshed, so
 // the new row appears in the list — that refreshed list is what "done" means
-// (hooks/use-pending-action.ts; e2e:pending measures it).
+// (hooks/use-pending-action.ts; e2e:pending measures it). From the click until
+// then the submit button is disabled and reads "Adding…" (`pending`), and a
+// second click in that window is refused by the hook's latch (lib/single-flight.ts)
+// before the DOM has even committed `disabled` — e2e:files proves a double click
+// stores exactly one object and one row.
 import { useState } from 'react'
 import { Loader2, Plus } from 'lucide-react'
 import { SELECT_CLASS } from '@/components/AddMemberForm'
@@ -39,7 +51,7 @@ import {
 import { Label } from '@/components/ui/label'
 import { prepareFileUpload, recordFileUpload } from '@/app/data/actions/files'
 import { SKIPPED, usePendingAction } from '@/hooks/use-pending-action'
-import { FILE_KIND_LABELS, FILE_KINDS, mapUploadHttpError, type FileKind, type FileResult } from '@/lib/files'
+import { FILE_KIND_LABELS, FILE_KINDS, mapUploadHttpError, uploadNetworkError, type FileKind, type FileResult } from '@/lib/files'
 import { formatFileSize } from '@/lib/document-profile'
 
 export type AddFileDialogProps = {
@@ -51,12 +63,44 @@ export type AddFileDialogProps = {
   variant?: 'panel' | 'row'
 }
 
+/**
+ * PUTs `file` to the signed upload URL and reports progress as a whole percent.
+ * Resolves with the HTTP answer, or with null when there was none (a dropped
+ * connection, an abort, a timeout) — it never rejects, so the caller always
+ * gets a FileResult and the pending state always clears.
+ */
+function putToSignedUrl(
+  url: string,
+  file: File,
+  mimeType: string,
+  onProgress: (percent: number) => void,
+): Promise<{ status: number; body: string } | null> {
+  return new Promise((resolve) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open('PUT', url)
+    xhr.setRequestHeader('content-type', mimeType)
+    // No upsert: an object is never overwritten (there is no UPDATE policy either).
+    xhr.setRequestHeader('x-upsert', 'false')
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable && event.total > 0) onProgress(Math.min(100, Math.floor((event.loaded / event.total) * 100)))
+    }
+    xhr.onload = () => resolve({ status: xhr.status, body: xhr.responseText })
+    xhr.onerror = () => resolve(null)
+    xhr.onabort = () => resolve(null)
+    xhr.ontimeout = () => resolve(null)
+    xhr.send(file)
+  })
+}
+
 export default function AddFileDialog({ revisionId, revisionLabel, documentNumber, variant = 'row' }: AddFileDialogProps) {
   const { run, refresh, pending } = usePendingAction()
   const [open, setOpen] = useState(false)
   const [file, setFile] = useState<File | null>(null)
   const [fileKind, setFileKind] = useState<FileKind>('original')
   const [error, setError] = useState<string | null>(null)
+  // null: no bar (nothing has been sent yet, or the last attempt was refused). 0–100 while the
+  // bytes go out and, at 100, while the row is written and the tree refreshed.
+  const [progress, setProgress] = useState<number | null>(null)
   // A new key remounts the <input type=file> when the dialog reopens: a file input cannot be cleared by value.
   const [inputKey, setInputKey] = useState(0)
 
@@ -64,6 +108,7 @@ export default function AddFileDialog({ revisionId, revisionLabel, documentNumbe
     setFile(null)
     setFileKind('original')
     setError(null)
+    setProgress(null)
     setInputKey((key) => key + 1)
   }
 
@@ -78,14 +123,12 @@ export default function AddFileDialog({ revisionId, revisionLabel, documentNumbe
     const result = await run<FileResult<{ id: string; documentId: string; fileName: string }>>(async () => {
       const prepared = await prepareFileUpload({ revisionId, fileKind, originalName: chosen.name })
       if (!prepared.ok) return prepared
-      // Straight to Storage, with the token the server signed into the URL. No
-      // upsert: an object is never overwritten (there is no UPDATE policy either).
-      const response = await fetch(prepared.data.signedUrl, {
-        method: 'PUT',
-        headers: { 'content-type': mimeType ?? 'application/octet-stream', 'x-upsert': 'false' },
-        body: chosen,
-      })
-      if (!response.ok) return mapUploadHttpError(response.status, await response.text().catch(() => ''))
+      // Straight to Storage, with the token the server signed into the URL.
+      setProgress(0)
+      const response = await putToSignedUrl(prepared.data.signedUrl, chosen, mimeType ?? 'application/octet-stream', setProgress)
+      if (!response) return uploadNetworkError()
+      if (response.status < 200 || response.status >= 300) return mapUploadHttpError(response.status, response.body)
+      setProgress(100)
       return recordFileUpload({
         revisionId,
         fileKind,
@@ -98,6 +141,8 @@ export default function AddFileDialog({ revisionId, revisionLabel, documentNumbe
     })
     if (result === SKIPPED) return
     if (!result.ok) {
+      // The bar gives way to the sentence.
+      setProgress(null)
       setError(result.message ?? result.error)
       return
     }
@@ -176,6 +221,23 @@ export default function AddFileDialog({ revisionId, revisionLabel, documentNumbe
               ))}
             </select>
           </div>
+
+          {progress !== null ? (
+            <div className="space-y-1">
+              <div
+                role="progressbar"
+                aria-label="Upload progress"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={progress}
+                data-upload-progress={progress}
+                className="h-2 w-full overflow-hidden rounded-full bg-muted"
+              >
+                <div className="h-full bg-primary transition-[width] duration-150" style={{ width: `${progress}%` }} />
+              </div>
+              <p className="text-xs text-muted-foreground">{progress < 100 ? `Uploading… ${progress}%` : 'Uploaded 100% — saving the file…'}</p>
+            </div>
+          ) : null}
 
           {error ? (
             <p role="alert" className="text-xs text-destructive">
