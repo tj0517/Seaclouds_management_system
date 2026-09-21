@@ -75,9 +75,9 @@ select columns_are('dcs', 'documents',
 select columns_are('dcs', 'revisions',
   array['id', 'document_id', 'project_id', 'scl_revision', 'cpy_revision',
         'step_id', 'reason_for_issue', 'revision_date', 'acceptance_code_id',
-        'status_id', 'created_by', 'created_at', 'updated_at',
+        'status_id', 'created_by', 'created_at', 'updated_at', 'locked_at',
         'step_dict_type', 'acceptance_code_dict_type', 'status_dict_type'],
-  'revisions: the 1b.01 columns, including project_id and the three discriminators');
+  'revisions: the 1b.01 columns, including project_id and the three discriminators — and locked_at, added by DCS 1b.10');
 select columns_are('dcs', 'files',
   array['id', 'revision_id', 'project_id', 'file_name', 'original_name',
         'storage_path', 'file_kind', 'sort_order', 'size_bytes', 'mime_type',

@@ -294,6 +294,7 @@ export type Database = {
           created_by: string | null
           document_id: string
           id: string
+          locked_at: string | null
           project_id: string
           reason_for_issue: string | null
           revision_date: string | null
@@ -312,6 +313,7 @@ export type Database = {
           created_by?: string | null
           document_id: string
           id?: string
+          locked_at?: string | null
           project_id: string
           reason_for_issue?: string | null
           revision_date?: string | null
@@ -330,6 +332,7 @@ export type Database = {
           created_by?: string | null
           document_id?: string
           id?: string
+          locked_at?: string | null
           project_id?: string
           reason_for_issue?: string | null
           revision_date?: string | null
