@@ -97,7 +97,7 @@ select col_not_null('dcs', 'documents', 'area_id', 'documents.area_id is NOT NUL
 select col_not_null('dcs', 'documents', 'language_id', 'documents.language_id is NOT NULL');
 select col_not_null('dcs', 'documents', 'workflow_status_id', 'documents.workflow_status_id is NOT NULL');
 select col_is_null('dcs', 'documents', 'cpy_doc_number', 'documents.cpy_doc_number is nullable (no CPY number until the client issues one)');
-select col_is_null('dcs', 'files', 'file_name', 'files.file_name is nullable until 1b.09 generates it');
+select col_not_null('dcs', 'files', 'file_name', 'files.file_name is NOT NULL since 1b.09 (files_paths_not_null)');
 
 select col_is_unique('dcs', 'documents', array['scl_doc_number'],
   'scl_doc_number is unique globally');
@@ -315,8 +315,10 @@ select doc1_id, pej_id, 'SC2602-SCL-RA-0001-EN', 'Fixture document',
 insert into dcs.revisions (id, document_id, project_id, scl_revision, step_id, status_id)
 select rev1_id, doc1_id, pej_id, 'A', step_id, status_id from t_fixture;
 
-insert into dcs.files (revision_id, project_id, file_kind, original_name)
-select rev1_id, pej_id, 'original', 'fixture.pdf' from t_fixture;
+-- DCS 1b.09 (files_paths_not_null): file_name, original_name and storage_path
+-- are NOT NULL, so every dcs.files insert in this file now supplies all three.
+insert into dcs.files (revision_id, project_id, file_kind, file_name, original_name, storage_path)
+select rev1_id, pej_id, 'original', 'fixture.pdf', 'fixture.pdf', 'SC2602/fixture.pdf' from t_fixture;
 
 -- ============================================================
 -- 4. Constraints and guard triggers, as postgres — RLS is not what is being
@@ -457,11 +459,11 @@ select lives_ok(
 
 -- files
 select throws_ok(
-  $$insert into dcs.files (revision_id, project_id, file_kind) select rev1_id, pej_id, 'sketch' from t_fixture$$,
+  $$insert into dcs.files (revision_id, project_id, file_kind, file_name, original_name, storage_path) select rev1_id, pej_id, 'sketch', 'f.pdf', 'f.pdf', 'SC2602/f.pdf' from t_fixture$$,
   '23514', null,
   'RED: a file_kind outside the CHECK list is rejected (23514)');
 select throws_ok(
-  $$insert into dcs.files (revision_id, project_id, file_kind) select rev1_id, it_id, 'original' from t_fixture$$,
+  $$insert into dcs.files (revision_id, project_id, file_kind, file_name, original_name, storage_path) select rev1_id, it_id, 'original', 'f.pdf', 'f.pdf', 'SC2602/f.pdf' from t_fixture$$,
   '23503', null,
   'RED: a file whose project_id is not its revision''s is rejected (23503, composite FK)');
 select throws_ok(
@@ -505,8 +507,8 @@ select doc1_id, pej_id, 'SC2602-SCL-RA-0001-EN', 'Fixture document',
   from t_fixture;
 insert into dcs.revisions (id, document_id, project_id, scl_revision, step_id, status_id)
 select rev1_id, doc1_id, pej_id, 'A', step_id, status_id from t_fixture;
-insert into dcs.files (revision_id, project_id, file_kind, original_name)
-select rev1_id, pej_id, 'original', 'fixture.pdf' from t_fixture;
+insert into dcs.files (revision_id, project_id, file_kind, file_name, original_name, storage_path)
+select rev1_id, pej_id, 'original', 'fixture.pdf', 'fixture.pdf', 'SC2602/fixture.pdf' from t_fixture;
 
 -- The bare row counts the RLS section compares against, read once as postgres
 -- (which is RLS-exempt) rather than hard-coded.
@@ -569,7 +571,7 @@ select throws_ok(
   '42501', null,
   'RED: a VIEW member cannot insert a revision (42501)');
 select throws_ok(
-  $$insert into dcs.files (revision_id, project_id, file_kind) select rev1_id, pej_id, 'original' from t_fixture$$,
+  $$insert into dcs.files (revision_id, project_id, file_kind, file_name, original_name, storage_path) select rev1_id, pej_id, 'original', 'f.pdf', 'f.pdf', 'SC2602/f.pdf' from t_fixture$$,
   '42501', null,
   'RED: a VIEW member cannot insert a file (42501)');
 
@@ -594,7 +596,7 @@ select lives_ok(
     select doc1_id, pej_id, 'O', step_id, status_id from t_fixture$$,
   'GREEN: an ORIG inserts a revision at aal1');
 select lives_ok(
-  $$insert into dcs.files (revision_id, project_id, file_kind) select rev1_id, pej_id, 'attachment' from t_fixture$$,
+  $$insert into dcs.files (revision_id, project_id, file_kind, file_name, original_name, storage_path) select rev1_id, pej_id, 'attachment', 'f.pdf', 'f.pdf', 'SC2602/f.pdf' from t_fixture$$,
   'GREEN: an ORIG inserts a file at aal1');
 
 -- DC inserts only at aal2.
