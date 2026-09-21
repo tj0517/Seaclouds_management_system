@@ -124,11 +124,9 @@ export function formatFileSize(bytes: number | null | undefined): string {
 }
 
 /**
- * The name a file row is listed under.
- *
- * file_name, original_name and storage_path are all nullable until 1b.09
- * (docs/02-data-model.md, dcs.files), so a row can legitimately have none of
- * them. The list must still render that row.
+ * The name a file row is listed under: the generated file_name (NOT NULL since
+ * 1b.09, migration 20260921112841). The fallbacks are kept for a row read
+ * through a type that still allows null — the list must render it either way.
  */
 export function fileDisplayName(file: {
   file_name: string | null
@@ -138,7 +136,15 @@ export function fileDisplayName(file: {
   return file.file_name || file.original_name || file.storage_path?.split('/').pop() || '(unnamed file)'
 }
 
-export type FileRowView = { id: string; name: string; kind: string; size: string; uploaded: string }
+export type FileRowView = {
+  id: string
+  name: string
+  /** The name the file was uploaded under — a hint beside the generated name; '' when it is the same or unknown. */
+  originalName: string
+  kind: string
+  size: string
+  uploaded: string
+}
 
 /**
  * A revision's files as the two places that list them draw them — the current-
@@ -159,6 +165,7 @@ export function toFileRows(
   return files.map((file) => ({
     id: file.id,
     name: fileDisplayName(file),
+    originalName: file.original_name && file.original_name !== fileDisplayName(file) ? file.original_name : '',
     kind: file.file_kind,
     size: formatFileSize(file.size_bytes),
     uploaded: formatTimestamp(file.uploaded_at),
@@ -172,17 +179,16 @@ export function toFileRows(
 export type PanelAction = { key: string; label: string; hint: string }
 
 /**
- * The buttons of the current-revision panel that are still disabled. All of them:
- * none may write to dcs.revisions or dcs.files from here. The hint is what the
- * tooltip and the visible caption say, and it names the task that turns the
- * button on — kept here, not in JSX, so a test can pin it.
+ * The buttons of the current-revision panel that are still disabled. The hint
+ * is what the tooltip and the visible caption say, and it names the phase that
+ * turns the button on — kept here, not in JSX, so a test can pin it.
  *
- * New Revision is not in this list any more: DCS 1b.08 made it a live dialog
- * (components/document-profile/NewRevisionDialog.tsx), rendered above these by
- * RevisionPanelActions.
+ * Not in this list any more: New Revision (a live dialog since DCS 1b.08,
+ * components/document-profile/NewRevisionDialog.tsx) and Add File (a live
+ * dialog since DCS 1b.09, AddFileDialog.tsx). RevisionPanelActions renders both
+ * above these.
  */
 export const PANEL_ACTIONS: readonly PanelAction[] = [
-  { key: 'add-file', label: 'Add File', hint: 'Arrives with DCS 1b.09' },
   { key: 'distribute-idc', label: 'Distribute for IDC', hint: 'Phase 2/3' },
   { key: 'initiate-review', label: 'Initiate Review', hint: 'Phase 2/3' },
   { key: 'initiate-approval', label: 'Initiate Approval', hint: 'Phase 2/3' },

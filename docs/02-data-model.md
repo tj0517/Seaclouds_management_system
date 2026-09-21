@@ -972,7 +972,51 @@ i DELETE — nadpisania ani usunięcia przez API nie ma, także dla admina
 czyta `public.projects`, do którego `anon` nie ma grantu (a `anon` i tak
 dostaje 42501 na `storage.objects` od 2026-08-31 przez `is_admin()` w
 politykach Timesheeta). Dostęp do bajtów tylko przez signed URL — PR 2.
-Test: `supabase/tests/storage_dcs_documents.test.sql` (68 asercji: bucket,
+**Aplikacja (DCS 1b.09 PR 2, `apps/dcs/lib/files.ts`):** nazwa pliku
+`[SCL_DOC_NUMBER]_[SCL_REV]_[STEP]_[YYYY-MM-DD]_[NN].[ext]` — data to
+`revisions.revision_date`, a gdy NULL, data wgrania w UTC; NN = największe NN
+na rewizji + 1 (czytane z wierszy `dcs.files` **i** z listingu folderu w
+buckecie, żeby obiekt bez wiersza nie blokował numeru), dwie cyfry, bez
+UNIQUE — kolizja to 409 `Duplicate` storage-api zamieniane na zdanie;
+rozszerzenie małymi literami, tylko `[a-z0-9]`, non-ASCII wycięte; nazwa
+użytkownika trafia do `original_name` i jest podpowiedzią. Klucz obiektu
+`{project_code}/{scl_doc_number}/{revision}/{file_name}`. Wgranie: server
+action generuje nazwę i podpisuje URL wgrania **na sesji użytkownika**
+(`createSignedUploadUrl`), przeglądarka robi PUT prosto do Storage, potem
+server action wstawia wiersz (`sort_order` = NN, `uploaded_by` z sesji).
+PUT to `XMLHttpRequest` na ten sam podpisany URL, z tymi samymi dwoma
+nagłówkami (`content-type`, `x-upsert: false`) — nie `fetch`, bo tylko XHR
+ma `upload.onprogress`, z którego dialog rysuje pasek procentów (PR #81,
+runda 3); bez TUS/resumable. Ciałem żądania jest sam obiekt `File`, więc
+przeglądarka strumieniuje bajty z dysku — kod nigdy nie czyta zawartości
+pliku (żadnego `arrayBuffer()`, `FileReader`, hashowania ani kopii `Blob`;
+czytane są tylko `name`, `size`, `type`). PUT bez odpowiedzi HTTP (zerwane
+połączenie, abort) to osobne zdanie z zachętą do ponowienia
+(`UPLOAD_NETWORK_MESSAGE`) — nic nie zostało zapisane, następna próba
+podpisuje nowy URL i liczy NN od nowa; server action, który rzuci zamiast
+odpowiedzieć (żądanie nie doszło do aplikacji albo odpowiedź nie jest
+odpowiedzią server action), to zdanie `UPLOAD_REQUEST_MESSAGE`, nigdy dialog
+zawieszony na „Adding…". Od kliknięcia do odświeżonej listy przycisk jest
+wyłączony i pokazuje „Adding…", a drugi klik w tym oknie odrzuca zatrzask
+hooka (`lib/single-flight.ts`); **dialog zamyka się dopiero w renderze, w
+którym odświeżone drzewo z nowym wierszem jest w DOM** (stan wyprowadzony:
+`open && !(closeWhenRefreshed && !pending)`), więc stara lista nigdy nie jest
+na ekranie bez wskaźnika (reguła w `03-conventions.md`, „Stany ładowania").
+Pobranie: server action sprawdza dostęp odczytem (`dcs.files` pod RLS,
+`createSignedUrl(path, 60, { download: file_name })` na sesji użytkownika),
+odmowa i „nie ma obiektu" to jedno zdanie, sukces to URL zwrócony jako dane,
+na który przycisk kieruje przeglądarkę przez `window.location.assign` — **nie
+`redirect()` z server action** (PR #81, runda 5): router kliencki Next
+zapisuje zewnętrzny redirect akcji jako swój `canonicalUrl` i wysyła każdą
+następną server action POST-em na ten adres (`server-action-reducer.js`,
+`fetch(state.canonicalUrl)`), a pobranie z `Content-Disposition: attachment`
+nie wyładowuje strony, więc do przeładowania każde Add File po pobraniu
+lądowało 400 w storage-api.
+`service_role` nie występuje w żadnym z tych kroków — polityki bucketa SĄ
+kontrolą dostępu. Testy: `apps/dcs/lib/files.test.ts` (reguła nazwy, NN,
+parsowanie, zdania błędów), `apps/dcs/e2e/revision-files.mjs` (`e2e:files`).
+
+Test bazy: `supabase/tests/storage_dcs_documents.test.sql` (68 asercji: bucket,
 pięć polityk i brak UPDATE/DELETE, NOT NULL z 23502, odczyt jako 8
 użytkowników gołym `count(*)` — członek TES bez roli DCS 0 wierszy przy
 widocznym wierszu `dcs.files`, VIEW 2 wiersze — INSERT 42501 dla

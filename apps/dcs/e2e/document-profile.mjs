@@ -56,6 +56,8 @@ function anonKey() {
   return line.slice(line.indexOf('=') + 1).trim()
 }
 const ANON = anonKey()
+// E2E_ERROR_CHARS: how much of each console/page error to keep (a dev build prints the hydration diff, which is long).
+const ERROR_CHARS = Number(process.env.E2E_ERROR_CHARS ?? 300)
 fs.mkdirSync(SHOTS, { recursive: true })
 
 // Fixed ids from supabase/fixtures/document_profile.sql.
@@ -95,10 +97,11 @@ const rec = (name, ok, detail = '') => {
 async function session(browser, email, viewport = { width: 1280, height: 900 }) {
   const ctx = await browser.newContext({ viewport })
   const page = await ctx.newPage()
+  // The page's URL is recorded with each error: a rare hydration error is only diagnosable by where it happened.
   page.on('console', (m) => {
-    if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) consoleErrors.push(`${email}: ${m.text().slice(0, 300)}`)
+    if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) consoleErrors.push(`${email} @ ${page.url()} (after "${results.at(-1)?.name ?? 'start'}"): ${m.text().slice(0, ERROR_CHARS)}`)
   })
-  page.on('pageerror', (e) => consoleErrors.push(`${email}: pageerror ${e.message.slice(0, 300)}`))
+  page.on('pageerror', (e) => consoleErrors.push(`${email} @ ${page.url()} (after "${results.at(-1)?.name ?? 'start'}"): pageerror ${e.message.slice(0, ERROR_CHARS)}`))
   await page.goto(`${BASE}/login`)
   await page.fill('#email', email)
   await page.fill('#password', 'password123')
@@ -125,7 +128,10 @@ async function toAal2(page, next, landing = '/documents') {
 }
 
 const text = async (page) => page.locator('main').innerText().catch(() => page.locator('body').innerText())
-const shot = (page, name, options = {}) => page.screenshot({ path: path.join(SHOTS, `${name}.png`), ...options })
+// caret: 'initial' — a default screenshot writes an inline caret-color into every <input>, which a shot taken
+// mid-hydration turns into a false React #418 (docs/03-conventions.md, "Pułapka: zrzut ekranu"). Measured here:
+// 1 of 10 e2e:profile runs on 2026-09-21 (DCS 1b.09 PR 2) before this line, 0 of 10 after.
+const shot = (page, name, options = {}) => page.screenshot({ path: path.join(SHOTS, `${name}.png`), caret: 'initial', ...options })
 
 async function accessToken(email) {
   const r = await fetch(`${API}/auth/v1/token?grant_type=password`, {
@@ -175,16 +181,21 @@ const browser = await chromium.launch()
     /SCL revision\s*\n?\s*A/.test(t) && /IDC/.test(t) && /Issued for internal discipline check/.test(t) && t.includes(`${SCL_A}_A_IDC_2026-09-19_01.docx`),
   )
   rec('a/2: the file row shows kind and size', /original/.test(t) && /2\.3 MB/.test(t))
-  rec('a/6: no download link in the panel', (await page.locator(`${PANEL} a`).count()) === 0)
+  rec('a/6: no download LINK in the panel — the Download control is a button that mints a signed URL on click (1b.09)', (await page.locator(`${PANEL} a`).count()) === 0 && (await page.locator(`${PANEL} button[data-download]`).count()) === 1)
 
-  // 1b.07 acceptance 6, as amended by DCS 1b.08: New Revision is a LIVE dialog now (the DC at aal2 gets
-  // an enabled button; new-revision.mjs proves what it does), so the disabled actions are the other
-  // five — each with its tooltip (title on the wrapper) AND the same sentence printed under the
-  // button and tied to it with aria-describedby.
+  // 1b.07 acceptance 6, as amended by DCS 1b.08 and 1b.09: New Revision and Add File are LIVE dialogs now
+  // (the DC at aal2 gets enabled buttons; new-revision.mjs and revision-files.mjs prove what they do), so the
+  // disabled actions are the other four — each with its tooltip (title on the wrapper) AND the same sentence
+  // printed under the button and tied to it with aria-describedby.
   rec(
     'a/6 (1b.08): New Revision is an ENABLED button for the DC at aal2',
     (await page.locator(`${PANEL} button:has-text("New Revision")`).count()) === 1 &&
       (await page.locator(`${PANEL} button:has-text("New Revision")`).isEnabled()),
+  )
+  rec(
+    'a/6 (1b.09): Add File is an ENABLED button for the DC at aal2 on a document with a current revision',
+    (await page.locator(`${PANEL} button:has-text("Add File")`).count()) === 1 &&
+      (await page.locator(`${PANEL} button:has-text("Add File")`).isEnabled()),
   )
   const actions = await page.locator(`${PANEL} li:has(span[title])`).evaluateAll((items) =>
     items.map((li) => {
@@ -200,15 +211,14 @@ const browser = await chromium.launch()
     }),
   )
   const expected = [
-    ['Add File', 'Arrives with DCS 1b.09'],
     ['Distribute for IDC', 'Phase 2/3'],
     ['Initiate Review', 'Phase 2/3'],
     ['Initiate Approval', 'Phase 2/3'],
     ['Create Transmittal', 'Phase 2/3'],
   ]
   rec(
-    'a/6: five disabled actions, each with its tooltip, its caption and aria-describedby',
-    actions.length === 5 &&
+    'a/6: four disabled actions, each with its tooltip, its caption and aria-describedby',
+    actions.length === 4 &&
       expected.every(([label, hint], i) => {
         const a = actions[i]
         return a.label === label && a.disabled && a.title === hint && a.caption === hint && a.described
@@ -273,6 +283,10 @@ const browser = await chromium.launch()
 
   await go(page, `${BASE}/documents/${DOC_B}`)
   rec('a/2: a document without a revision shows "No revision yet"', /No revision yet/.test(await text(page)))
+  rec(
+    'a/2 (1b.09): on a document without a revision Add File is disabled and says to issue one first',
+    (await page.locator(`${PANEL} button:has-text("Add File")`).isDisabled()) && /Issue the first revision/.test(await page.locator('#panel-action-add-file-hint').innerText()),
+  )
   await shot(page, 'a4-dc-no-revision', { fullPage: true })
 
   // RED PROOF 3: point the fixture document at NULL, reload, restore.

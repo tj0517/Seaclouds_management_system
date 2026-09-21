@@ -1,10 +1,10 @@
-// DCS 1b.07 / 1b.08: the actions of the current-revision panel.
+// DCS 1b.07 / 1b.08 / 1b.09: the actions of the current-revision panel.
 //
-// New Revision is live since DCS 1b.08 — a dialog for the readers the database
-// lets create one, and a disabled button that says why for everyone else (a Void
-// document, a viewer, a DC without the second factor). The other five stay
-// disabled, each naming the task or phase that turns it on; nothing here writes
-// to dcs.files (1b.09 owns files, and "Add File" says so).
+// New Revision is live since DCS 1b.08 and Add File since DCS 1b.09 — each a
+// dialog for the readers the database lets write, and a disabled button that
+// says why for everyone else (a Void document, a viewer, a DC without the
+// second factor, a document with no revision yet). The other four stay
+// disabled, each naming the phase that turns it on.
 //
 // The hint is shown twice on purpose. `title` sits on a wrapper span, not on
 // the button, because a disabled <button> receives no pointer events in some
@@ -14,12 +14,19 @@
 // fix both but is a new dependency — the decision recorded on the 1b.07 PR.)
 import { Button } from '@/components/ui/button'
 import { PANEL_ACTIONS } from '@/lib/document-profile'
+import type { FileUploadAccess } from '@/lib/files'
 import type { NewRevisionAccess } from '@/lib/revisions'
+import AddFileDialog from './AddFileDialog'
 import NewRevisionDialog, { type NewRevisionFormConfig } from './NewRevisionDialog'
 
 export type NewRevisionControl = { access: NewRevisionAccess; config: NewRevisionFormConfig }
+/** config is null when the document has no current revision (access is then 'no_revision'). */
+export type AddFileControl = {
+  access: FileUploadAccess
+  config: { revisionId: string; revisionLabel: string; documentNumber: string } | null
+}
 
-export default function RevisionPanelActions({ newRevision }: { newRevision: NewRevisionControl }) {
+export default function RevisionPanelActions({ newRevision, addFile }: { newRevision: NewRevisionControl; addFile: AddFileControl }) {
   const { access, config } = newRevision
   return (
     <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
@@ -35,6 +42,22 @@ export default function RevisionPanelActions({ newRevision }: { newRevision: New
             </span>
             <p id="panel-action-new-revision-hint" className="text-xs text-muted-foreground">
               {access.hint}
+            </p>
+          </>
+        )}
+      </li>
+      <li className="space-y-1">
+        {addFile.access.mode === 'enabled' && addFile.config ? (
+          <AddFileDialog variant="panel" {...addFile.config} />
+        ) : (
+          <>
+            <span title={addFile.access.mode === 'disabled' ? addFile.access.hint : undefined} className="block">
+              <Button type="button" disabled className="w-full" aria-describedby="panel-action-add-file-hint">
+                Add File
+              </Button>
+            </span>
+            <p id="panel-action-add-file-hint" className="text-xs text-muted-foreground">
+              {addFile.access.mode === 'disabled' ? addFile.access.hint : ''}
             </p>
           </>
         )}

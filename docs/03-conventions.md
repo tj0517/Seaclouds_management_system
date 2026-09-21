@@ -321,6 +321,14 @@ Zapisane przy DCS 1b.07 (2026-09-20).
   `docker exec -i -e PGOPTIONS='-c app.local_fixture=yes'
   supabase_db_Seaclouds_management_system psql -U postgres -v ON_ERROR_STOP=1
   < supabase/fixtures/<plik>.sql`.
+- **Od 1b.09 fixtura niesie `storage_path` na swoim wierszu `dcs.files`** (kolumna jest NOT NULL
+  od PR #80), ale **bez obiektu w buckecie** — to celowy przypadek „wiersz jest, bajtów nie ma":
+  Download na nim daje to samo zdanie co odmowa. Fixtura sprzed #80 (NULL) nie ładuje się już.
+  **Konsekwencja, której CI nie widzi:** fixtur nie ładuje ani `supabase test db`, ani `ci.yml`,
+  więc migracja, która zaostrza schemat (jak NOT NULL w #80), może zmergować się na zielono z
+  fixturą, która od tej chwili nie ładuje się wcale — wyszło dopiero przy pierwszym skrypcie
+  przeglądarkowym 1b.09 PR 2. Po każdej migracji ruszającej tabelę, którą fixtura wypełnia,
+  załaduj ją lokalnie i sprawdź (`docs/deferred-tasks.md`, ccc).
 - **Bezpiecznik:** plik odmawia uruchomienia bez `app.local_fixture=yes`.
   Konsola SQL w dashboardzie ani MCP `execute_sql` go nie ustawią. To pas
   bezpieczeństwa, nie granica — ktoś, kto ustawi zmienną, może go uruchomić
@@ -395,6 +403,60 @@ Zapisane przy DCS 1b.07 (2026-09-20).
   | `MdrToolbar` (zapisz, zmień nazwę, domyślny, usuń; eksport tylko `run`) | `/mdr` | `e2e:pending` |
   | `CreateProjectWizard`, `DocumentCreateForm` | `/admin/projects/new`, `/documents/new` | `e2e:pending` |
   | `NewRevisionDialog` | `/documents/[id]` | `e2e:revision` |
+  | `AddFileDialog` (panel i rozwinięty wiersz zakładki Revisions) | `/documents/[id]` | `e2e:pending` (`addfile`, `E2E_PROBE_N`), `e2e:files` |
+- **Czwarty skrypt, `e2e:files` (DCS 1b.09 PR 2):** `apps/dcs/e2e/revision-files.mjs`, te same
+  wymagania, ta sama fixtura (od 1b.09 zakłada też `tes.profile@local.test` — członek TES bez
+  roli DCS — i `view.profile@local.test`, rola `view`). Tworzy własny dokument z dwiema rewizjami
+  i sprząta go razem z wierszami `storage.objects` swojego folderu (lokalnie odstawia na jedną
+  instrukcję `storage.protect_delete` przez `storage.allow_delete_query`). Pokrywa: wgranie przez
+  wiersz zakładki i przez panel, nazwę generowaną (data rewizji albo data wgrania UTC, NN 01→02→03,
+  rozszerzenie małymi literami, brak rozszerzenia), `original_name` jako podpowiedź, pobranie
+  jako realny download przeglądarki pod nazwą generowaną, wygaśnięcie URL-a po 60 s (czeka
+  61 s; `E2E_SKIP_EXPIRY=1` pomija), brak publicznego URL-a, i odmowy dowiedzione **dwa razy** —
+  przez ekran i przez bezpośrednie wywołanie storage-api / PostgREST jako ten użytkownik:
+  `view` pobiera, nie wgrywa; członek TES bez roli widzi wiersze `dcs.files`, nie dostaje bajtów
+  (O-16); outsider 404 i 0 wierszy; DC na aal1 odmowa, na aal2 wgrywa; kolizja NN = 409
+  `Duplicate` przy podpisywaniu, a obiekt-sierota w folderze (bez wiersza) nie blokuje numeru,
+  bo NN czyta się z wierszy **i** z listingu folderu. Sekcja (h) (PR #81, rundy 3 i 4) to UX
+  wgrywania na rewizji A: podwójny klik w „Upload" i dwa `form.requestSubmit()` w jednym tasku dają
+  **dokładnie jeden** obiekt i jeden wiersz (liczone `count(*)` w `dcs.files` i `storage.objects`);
+  plik 50 MiB (zapisywany do katalogu tymczasowego OS, upload dławiony przez CDP do 16 MiB/s, żeby
+  pasek miał wartości pośrednie) — `MutationObserver` w stronie (`armSampler`) loguje każdą mutację
+  DOM razem ze stanem paska, przycisku i listy: pasek startuje od 0, ma wartości między, dochodzi
+  do 100, a przy każdej z nich (dopóki dialog ma `data-state="open"`) przycisk jest `disabled` i
+  pokazuje „Adding…"; PUT przerwany przez `page.route` → zdanie o sieci zamiast paska, przycisk
+  wraca do „Upload", nic nie zapisane, ten sam plik z tego samego dialogu ląduje przy ponownym
+  kliknięciu; **reguła nieaktualnej listy** (h/5): w każdej próbce od kliknięcia do pojawienia się
+  nowego wiersza jest wskaźnik albo wiersz, dialog jest otwarty w każdej z nich, a zamyka się dopiero
+  po wierszu (czerwony dowód: dialog zamykany przed odświeżeniem, jak do rundy 3, łamie tę asercję);
+  server action, którego POST przerywa `page.route` (h/6) → zdanie „The request to the server
+  failed…", przycisk wraca do „Upload", nic nie zapisane, ponowne kliknięcie ląduje. Sekcja (i)
+  (runda 4, po nieudanym wgraniu JPG na Preview, którego przyczyny nie udało się ustalić — żadne
+  żądanie tej próby nie dotarło ani do Vercela, ani do Supabase): pięć realnych plików graficznych
+  (`photo.jpg`, `IMG_4123.JPG` 4032×3024, `IMG_4124.jpeg`, `Zdjęcie z budowy 12.09 (v2).jpg`,
+  `screenshot.png`; generowane przez `sips`, albo z `E2E_IMAGES_DIR`) — każdy ląduje z nazwą
+  generowaną, `original_name`, rozmiarem, `image/jpeg`/`image/png` i obiektem. Przypadek
+  `DownloadFileButton` nie używa hooka (`useTransition`), więc nie ma go w tabeli wyżej; jego dowód
+  to `e2e:files`.
+- **`e2e:profile` bywa czerwone na ostatniej asercji („no console or hydration errors") z powodu
+  niezależnego od zmiany pod testem: przerywanego hydrowania panelu (React #418), zmierzonego i
+  nierozstrzygniętego w `docs/deferred-tasks.md` (ccc) — ok. 3 na 100 ładowań w sekwencji RED 3,
+  ok. 1 na 80 na `origin/main`. Skrypt drukuje przy błędzie URL i ostatnią zaliczoną asercję;
+  podawaj surowe liczby serii, nie „flaky".
+- **Pobranie: server action zwraca podpisany URL jako dane, a przycisk kieruje przeglądarkę
+  przez `window.location.assign`; nigdy `redirect()` z server action na URL zewnętrzny.**
+  Do rundy 5 przeglądu PR #81 pobranie było `redirect()`-em i strona „zostawała żywa"
+  (zakładki się przełączały), ale router Next zapisywał zewnętrzny redirect jako
+  `canonicalUrl` (`handleExternalUrl`, `mpaNavigation`), a `Content-Disposition: attachment`
+  nie wyładowuje strony — więc **każda następna server action na tej stronie szła POST-em na
+  URL storage** (`server-action-reducer.js`: `fetch(state.canonicalUrl)`), storage-api
+  odpowiadał 400, a przycisk Download zostawał wyłączony (tranzycja nigdy nie kończyła się).
+  Na Preview wyglądało to jak „JPG po pobraniu nie wgrywa się". Dowód: `e2e:files` h/0 i h/2
+  (dwa pobrania, wgranie bez przeładowania; wgranie, pobranie, wgranie) rejestrują każdy POST
+  z nagłówkiem `next-action` i wymagają adresu aplikacji; czerwony dowód na buildzie
+  `b25d34d`: POST na `…/storage/v1/object/sign/…`. Powtórzone w WebKicie (Playwright) — ta sama
+  ścieżka, bo mechanizm jest w routerze Next, nie w przeglądarce. Asercja a/5 („strona
+  zostaje żywa") stoi, ale nie jest dowodem na nic więcej.
 - **Dowód przeglądarkowy: build produkcyjny (`next build` + `next start`), nigdy
   `next dev` (DCS 1b.07b, 2026-09-21).** Dwa razy błąd po stronie klienta przeszedł
   na `next dev` i wyszedł dopiero na buildzie produkcyjnym: Timesheet `/mfa`
@@ -495,6 +557,32 @@ Zapisane przy DCS 1b.07 (2026-09-20).
   server actions w katalogu akcji aplikacji z `'use server'`.
 - `apps/dcs`: klient Supabase zawsze z generykiem `<Database>`; zakaz
   `as any` na zapytaniach (dług Timesheet nie przechodzi do DCS).
+
+## Stany ładowania w UI (decyzja z przeglądu PR #81, 2026-09-21)
+
+- **Każda akcja użytkownika zmieniająca dane pokazuje stan „w toku” od kliknięcia
+  do chwili, gdy wynik jest widoczny** — czyli odświeżone dane są w DOM (nowy
+  wiersz, nowa wartość, zremontowany `<input>`), a nie tylko do chwili, gdy
+  żądanie wróciło. Techniczny odpowiednik: `hooks/use-pending-action.ts` trzyma
+  `pending` przez `router.refresh()` w tranzycji; dialog, który zamyka się
+  wcześniej, łamie regułę, bo przez długość odświeżenia (400–470 ms na scl-dev)
+  użytkownik widzi starą listę bez żadnego znaku.
+- **Wyzwalacz akcji jest przez ten czas wyłączony**, więc podwójne wysłanie jest
+  niemożliwe — atrybut `disabled` jest tym, co użytkownik widzi, a zatrzask
+  `lib/single-flight.ts` tym, co trzyma (flipuje synchronicznie w handlerze
+  kliknięcia, zanim DOM dostanie `disabled`).
+- **Żaden ekran nie pokazuje po akcji nieaktualnych danych bez wskaźnika.** W
+  każdej chwili między kliknięciem a odświeżonym DOM na ekranie jest wskaźnik
+  (spinner, pasek, etykieta „Adding…/Saving…”) albo już nowe dane.
+- **Nowe UI nie jest przyjmowane bez dowodu w przeglądarce na buildzie
+  produkcyjnym** — skrypt `e2e:*` próbkuje DOM przy każdej mutacji od kliknięcia
+  do nowego wiersza i wymaga w każdej próbce wskaźnika albo wiersza (wzór:
+  `e2e:files` h/5, `armSampler` w `apps/dcs/e2e/revision-files.mjs`).
+- Stan: **DCS 1b.09 (Add File) jest pierwszym przepływem zgodnym z regułą** —
+  dialog zostaje otwarty z paskiem na 100% i przyciskiem „Adding…” aż do
+  odświeżonej listy. **Znana luka: New Revision (`NewRevisionDialog`) — zadanie
+  DCS 1b.08b**, nie ruszane w PR #81. Pozostałe ekrany z tabeli hooka niżej
+  mają wskaźnik na przycisku, ale nie były sprawdzane pod kątem trzeciego punktu.
 
 ## Dostęp do ekranów `/admin` w DCS
 

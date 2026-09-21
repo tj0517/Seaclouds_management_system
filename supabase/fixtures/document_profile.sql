@@ -30,6 +30,10 @@
 --   outsider.profile@local.test no role and no assignment anywhere — the 404 session
 --   e2e.admin@local.test        admin (profiles.role), with a VERIFIED TOTP factor, same
 --                               secret — DCS 1b.07b, for the /admin screens (aal2)
+--   tes.profile@local.test      DCS 1b.09: a Timesheet member of SC2602 (project_assignments
+--                               row) with NO DCS role — reads dcs.files metadata, is refused
+--                               the bytes (O-16, bucket SELECT policy of 20260921112840)
+--   view.profile@local.test     DCS 1b.09: `view` on SC2602 — downloads, cannot upload
 -- plus the seed's own admin, tjezionekspam@gmail.com.
 --
 -- Rows: two documents on SC2602 (project 6c0909ce-…). One has a current
@@ -62,7 +66,9 @@ insert into fx_users values
   ('f1000000-0000-4000-8000-000000000001', 'dc.profile@local.test',       'Dorota Controller'),
   ('f1000000-0000-4000-8000-000000000002', 'orig.profile@local.test',     'Oskar Originator'),
   ('f1000000-0000-4000-8000-000000000003', 'outsider.profile@local.test', 'Olga Outsider'),
-  ('f1000000-0000-4000-8000-0000000000a1', 'e2e.admin@local.test',        'E2E Admin');
+  ('f1000000-0000-4000-8000-0000000000a1', 'e2e.admin@local.test',        'E2E Admin'),
+  ('f1000000-0000-4000-8000-000000000004', 'tes.profile@local.test',      'Tadeusz Timesheet'),
+  ('f1000000-0000-4000-8000-000000000005', 'view.profile@local.test',     'Wiktoria Viewer');
 
 insert into auth.users (
   instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -99,13 +105,23 @@ insert into dcs.project_roles (project_id, user_id, role)
 select '6c0909ce-9b74-4bda-8e92-10811ff5a0fc'::uuid, u.id, r.role::dcs.project_role
 from (values
   ('f1000000-0000-4000-8000-000000000001'::uuid, 'dc'),
-  ('f1000000-0000-4000-8000-000000000002'::uuid, 'orig')
+  ('f1000000-0000-4000-8000-000000000002'::uuid, 'orig'),
+  ('f1000000-0000-4000-8000-000000000005'::uuid, 'view')
 ) as r(uid, role)
 join fx_users u on u.id = r.uid
 where not exists (
   select 1 from dcs.project_roles x
    where x.project_id = '6c0909ce-9b74-4bda-8e92-10811ff5a0fc' and x.user_id = u.id and x.role = r.role::dcs.project_role
 );
+
+-- DCS 1b.09: the Timesheet-only member — assigned to SC2602 in TES, no DCS role.
+-- is_project_member() is true for this row, so the register and dcs.files
+-- metadata are visible; the bucket's SELECT policy (has_project_role) is not.
+insert into public.project_assignments (project_id, user_id)
+select '6c0909ce-9b74-4bda-8e92-10811ff5a0fc', 'f1000000-0000-4000-8000-000000000004'
+where not exists (
+  select 1 from public.project_assignments
+   where project_id = '6c0909ce-9b74-4bda-8e92-10811ff5a0fc' and user_id = 'f1000000-0000-4000-8000-000000000004');
 
 -- A verified TOTP factor for the DC, so a browser session can reach aal2 by
 -- typing a code computed from the secret above (no QR enrolment in the way).
@@ -172,13 +188,16 @@ from dcs.documents d
 where d.id = 'f3000000-0000-4000-8000-000000000001'
   and not exists (select 1 from dcs.revisions x where x.id = 'f4000000-0000-4000-8000-000000000001');
 
--- A file row with no storage object behind it: the panel lists metadata only
--- (downloads and signed URLs are 1b.09), so storage_path stays NULL.
+-- A file row with NO storage object behind it (storage_path is NOT NULL since
+-- 1b.09 PR 1, so it carries the key the object would have). The panel lists
+-- it; pressing Download on it is the "object not there" case of the download
+-- action — the same sentence as a refusal — and e2e:files asserts exactly that.
 insert into dcs.files (
-  id, revision_id, project_id, file_kind, file_name, original_name, mime_type, size_bytes, uploaded_by)
+  id, revision_id, project_id, file_kind, file_name, original_name, storage_path, mime_type, size_bytes, uploaded_by)
 select
   'f5000000-0000-4000-8000-000000000001', r.id, r.project_id, 'original',
   d.scl_doc_number || '_A_IDC_2026-09-19_01.docx', 'Survey report draft.docx',
+  'SC2602/' || d.scl_doc_number || '/A/' || d.scl_doc_number || '_A_IDC_2026-09-19_01.docx',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 2411520,
   'f1000000-0000-4000-8000-000000000002'
 from dcs.revisions r

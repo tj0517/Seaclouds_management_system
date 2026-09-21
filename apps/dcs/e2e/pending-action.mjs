@@ -34,7 +34,10 @@
 //   E2E_PROBE_N  attempts for the two screens known to sit under the boundary that
 //                caused the defect — the CPY field and /mdr (default 30)
 //   E2E_SITES    comma list to run only some: cpy,addmember,roles,editproject,
-//                clients,dictionaries,mdr,wizard,docform
+//                clients,dictionaries,mdr,wizard,docform,addfile
+//                (addfile — DCS 1b.09, the Add File dialog: E2E_PROBE_N uploads
+//                through the panel; "done" = the refreshed file list carries
+//                one more server-rendered row)
 //   E2E_BASE_URL, E2E_SUPABASE_URL, E2E_DB_CONTAINER, E2E_SHOTS
 //
 // Not in this file, because they already have a script: NewRevisionDialog
@@ -128,7 +131,7 @@ if (needAdmin()) {
   admin = await session(browser, 'e2e.admin@local.test', errors)
   await toAal2(admin.page, `/admin/projects/${IDS.PEJ}`)
 }
-if (want('docform')) orig = await session(browser, 'orig.profile@local.test', errors)
+if (want('docform') || want('addfile')) orig = await session(browser, 'orig.profile@local.test', errors)
 
 // ---------------------------------------------------------------------------
 // 1. CpyNumberField — /documents/[documentId] (on a document of this script's own)
@@ -445,6 +448,52 @@ if (want('docform')) {
     )
   }
   drop()
+}
+
+// ---------------------------------------------------------------------------
+// 13. AddFileDialog — /documents/[documentId], the panel's Add File (DCS 1b.09)
+// ---------------------------------------------------------------------------
+if (want('addfile')) {
+  const { page } = orig
+  row('addfile', 'AddFileDialog')
+  const site = tally.get('addfile')
+  // Its own document with one revision; the folder's objects are removed with it at the end (local only:
+  // the storage-api's delete guard is stood aside for that statement).
+  const doc = 'f3000000-0000-4000-8000-0000000000f1'
+  const rev = 'f4000000-0000-4000-8000-0000000000f1'
+  const dict = (type, code) => psql(`select id from dcs.dictionaries where dict_type = '${type}' and code = '${code}'`)
+  const cleanFiles = () => {
+    const folder = psql(`select 'SC2602/' || scl_doc_number || '/' from dcs.documents where id = '${doc}'`)
+    if (folder) psql(`set storage.allow_delete_query = 'true'; delete from storage.objects where bucket_id = 'dcs-documents' and name like '${folder}%'`)
+    psql(`delete from dcs.documents where id = '${doc}'`)
+  }
+  cleanFiles()
+  psql(`insert into dcs.documents (id, project_id, title, doc_type_id, discipline_id, area_id, language_id, workflow_status_id, originator_id)
+        values ('${doc}', '${IDS.PEJ}', 'E2E pending-action Add File document', '${dict('doc_type', 'RA')}', '${dict('discipline', 'A00')}',
+                '${dict('area', '00')}', '${dict('language', 'EN')}', '${dict('workflow_status', 'NOT_STARTED')}', '${IDS.ORIG}');
+        insert into dcs.revisions (id, document_id, project_id, scl_revision, step_id, status_id, revision_date, created_by)
+        values ('${rev}', '${doc}', '${IDS.PEJ}', 'A', '${dict('workflow_step', 'IDC')}', '${dict('workflow_status', 'IDC')}', date '2026-09-19', '${IDS.ORIG}')`)
+  const PANEL = 'aside[aria-label="Current revision"]'
+  for (let i = 1; i <= PROBE_N; i++) {
+    await go(page, `${BASE}/documents/${doc}`)
+    const before = await page.locator(`${PANEL} [data-file-row]`).count()
+    await attempt(
+      'addfile',
+      page,
+      async () => {
+        await page.locator(`${PANEL} button[data-add-file="A"]`).click()
+        const dialog = page.getByRole('dialog')
+        await dialog.waitFor()
+        await dialog.locator('input[type=file]').setInputFiles({ name: `probe-${pad(i)}.txt`, mimeType: 'text/plain', buffer: Buffer.from(`probe ${i}`) })
+        await dialog.getByRole('button', { name: 'Upload' }).click()
+      },
+      // One more server-rendered file row in the panel: the refreshed tree, not the cleared spinner.
+      (n) => document.querySelectorAll('aside[aria-label="Current revision"] [data-file-row]').length > n,
+      before,
+    )
+    if (Number(psql(`select count(*) from dcs.files where revision_id = '${rev}'`)) !== i) site.notStored += 1
+  }
+  cleanFiles()
 }
 
 await shot((admin ?? dc ?? orig).page, 'pending-action-last-page', { fullPage: true }).catch(() => undefined)

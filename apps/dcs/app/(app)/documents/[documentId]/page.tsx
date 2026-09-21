@@ -1,6 +1,8 @@
 // DCS 1b.07: the document profile — Information / Additional attributes on the
 // left, the current revision on the right, History from the audit log.
 // DCS 1b.08 adds the Revisions tab and makes New Revision a live dialog.
+// DCS 1b.09 adds Add File (a dialog in the panel and in each expanded revision
+// row) and a Download button on every file row.
 //
 // Third screen of the mock-ups (brief §9.3, PIMS annex D). Every tab and the
 // panel is its own component so 1b.09 (files) and 1b.11 (status / Void) each
@@ -30,6 +32,7 @@ import { CommentsTab, PlanTab, ReferencesTab, TransmittalsTab } from '@/componen
 import RevisionsTab from '@/components/document-profile/RevisionsTab'
 import { fetchUserProjectRoles, hasAnyRole } from '@/lib/auth-helpers'
 import { getActiveDictionary } from '@/lib/dictionaries'
+import { fileUploadAccess } from '@/lib/files'
 import {
   cpyFieldMode,
   dictionaryLabel,
@@ -166,6 +169,21 @@ export default async function DocumentProfilePage({
   }
   const revisionRows = toRevisionRows(revisions, document.current_revision_id, nameById)
 
+  // Add File. MIRRORS the three INSERT policies on storage.objects / dcs.files
+  // (fileUploadAccess says so): the storage-api and RLS decide who may actually
+  // write, as the signed-in user, when the upload URL is signed and the row is
+  // inserted. The panel's control is for the current revision; the Revisions
+  // tab asks per row, where a revision always exists.
+  const isAdmin = sessionProfile?.role === 'admin'
+  const isOrig = hasAnyRole(projectRoles, ['orig'])
+  const addFile = {
+    access: fileUploadAccess({ hasRevision: current !== null, isAdmin, isOrig, isDc: isProjectDc, aal2 }),
+    config: current
+      ? { revisionId: current.revision.id, revisionLabel: current.revision.scl_revision, documentNumber: document.scl_doc_number }
+      : null,
+  }
+  const rowUpload = fileUploadAccess({ hasRevision: true, isAdmin, isOrig, isDc: isProjectDc, aal2 })
+
   const projectLabel = project ? `${project.project_code} — ${project.name}` : 'Project'
 
   return (
@@ -224,7 +242,7 @@ export default async function DocumentProfilePage({
               />
             </TabsContent>
             <TabsContent value="revisions">
-              <RevisionsTab rows={revisionRows} openId={openRevisionId} />
+              <RevisionsTab rows={revisionRows} openId={openRevisionId} documentNumber={document.scl_doc_number} upload={rowUpload} />
             </TabsContent>
             <TabsContent value="plan">
               <PlanTab />
@@ -244,7 +262,7 @@ export default async function DocumentProfilePage({
           </Tabs>
 
           <div className="min-w-0">
-            <CurrentRevisionPanel current={current} newRevision={newRevision} />
+            <CurrentRevisionPanel current={current} newRevision={newRevision} addFile={addFile} />
           </div>
         </div>
       </PageBody>

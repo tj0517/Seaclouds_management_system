@@ -3,9 +3,10 @@
 // DCS 1b.08: the Revisions tab — every revision of the document, newest first,
 // each row expandable to that revision's files.
 //
-// Read-only, and it stays that way: no edit, no delete, no "Add files" control
-// (enabled or disabled) — files are 1b.09. Today every expanded list is empty
-// and says so. The rows arrive as strings already (toRevisionRows in
+// The rows are read-only: no edit, no delete. Each expanded row lists the
+// revision's files with a Download button, and — for a reader the INSERT
+// policies admit (fileUploadAccess mirrors them) — an Add File dialog for that
+// revision (DCS 1b.09). The rows arrive as strings already (toRevisionRows in
 // lib/revisions.ts, unit tested), so this component only draws them and keeps
 // the one piece of state it owns: which rows are open.
 //
@@ -18,8 +19,10 @@ import { ChevronDown, ChevronRight } from 'lucide-react'
 import { EmptyState } from '@/components/page-chrome'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { mdrStatusColor } from '@/lib/mdr'
+import type { FileUploadAccess } from '@/lib/files'
 import type { RevisionRow } from '@/lib/revisions'
 import { cn } from '@/lib/utils'
+import AddFileDialog from './AddFileDialog'
 import RevisionFileList from './RevisionFileList'
 
 // Codes in the cells, "CODE — label" in the tooltip, and the columns that answer "what is this revision and
@@ -27,7 +30,18 @@ import RevisionFileList from './RevisionFileList'
 // beside the profile's right-hand panel on a laptop, and the wrapper scrolls sideways for the rest.
 const COLUMNS = ['SCL revision', 'Status', 'Step', 'Date', 'Author', 'Reason for issue', 'CPY revision', 'Acceptance'] as const
 
-export default function RevisionsTab({ rows, openId }: { rows: RevisionRow[]; openId: string | null }) {
+export default function RevisionsTab({
+  rows,
+  openId,
+  documentNumber,
+  upload,
+}: {
+  rows: RevisionRow[]
+  openId: string | null
+  documentNumber: string
+  /** Whether this reader may add files (mirrors the INSERT policies; the same answer for every row). */
+  upload: FileUploadAccess
+}) {
   const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set(openId && rows.some((row) => row.id === openId) ? [openId] : []))
 
   if (rows.length === 0) {
@@ -70,6 +84,8 @@ export default function RevisionsTab({ rows, openId }: { rows: RevisionRow[]; op
                 expanded={expanded}
                 detailsId={detailsId}
                 onToggle={() => toggle(row.id)}
+                documentNumber={documentNumber}
+                upload={upload}
               />
             )
           })}
@@ -84,11 +100,15 @@ function RevisionRowView({
   expanded,
   detailsId,
   onToggle,
+  documentNumber,
+  upload,
 }: {
   row: RevisionRow
   expanded: boolean
   detailsId: string
   onToggle: () => void
+  documentNumber: string
+  upload: FileUploadAccess
 }) {
   return (
     <>
@@ -138,9 +158,16 @@ function RevisionRowView({
       {expanded ? (
         <TableRow id={detailsId} data-revision-files={row.sclRevision} className="bg-muted/30 hover:bg-muted/30">
           <TableCell colSpan={COLUMNS.length} className="space-y-2 px-2 py-3">
-            <h3 className="text-xs font-medium text-muted-foreground">
-              Files on revision {row.sclRevision} ({row.files.length})
-            </h3>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-xs font-medium text-muted-foreground">
+                Files on revision {row.sclRevision} ({row.files.length})
+              </h3>
+              {upload.mode === 'enabled' ? (
+                <AddFileDialog revisionId={row.id} revisionLabel={row.sclRevision} documentNumber={documentNumber} />
+              ) : upload.reason !== 'no_revision' ? (
+                <p className="text-xs text-muted-foreground">{upload.hint}</p>
+              ) : null}
+            </div>
             <RevisionFileList files={row.files} />
           </TableCell>
         </TableRow>
