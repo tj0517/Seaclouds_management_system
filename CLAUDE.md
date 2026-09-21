@@ -200,6 +200,15 @@ Supabase, prod ref `tfbzivfsqsgebegcvfah`.
   build i tak zostanie pominięty". Przed podaniem URL-a i przed merge'em sprawdź
   faktyczny stan (`gh pr checks`, dashboard Vercela) — z listy zmienionych
   plików tego nie przewidzisz.
+
+  **Zasada zapisu (od PR #79):** wynik CI i Vercela wpisujemy tu wyłącznie dla
+  commita, który idzie do merge'a (HEAD PR-a), w jednej linii nadpisywanej przy
+  następnym PR-ze — bez kroniki pushów i bez osobnego commita tylko po to, żeby
+  ją dopisać (każdy taki commit jest kolejnym punktem danych, więc kronika nigdy
+  by się nie skończyła). Lista PR-ów #58–#76 wyżej zostaje jako dowód do
+  otwartego pytania; nie kasować jej bez zgody.
+
+  **Ostatni odczyt (jedna linia, nadpisywana):** PR #79 (DCS 1b.07b, 21.09), `7c40388` — `apps/dcs/` + `docs/` + `supabase/fixtures/`, bez `apps/timesheet/`, `packages/` i migracji → `dcs` **i** `seaclouds-management-system` zbudowane (`Deployment has completed`), `ci` success; odczyt z `gh api .../commits/7c40388/status` (2026-09-21); commit dopisujący tę linię jest następny i sam w niej nie figuruje.
 - Różnica w ochronie, istotna przy podawaniu URL-i: `dcs` ma
   `ssoProtection = all_except_custom_domains`, więc Preview **i** produkcyjny
   `*.vercel.app` stoją za logowaniem Vercela, a publiczny jest wyłącznie

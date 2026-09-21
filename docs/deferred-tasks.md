@@ -2380,8 +2380,8 @@ proved. None of them is started.
   server-side route writes `dcs.revisions` today (checked 2026-09-20: the only
   service-key modules are the Timesheet admin client and the DCS MDR export). The
   moment one is added, that is a decision to make on purpose.
-- **RESOLVED by DCS 1b.07b, 2026-09-21 (branch `fix/dcs-pending-action-hang`; the PR
-  number goes here when it is opened) — see (zz).** What follows is the record as it was
+- **RESOLVED by DCS 1b.07b, 2026-09-21 (PR #79, branch `fix/dcs-pending-action-hang`)
+  — see (zz).** What follows is the record as it was
   found. Its "what I'd look at first" (the hook's `useTransition`) turned out NOT to be the
   cause, and the "fails on every run (4 of 4)" figure did not reproduce: it was 3 of 10.
 - **HIGH PRIORITY, its own task — saving the CPY number hangs on "Saving…" on a
@@ -2459,7 +2459,7 @@ proved. None of them is started.
 ## zz) DCS 1b.07b — "Saving…" hung on a production build (two `loading.tsx` removed, 2026-09-21)
 
 Records what the fix is, what it rests on, and — deliberately — what it does not
-explain. Branch `fix/dcs-pending-action-hang`; the PR number goes here when it is opened.
+explain. PR #79, branch `fix/dcs-pending-action-hang`.
 Measured on a production build (`next build` + `next start`), Node 20.20.0, local stack.
 
 **What was wrong.** Saving the CPY number on the document profile left the button on
