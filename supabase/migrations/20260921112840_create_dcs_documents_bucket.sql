@@ -30,8 +30,17 @@
 -- folder, or under a code no project has, resolves to NULL, every function
 -- returns false, and no policy admits it.
 --
--- The set mirrors dcs.files (20260917130035) minus its UPDATE half:
---   SELECT  project members; admins
+-- The set mirrors dcs.files (20260917130035) minus its UPDATE half, with
+-- ONE deliberate difference in SELECT (O-16, decided 2026-09-21 on PR #80):
+--   SELECT  holders of ANY dcs.project_roles row on the project; admins.
+--           NOT is_project_member(): that function is also satisfied by a
+--           Timesheet project_assignments row, which is what dcs.files still
+--           uses for METADATA. Bytes are narrower than metadata on purpose;
+--           whether metadata should follow is the part of O-16 still open.
+--           The six roles are listed literally — read from production and
+--           local on 2026-09-21 (orig, rev, chk, app, dc, view) — and the
+--           pgTAP file compares the list with enum_range, so a seventh role
+--           has to be added here consciously rather than inheriting access.
 --   INSERT  Originators of the project (any aal); Doc Controllers of the
 --           project at aal2; admins
 --   UPDATE  none — an object is never overwritten; a new file is a new
@@ -69,13 +78,14 @@ on conflict (id) do update
 --    bypasses RLS; authenticated reads public.projects under
 --    "Widoczność projektów".
 -- ------------------------------------------------------------------
-create policy "Project members read dcs documents"
+create policy "Project role holders read dcs documents"
   on storage.objects for select to authenticated
   using (
     bucket_id = 'dcs-documents'
-    and public.is_project_member((
+    and public.has_project_role((
       select p.id from public.projects p
-       where p.project_code = (storage.foldername(objects.name))[1]))
+       where p.project_code = (storage.foldername(objects.name))[1]),
+      array['orig', 'rev', 'chk', 'app', 'dc', 'view']::dcs.project_role[])
   );
 
 create policy "Admins read dcs documents"

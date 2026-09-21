@@ -12,6 +12,11 @@
 -- this file means what 1b.09 says it means: 0 rows on a SELECT under RLS, and
 -- 42501 on an INSERT.
 --
+-- SELECT is narrower than dcs.files (O-16, decided on PR #80): bytes go to
+-- holders of a dcs.project_roles row on the project (any of the six roles)
+-- and to admins; a Timesheet project_assignments row alone reads nothing
+-- here, while it still reads dcs.files metadata.
+--
 -- Every "this user sees" assertion is a bare count(*) over storage.objects
 -- with no WHERE (docs/03-conventions.md): the difference between users has to
 -- be made by the database. The file therefore expects a database from
@@ -20,10 +25,11 @@
 -- Cast:
 --   admin      tjezionekspam@gmail.com   profiles.role = admin (seed)
 --   ernest     ejezionek@gmail.com       TES member of PEJ via project_assignments,
---                                        no DCS role (seed) — the O-16 case
+--                                        no DCS role (seed) — the O-16 case: 0 objects
 --   tymon      tjezionek2000@gmail.com   TES member of IT only (seed)
 --   orig_pej   created below             orig of PEJ
 --   dc_pej     created below             dc of PEJ
+--   view_pej   created below             view of PEJ — a DCS role that writes nothing
 --   orig_it    created below             orig of IT — an Originator, of the wrong project
 --   outsider   created below             nothing anywhere
 --
@@ -34,7 +40,7 @@
 -- Postgres) and the signed-URL path (PR 2, browser).
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(64);
+select plan(68);
 
 -- ============================================================
 -- 1. Bucket (red without the migration)
@@ -65,7 +71,7 @@ select is(
   (select array_agg(policyname::text order by policyname) from v_pol),
   array['Admins read dcs documents', 'Admins upload dcs documents',
         'Doc controllers upload dcs documents', 'Originators upload dcs documents',
-        'Project members read dcs documents'],
+        'Project role holders read dcs documents'],
   'the five dcs-documents policies, and no other policy mentions the bucket');
 select is((select count(*) from v_pol where cmd = 'SELECT'), 2::bigint, 'two SELECT policies');
 select is((select count(*) from v_pol where cmd = 'INSERT'), 3::bigint, 'three INSERT policies');
@@ -93,7 +99,7 @@ select policies_are('storage', 'objects',
         'Users can upload own receipts', 'Users can view own receipts',
         'Admins read dcs documents', 'Admins upload dcs documents',
         'Doc controllers upload dcs documents', 'Originators upload dcs documents',
-        'Project members read dcs documents'],
+        'Project role holders read dcs documents'],
   'the six Timesheet storage policies (20260827125731) are untouched');
 select ok(
   has_table_privilege('authenticated', 'storage.objects', 'select')
@@ -134,6 +140,7 @@ select
   'cccccccc-cccc-4ccc-8ccc-ccccccccccc2'::uuid as dc_pej_id,
   'cccccccc-cccc-4ccc-8ccc-ccccccccccc3'::uuid as orig_it_id,
   'cccccccc-cccc-4ccc-8ccc-ccccccccccc4'::uuid as outsider_id,
+  'cccccccc-cccc-4ccc-8ccc-ccccccccccc5'::uuid as view_pej_id,
   (select id from dcs.dictionaries where dict_type = 'doc_type' and code = 'RA') as ra_id,
   (select id from dcs.dictionaries where dict_type = 'discipline' and code = 'A00') as disc_id,
   (select id from dcs.dictionaries where dict_type = 'area' and code = '00') as area_id,
@@ -201,13 +208,15 @@ from (values
   ('cccccccc-cccc-4ccc-8ccc-ccccccccccc1'::uuid, 'orig-pej-1b09@example.com', 'Originator PEJ 1b09'),
   ('cccccccc-cccc-4ccc-8ccc-ccccccccccc2'::uuid, 'dc-pej-1b09@example.com', 'DC PEJ 1b09'),
   ('cccccccc-cccc-4ccc-8ccc-ccccccccccc3'::uuid, 'orig-it-1b09@example.com', 'Originator IT 1b09'),
-  ('cccccccc-cccc-4ccc-8ccc-ccccccccccc4'::uuid, 'outsider-1b09@example.com', 'Outsider 1b09')
+  ('cccccccc-cccc-4ccc-8ccc-ccccccccccc4'::uuid, 'outsider-1b09@example.com', 'Outsider 1b09'),
+  ('cccccccc-cccc-4ccc-8ccc-ccccccccccc5'::uuid, 'view-pej-1b09@example.com', 'Viewer PEJ 1b09')
 ) as u(id, email, name);
 
 insert into dcs.project_roles (project_id, user_id, role)
 select pej_id, orig_pej_id, 'orig'::dcs.project_role from t
 union all select pej_id, dc_pej_id, 'dc'::dcs.project_role from t
-union all select it_id, orig_it_id, 'orig'::dcs.project_role from t;
+union all select it_id, orig_it_id, 'orig'::dcs.project_role from t
+union all select pej_id, view_pej_id, 'view'::dcs.project_role from t;
 
 select is((select count(*) from storage.objects), 0::bigint,
   'storage.objects is empty before the fixtures (a database from db reset) — the bare counts below depend on it');
@@ -236,12 +245,18 @@ select is((select count(*) from storage.objects), 0::bigint,
   'RED: an outsider sees 0 objects, even at aal2');
 
 select pg_temp.as_user((select ernest_id from t), 'aal1');
-select is((select count(*) from storage.objects), 2::bigint,
-  'a TES member of PEJ with no DCS role sees the two SC2602 objects — is_project_member is satisfied by project_assignments alone (docs/04-open-questions.md O-16)');
+select is((select count(*) from storage.objects), 0::bigint,
+  'RED: a TES member of PEJ with no DCS role sees 0 objects — a project_assignments row reads dcs.files metadata but not bytes (O-16, decided on PR #80)');
+select is((select count(*) from dcs.files), 1::bigint,
+  'while the same user still reads the dcs.files row of PEJ — the metadata half of O-16, deliberately unchanged');
 
 select pg_temp.as_user((select tymon_id from t), 'aal1');
-select is((select count(*) from storage.objects), 1::bigint,
-  'a TES member of IT only sees the one SCMS-IT object');
+select is((select count(*) from storage.objects), 0::bigint,
+  'RED: a TES member of IT with no DCS role sees 0 objects either');
+
+select pg_temp.as_user((select view_pej_id from t), 'aal1');
+select is((select count(*) from storage.objects), 2::bigint,
+  'GREEN: a VIEW of PEJ — a DCS role that writes nothing — sees the two SC2602 objects: any dcs.project_roles row on the project reads');
 
 select pg_temp.as_user((select orig_pej_id from t), 'aal1');
 select is((select count(*) from storage.objects), 2::bigint,
@@ -303,7 +318,12 @@ select pg_temp.as_user((select ernest_id from t), 'aal2');
 select throws_ok(
   $$insert into storage.objects (bucket_id, name) values ('dcs-documents', 'SC2602/DOC/A/4.pdf')$$,
   '42501', null,
-  'RED: a project member with no DCS role cannot upload (42501) even at aal2 — reading is membership, writing is a role');
+  'RED: a TES member with no DCS role cannot upload (42501) even at aal2');
+select pg_temp.as_user((select view_pej_id from t), 'aal2');
+select throws_ok(
+  $$insert into storage.objects (bucket_id, name) values ('dcs-documents', 'SC2602/DOC/A/4.pdf')$$,
+  '42501', null,
+  'RED: a VIEW of PEJ cannot upload (42501) even at aal2 — reading is any role, writing is ORIG or DC');
 
 -- Outsider
 select pg_temp.as_user((select outsider_id from t), 'aal2');
@@ -422,10 +442,16 @@ select is(
                   'public.is_doc_controller(uuid)'::regprocedure)),
   3::bigint,
   'is_project_member, has_project_role and is_doc_controller exist with their 1a.09 signatures');
-select matches(
-  (select prosrc from pg_proc where oid = 'public.is_project_member(uuid)'::regprocedure),
-  'public\.project_assignments',
-  'is_project_member still reads public.project_assignments — the O-16 fact this file asserts above, not a regression');
+select ok(
+  (select qual not like '%is_project_member%' and qual like '%has_project_role%'
+     from v_pol where policyname = 'Project role holders read dcs documents'),
+  'the SELECT policy calls has_project_role, not is_project_member — the O-16 narrowing; is_project_member would admit a project_assignments row');
+select is(
+  (select regexp_replace(qual, '.*ARRAY\[(.*?)\].*', '\1')
+     from v_pol where policyname = 'Project role holders read dcs documents'),
+  (select string_agg(quote_literal(e::text) || '::dcs.project_role', ', ' order by e)
+     from unnest(enum_range(null::dcs.project_role)) e),
+  'and its literal role list is every value of dcs.project_role — a seventh role must be added to the policy consciously, it does not inherit access');
 select is(
   (select count(*) from v_pol where policyname not like 'Admins%'
      and (coalesce(qual, '') || coalesce(with_check, ''))

@@ -958,20 +958,26 @@ storage-api czyta go przed `FILE_SIZE_LIMIT` (zmierzone 2026-09-21: przy
 `1MiB` w `config.toml` 60 MB weszło do bucketa bez limitu). Klucz obiektu
 zaczyna się od `projects.project_code` (niezmienny od `20260915081813`),
 a polityki na `storage.objects` rozwiązują go do `project_id` przez
-`public.projects` i wołają te same trzy funkcje co `dcs.files`. Zestaw =
-`dcs.files` bez połówki UPDATE: SELECT członkowie projektu + admin; INSERT
-ORIG projektu (dowolny aal), DC projektu (aal2), admin; **zero** polityk
-UPDATE i DELETE — nadpisania ani usunięcia przez API nie ma, także dla
-admina (Void, nie delete). Polityki są `TO authenticated`: podzapytanie
+`public.projects` i wołają funkcje z 1a.09 bez zmian. Zestaw = `dcs.files`
+bez połówki UPDATE i z **jedną celową różnicą w SELECT**: bajty czyta
+posiadacz **dowolnego** wiersza `dcs.project_roles` w projekcie
+(`has_project_role` z dosłowną listą sześciu ról `orig, rev, chk, app, dc,
+view`; test porównuje ją z `enum_range`) albo admin — **nie**
+`is_project_member`, którą spełnia już wiersz `project_assignments` z
+Timesheeta i której `dcs.files` nadal używa dla metadanych (O-16,
+rozstrzygnięte dla bajtów na PR #80; metadane wciąż otwarte). INSERT ORIG
+projektu (dowolny aal), DC projektu (aal2), admin; **zero** polityk UPDATE
+i DELETE — nadpisania ani usunięcia przez API nie ma, także dla admina
+(Void, nie delete). Polityki są `TO authenticated`: podzapytanie
 czyta `public.projects`, do którego `anon` nie ma grantu (a `anon` i tak
 dostaje 42501 na `storage.objects` od 2026-08-31 przez `is_admin()` w
 politykach Timesheeta). Dostęp do bajtów tylko przez signed URL — PR 2.
-Krąg czytelników bajtów = `is_project_member`, czyli także członek TES bez
-roli DCS — **O-16**. Test: `supabase/tests/storage_dcs_documents.test.sql`
-(64 asercje: bucket, pięć polityk i brak UPDATE/DELETE, NOT NULL z 23502,
-odczyt jako 7 użytkowników gołym `count(*)`, INSERT 42501 dla outsidera /
-członka TES / ORIG cudzego projektu / DC na aal1 / anon, UPDATE i DELETE
-0 wierszy także dla admina).
+Test: `supabase/tests/storage_dcs_documents.test.sql` (68 asercji: bucket,
+pięć polityk i brak UPDATE/DELETE, NOT NULL z 23502, odczyt jako 8
+użytkowników gołym `count(*)` — członek TES bez roli DCS 0 wierszy przy
+widocznym wierszu `dcs.files`, VIEW 2 wiersze — INSERT 42501 dla
+outsidera / członka TES / VIEW / ORIG cudzego projektu / DC na aal1 /
+anon, UPDATE i DELETE 0 wierszy także dla admina).
 
 RLS: sześć polityk, identycznie jak `documents`. Trigger `audit_files`.
 
