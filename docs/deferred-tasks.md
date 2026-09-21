@@ -1604,9 +1604,11 @@ wystawia je wszystkie publicznie, a raz rozesłanych URL-i się nie cofa.
   `apps/dcs/app/(app)/nav.test.ts` asserts that link's children are exactly
   the string `'Team'`, and `useLinkStatus()` only reports from *inside* its
   own `<Link>` — so any sibling indicator there fails a test 1a.24 was
-  required not to edit. The click is still acknowledged: it lands on
+  required not to edit. ~~The click is still acknowledged: it lands on
   `/admin/projects/[projectId]`, whose `loading.tsx` skeleton paints on the
-  first frame. Whoever next touches that test can give the link the same
+  first frame.~~ **No longer true (DCS 1b.07b, 2026-09-21):** that skeleton was
+  removed (see zz), so the link now has no acknowledgement at all until the page
+  renders. Whoever next touches that test can give the link the same
   treatment as the others by matching on the href instead of the children.
 
 - **`AppShell` takes its sidebar as the FIRST CHILD, not as a prop**, for the
@@ -2235,6 +2237,16 @@ Recorded 2026-09-20. Each is a known gap left on purpose; none blocks 1b.07.
   with status 200 — on the profile and on the 1b.04 stub alike. The visible 404
   is what acceptance 5 asks for; revisit when an HTTP consumer (an API,
   monitoring, a crawler) appears.
+  **Re-measured 2026-09-21 (DCS 1b.07b) — no longer true, and now pinned by a test.**
+  DCS 1b.07b removed that boundary (and the `admin/projects/[projectId]` one, see (zz)).
+  On a production build the same requests returned HTTP 200 five times out of five while the
+  `loading.tsx` files were there and HTTP **404** five out of five with them removed:
+  `/documents/<unknown uuid>`, `/documents/abc`, `/projects/<unknown uuid>/documents` (DC
+  session) and `/admin/projects/<unknown uuid>` (admin at aal2). Existing pages stay 200.
+  `e2e:profile` now **asserts** HTTP 404 on those four requests. Shown failing once with only
+  `app/(app)/loading.tsx` restored (all four answered 200; 34 of 38 checks passed) and
+  passing without it (38/38). Not measured: `/documents/new` (the 1b.04 stub named above),
+  and the effect of the `admin/projects/[projectId]` file separately from the group file.
 
 ## ww) DCS 1a.25b — Timesheet `/mfa` "Verifying…" hang (fixed in code 2026-09-20)
 
@@ -2368,6 +2380,10 @@ proved. None of them is started.
   server-side route writes `dcs.revisions` today (checked 2026-09-20: the only
   service-key modules are the Timesheet admin client and the DCS MDR export). The
   moment one is added, that is a decision to make on purpose.
+- **RESOLVED by DCS 1b.07b, 2026-09-21 (PR #79, branch `fix/dcs-pending-action-hang`)
+  — see (zz).** What follows is the record as it was
+  found. Its "what I'd look at first" (the hook's `useTransition`) turned out NOT to be the
+  cause, and the "fails on every run (4 of 4)" figure did not reproduce: it was 3 of 10.
 - **HIGH PRIORITY, its own task — saving the CPY number hangs on "Saving…" on a
   PRODUCTION build. A defect in shipped 1b.07 code, found while running 1b.08's
   browser pass; not caused by 1b.08.** Everything known, measured 2026-09-20 on the
@@ -2439,3 +2455,269 @@ proved. None of them is started.
 - **`rls_document_register.test.sql` still never runs the number generators**
   (qq): it runs under `dcs.import_mode = 'on'` throughout, so the revision
   generator is exercised by `scl_revision_generator.test.sql` alone.
+
+## zz) DCS 1b.07b — "Saving…" hung on a production build (two `loading.tsx` removed, 2026-09-21)
+
+Records what the fix is, what it rests on, and — deliberately — what it does not
+explain. PR #79, branch `fix/dcs-pending-action-hang`.
+Measured on a production build (`next build` + `next start`), Node 20.20.0, local stack.
+
+**What was wrong.** Saving the CPY number on the document profile left the button on
+"Saving…" for good on roughly a third of saves. In every hang measured, the POST and the
+refresh GET both returned 200 and their bodies finished completely (291,711 B and
+291,615 B, no abort), the value was stored, and the refreshed tree was **never committed** to
+the page. That is a client-side transition that is never woken, not a slow write. It is the
+upstream defect described in [vercel/next.js#98303](https://github.com/vercel/next.js/issues/98303)
+("a transition lane stays suspended and is never pinged", production only, needs a
+`loading.js` above the page and a Server Action that calls `revalidatePath`; reported on
+16.2.6 and 16.3.4, a partial fix in 16.3.0 via PR #95391) and
+[#86055](https://github.com/vercel/next.js/issues/86055) (16.0.1, workaround "remove
+`loading.tsx`"). We are on **Next 16.1.1**, React 19.2.3. No version bump was made or
+tried: that is its own decision, and #98303 says even 16.3.4 still reproduces it (about 1%).
+
+**The fix: two skeletons removed, no replacement.** `hooks/use-pending-action.ts` is
+unchanged. The skeleton comes back when upstream fixes this — and before it does, re-measure
+(below).
+
+| File removed | Rate WITH it | Rate WITHOUT it |
+|---|---|---|
+| `app/(app)/loading.tsx` (the "Project list" skeleton, group level) | CPY: 16/40 saves stuck (probe: 9/20, 7/20) and 3/10 `e2e:profile` runs red before any change; later, `e2e:pending` CPY 5/30 (DOC_A), then 25/30 (own document) with all three files restored | CPY: 0/30 in each of three runs with both files removed (the dictionaries file was also out at that time; it does not touch the CPY page); the probe also 0/30 |
+| `app/(app)/admin/projects/[projectId]/loading.tsx` | project page (addmember + roles + editproject) 7/120 with the group file already gone, 5/120 (+2 blocked steps) with all three present | 0/120 in the experiment that removed it with the group file already gone; with both files removed 4/120 in one run, then 0/120, 0/120, 0/30, 0/30 — **see "unexplained" below** |
+
+**Tried and reverted — `app/(app)/admin/dictionaries/loading.tsx`.** It was removed first, on the
+strength of one hang in about 120 saves with the skeleton (add 1/30, toggle 0/30). The red proof
+then did not bring the hang back: **0/60** with the skeleton restored (add and toggle, N = 30
+each). Only removals with a demonstrated red proof stay in the PR, so the file is back. It is
+covered by the rule in `docs/03-conventions.md`; if `e2e:pending` ever catches a hang there,
+that is the evidence to remove it. (Without the file the same two saves were 0/60 twice — which
+proves nothing either way.)
+
+The removed group skeleton was also the one that wrongly showed "Project list" on `/mdr` and
+`/documents/[id]`, which had no skeleton of their own.
+
+**Left as they were (and why):** `admin/dictionaries/loading.tsx` (above), `admin/clients/loading.tsx` (0/90 saves stuck with it),
+`admin/projects/new/loading.tsx` (not measured) and `admin/users/[userId]/loading.tsx` (its
+page has no caller of the hook). The rule in `docs/03-conventions.md` says a `loading.tsx`
+over a page whose actions call `revalidatePath` needs a hang measurement before it merges.
+
+**Final scope** (group and project files removed; dictionaries, clients, new-project and users kept),
+production build, Node 20.20.0: `e2e:pending` one full run green over every screen (CPY 30/30,
+`/mdr` 30/30 per action, the rest 5 each); `e2e:profile` 10 of 10 (38/38, with the four HTTP 404
+assertions); `e2e:revision` 3 of 3 (40/40).
+
+**Hypotheses that were tested and are disproved — keep them, so nobody tries them again.**
+Probe of the CPY save, same build, N = 20–30:
+- *The hook's `useTransition` is the cause* — refresh moved outside the transition: no
+  "Saving…" (by construction), but the tree was still not committed in **14 of 20**.
+- *Sidebar prefetch races the refresh* — `prefetch={false}` on the four sidebar links:
+  **16/20 stuck**, worse than the 7–9/20 baseline.
+- *The explicit `router.refresh()` after the action is redundant and races the action's own
+  revalidation* — refresh removed from `CpyNumberField`: the action's own revalidation was
+  still not committed in **12 of 20**.
+- *A boundary next to the page fixes it* — a page-level `documents/[documentId]/loading.tsx`
+  added, group one kept: **7/30 stuck**.
+The only thing that cured the CPY page was removing the group boundary (0/30).
+
+**Unexplained — stated as such.**
+1. **`/mdr` calls `revalidatePath` in all five toolbar actions, sits under the same group
+   boundary, and never hangs:** 0/30 for each of save, rename, make default and delete
+   (and the export, which does not refresh), with and without the boundary, also on a full
+   50-row register page (122 documents). So the mechanism is not "any `loading.tsx` plus any
+   `revalidatePath`". Something else decides it and it is not known what.
+2. **The baseline rate moved between sessions on the same code** — 40% (16/40, probe), 17%
+   (5/30, script), 83% (25/30, script, own document) — and payload size does not explain it
+   (291 KB one day, 271 KB after a database reset). At 17% a small N can miss the defect
+   entirely, which is why every measurement here is N ≥ 30.
+3. **A residual on the project page after the removal:** one run with both files removed stuck
+   4 of 120 saves (all in `AddMemberForm`); six further runs (0/120, 0/120, 0/30, 0/30 and
+   0/20 in each of two full runs) did not. Diagnostics in that run were not yet in place (the script
+   now records whether a spinner is still up when a tree fails to arrive). It is not a cold
+   start (a restart followed by 30 immediate saves: 0). Not fixed, not understood; counted
+   at about 4 in 460.
+
+**Side effects.** `notFound()` now returns HTTP 404 on the routes measured — see the
+re-measurement under (vv). And the per-row "Team" link on `/`, whose only in-flight
+acknowledgement was the `admin/projects/[projectId]` skeleton (see the entry that pins it with a
+test), now has none; the sidebar links keep theirs (`NavLinkStatus`).
+
+**Process notes.**
+- `apps/dcs/e2e/pending-action.mjs` (`e2e:pending`) is the regression guard; the twelve
+  callers are tabled in `docs/03-conventions.md`. It is local only, like the other two.
+  A save counts when the refreshed tree is in the DOM **and** the spinner is gone.
+- It writes CPY saves to a document of its own. Its first version wrote to the fixture's
+  `DOC_A`, pushed its History past `HISTORY_LIMIT` (200 rows) and broke one `e2e:profile`
+  assertion, which looks for the fixture's "System (no session)" rows among the newest 200.
+  That coupling is still there for anything else that writes heavily to `DOC_A`.
+- `supabase/fixtures/document_profile.sql` now also creates `e2e.admin@local.test` (admin,
+  verified TOTP factor). It is **not** in `seed.sql`: two pgTAP files
+  (`dcs_profile_directory.test.sql`, `rls_module_permissions.test.sql`) pin the seed's cast, and
+  adding a user broke three assertions in them.
+- `apps/dcs/e2e/support.mjs` is the extraction (yy) asked for when a third script needed the
+  helpers. `document-profile.mjs` and `new-revision.mjs` were not moved onto it.
+- `@supabase/supabase-js` prints "Node.js 20 and below are deprecated" on every start of the
+  DCS server under Node 20. Reported, not acted on; `.nvmrc` stays at 20 until a separate decision.
+- The skeleton is restored when upstream fixes this: re-measure first, on a production build,
+  CPY N ≥ 60 and project page N ≥ 60 per action (`E2E_SITES=cpy,addmember,roles,editproject,dictionaries
+  E2E_PROBE_N=60 E2E_REPEAT=60 pnpm --filter @scl/dcs e2e:pending`). Any non-zero count means it
+  is not fixed for us.
+
+## aaa) OPEN — when does Vercel auto-skip a build? (the chronicle, moved out of `CLAUDE.md` on 2026-09-21)
+
+**Status: open, unresolved.** Both Vercel projects (`dcs`, `seaclouds-management-system`) start on
+every push and sometimes report `Skipped - Not affected` (`CANCELED` in the dashboard). Nobody knows
+when. The observations below do not fit one rule, and from #71 on they do not even agree with each
+other; hypotheses live in `docs/03-conventions.md` ("Workspace (pnpm) i zakres buildów Vercela") and (s).
+What is settled is only the practical consequence, which stays in `CLAUDE.md`: do not predict a build from
+the list of changed files — read the real state before giving a URL or merging.
+
+**Why it is here.** The owner decided on 2026-09-20, at the 1a.25b review, that the per-PR chronicle
+leaves `CLAUDE.md`; DCS 1b.07b (PR #79) is the next task that touched that file, and moved it on
+2026-09-21. It lives here while the question is open. `CLAUDE.md` keeps the write rule and exactly one
+line, overwritten each PR, for the CI/Vercel result of the PR's HEAD. Do not delete this list without the
+owner's consent — it is the evidence.
+
+**Moved verbatim** from `CLAUDE.md` (lines 74–196 of the file at `5df1efa`, section "Deploy i produkcja"),
+including its own introduction. The counts in it ("Dziesięć obserwacji…") are as of 2026-09-20.
+
+- Oba projekty startują przy każdym pushu i każdym merge'u, ale Vercel bywa,
+  że **auto-pomija** build: w checkach PR-a widać to jako
+  `Skipped - Not affected`, w dashboardzie jako `CANCELED`. **Kiedy dokładnie
+  pomija — nie wiemy.** **Dziesięć obserwacji** (jedenaście punktów danych — #66
+  i #71 wnoszą po dwa commity), wszystkie z tego repo, których nie da się
+  złożyć w jedną regułę — a od #71 **nie da się ich już nawet uzgodnić między
+  sobą**:
+  - **PR #58** — nowa gałąź, wyłącznie `docs/` — **zbudował oba projekty**.
+  - **PR #64** — nowa gałąź, `supabase/` + `docs/`, bez `apps/`
+    i bez `packages/` — **pominął oba** (`Skipped - Not affected`).
+  - **PR #65** — nowa gałąź, wyłącznie ten plik (`CLAUDE.md`, nawet nie
+    `docs/`) — **zbudował oba projekty** (`Deployment has completed`).
+  - **PR #66** (DCS 1b.04, 18.09) — nowa gałąź, **dwa commity, i to one są tu
+    najciekawsze**, bo PR trzeba czytać w całości, nie po pierwszym pushu:
+    - `7c6a55e` — `apps/dcs/` + `supabase/` (migracje i testy) + `docs/`,
+      **bez zmian w `packages/`** (`pnpm db:gen` nie dał diffu) →
+      `dcs` **zbudował** (`Deployment has completed`),
+      `seaclouds-management-system` **pominięty** (`Skipped - Not affected`).
+    - `1c0d558` — wyłącznie `CLAUDE.md` i `docs/03-conventions.md`, czyli
+      **ściśle mniej** niż commit wyżej (żadnego `apps/`, żadnego
+      `supabase/`) → **oba projekty zbudowały się**
+      (`Deployment has completed`).
+
+    **To najostrzejszy punkt danych z tej listy**, bo trzyma stałe wszystko,
+    co zwykle się różni — to samo repo, ta sama gałąź, ten sam PR, ta sama
+    konfiguracja — i zmienia **wyłącznie commit**. Timesheet pominął commit,
+    który ruszył `apps/dcs` i `supabase/`, a zbudował następny, który ruszył
+    tylko dokumentację. Kształt jest ten sam co #64 vs #65, tylko tym razem
+    bez żadnej różnicy między PR-ami, na którą dałoby się to zrzucić.
+
+    **Wniosek jest negatywny i taki ma zostać: z listy zmienionych plików nie
+    da się przewidzieć, które projekty się zbudują.** Żadna z hipotez
+    zapisanych w `docs/03-conventions.md` (w tym ta o członkostwie
+    w workspace) nie tłumaczy wszystkich siedmiu obserwacji — `1c0d558`
+    ruszył zero pakietów workspace i zbudował oba projekty. **Pytanie
+    pozostaje otwarte**; nie wstawiaj tu nowej teorii na miejsce starej,
+    dopisuj obserwacje.
+  - **PR #67** (follow-up 1b.04, 19.09) — nowa gałąź, `apps/dcs/`
+    + `supabase/tests/`, bez `packages/` i bez `apps/timesheet/` → `dcs`
+    **zbudował**, `seaclouds-management-system` **pominięty**
+    (`Skipped - Not affected`). Ten sam kształt co commit `7c6a55e` z #66;
+    obserwacja potwierdza, nie komplikuje.
+  - **PR #68** (follow-up 1b.04, 19.09) — nowa gałąź, `apps/dcs/` + `docs/`
+    + `CLAUDE.md`, bez `packages/` → **oba projekty zbudowały się**
+    (`seaclouds-management-system`: `Deployment has completed`, nie
+    `Skipped`). Para faktów do zestawienia z #67 wyżej: oba PR-y ruszyły
+    `apps/dcs/`, #67 pominął Timesheeta, #68 nie.
+  - **PR #71** (docs 1b.05, 19.09) — nowa gałąź, **wyłącznie `docs/`**
+    (`03-conventions.md` + `deferred-tasks.md`), bez `apps/`, bez `packages/`,
+    bez `supabase/`, bez `CLAUDE.md` → **oba projekty POMINIĘTE**
+    (`Skipped - Not affected`). **To pierwszy przypadek WPROST sprzeczny
+    z listą powyżej**, i tak ma tu stać: **PR #58 był tylko-`docs/` i zbudował
+    oba**, a **#65 był tylko-`CLAUDE.md` i też zbudował oba**. Ten sam kształt
+    zmian, przeciwny wynik — nie „inny zestaw ścieżek", tylko ta sama
+    kategoria zmiany raz budująca, raz pomijana. Żadnej nowej teorii pod to
+    nie podstawiam; obserwacja dochodzi do listy i pytanie zostaje otwarte.
+    (Zastrzeżenie do odczytu: dotyczy PIERWSZEGO runu #71. Commit dopisujący
+    tę obserwację rusza `CLAUDE.md`, więc kolejny run tego PR-a nie jest już
+    tym samym kształtem i nie wolno go czytać jako powtórzenia tej próby.)
+  - **PR #71, DRUGI run** (19.09) — i jest dokładnie tym, co zastrzeżenie
+    wyżej zapowiadało, więc stoi jako **osobna obserwacja, a nie powtórzenie
+    pierwszej próby**. Ten sam PR, ta sama gałąź, ta sama konfiguracja;
+    zmienia się **wyłącznie zawartość commita**:
+    - `e176d9c` — wyłącznie `docs/` (`03-conventions.md` +
+      `deferred-tasks.md`), bez `CLAUDE.md` → **oba projekty POMINIĘTE**
+      (`Skipped - Not affected`).
+    - `8fdbcae` — `CLAUDE.md` + `docs/03-conventions.md` +
+      `docs/deferred-tasks.md`, czyli **ściśle więcej** niż commit wyżej →
+      **oba projekty zbudowały się** (`Deployment has completed`).
+
+    Odczytane z checków obu commitów (`gh api .../commits/<sha>/status`,
+    2026-09-19), nie z pamięci i nie z `gh pr checks`, które pokazuje stan
+    ostatniego commita i o pierwszym nic by nie powiedziało.
+
+    Kształt jest ten sam co para commitów w #66 — jeden PR, dwa commity,
+    przeciwne wyniki — tylko **z przeciwnym znakiem**: w #66 zbudował się
+    commit ruszający MNIEJ (`1c0d558`, tylko dokumentacja), a pominięty
+    został ten ruszający WIĘCEJ (`7c6a55e`, `apps/dcs` + `supabase`). Tutaj
+    zbudował się ten ruszający więcej. Dwie pary z tego samego repo,
+    trzymające stałe wszystko poza zawartością commita, wskazują w
+    **przeciwne** strony.
+
+    Żadnej nowej teorii pod to nie podstawiam — w szczególności nie
+    „`CLAUDE.md` wymusza build": #71 pierwszy run i #58 były tylko-`docs/`
+    z przeciwnymi wynikami, a `CLAUDE.md` nie należy do żadnego pakietu
+    workspace, więc hipoteza o członkostwie tłumaczyłaby tu pominięcie, nie
+    build. Obserwacja dochodzi do listy, **pytanie zostaje otwarte**.
+
+  - **PR #75** (DCS 1b.07, 20.09) — nowa gałąź, pierwszy commit `f741a5b`:
+    `apps/dcs/` (15 plików, w tym `apps/dcs/package.json`) + `docs/` (3 pliki)
+    + `supabase/fixtures/` + `pnpm-lock.yaml` w rootcie; **bez**
+    `apps/timesheet/`, **bez** `packages/`, bez migracji → **oba projekty
+    zbudowały się** (`Deployment has completed`). Odczytane z
+    `gh api .../commits/f741a5b/status` (2026-09-20), nie z `gh pr checks`.
+    Do zestawienia, bez wniosku: #67 i `7c6a55e` z #66 ruszyły `apps/dcs/`
+    bez `apps/timesheet/` i bez `packages/` — i pominęły Timesheeta. Ten
+    commit różni się od nich tym, że rusza też `pnpm-lock.yaml` i
+    `apps/dcs/package.json`. Żadnej teorii pod to nie podstawiam;
+    obserwacja dochodzi do listy. (Zastrzeżenie do odczytu: dotyczy
+    PIERWSZEGO commita. Commit dopisujący tę obserwację rusza `CLAUDE.md`,
+    więc kolejny run tego PR-a nie jest już tym samym kształtem.)
+  - **PR #76** (Timesheet 1a.25b, 20.09) — nowa gałąź, pierwszy commit
+    `683d17e`: `apps/timesheet/` (`app/mfa/page.tsx`, `lib/mfa-navigation.ts`,
+    nowy plik testowy) + `docs/deferred-tasks.md`; **bez** `apps/dcs/`, **bez**
+    `packages/`, bez `supabase/`, bez `pnpm-lock.yaml` →
+    `seaclouds-management-system` **zbudował** (`Deployment has completed`),
+    `dcs` **pominięty** (`Skipped - Not affected`). Odczytane z
+    `gh api .../commits/683d17e/status` (2026-09-20), nie z `gh pr checks`.
+    Ten sam kształt co #67 z odwróconymi rolami aplikacji; obserwacja
+    dochodzi do listy, bez wniosku. (Zastrzeżenie do odczytu: dotyczy
+    PIERWSZEGO commita. Commit dopisujący tę obserwację rusza `CLAUDE.md`,
+    więc kolejny run tego PR-a nie jest już tym samym kształtem.)
+
+  Sama „nowa gałąź" więc builda nie wymusza (to zdanie stało tu wcześniej jako
+  reguła i jest nieprawdziwe), ale i „mniej zmienionych plików = pominięty
+  build" nie działa: #64 ruszył **więcej** ścieżek niż #58 i #65, a zbudował się
+  jako jedyny z tamtych trzech **mniej**. Ustalone jest tylko tyle, że
+  bazą porównania bywa **ostatni deployment danego projektu**, a nie
+  commit-rodzic (`d1d1470`, wyłącznie `docs/`, zbudował się, bo poprzedni
+  deployment `dcs` był sprzed `3a08da3`; dwa kolejne commity tylko-`docs/` już
+  nie). Sprawdzone w repo: **nie ma tu żadnego `vercel.json` ani
+  `ignoreCommand`** — ale to mówi wyłącznie, gdzie mechanizmu NIE ma, i niczego
+  nie wyjaśnia. Nic w repo tego nie pilnuje i nikt nie dostanie alertu.
+
+**Added after the move** (same format; read from `gh api .../commits/<sha>/status`, 2026-09-21, not from
+`gh pr checks`):
+
+  - **PR #79** (DCS 1b.07b, 21.09) — nowa gałąź, **trzy commity** w jednym PR-ze, więc do czytania w
+    całości (jak #66 i #71):
+    - `7c40388` — `apps/dcs/` (7 plików, w tym dwa usunięte `loading.tsx` i `package.json`, bez
+      `pnpm-lock.yaml`) + `docs/` + `supabase/fixtures/`; **bez** `apps/timesheet/`, **bez**
+      `packages/`, bez migracji → **oba projekty zbudowały się** (`Deployment has completed`).
+    - `87aa5a6` — wyłącznie `CLAUDE.md` + `docs/deferred-tasks.md` → **oba zbudowały się**
+      (`Deployment has completed`).
+    - `5df1efa` — wyłącznie `docs/deferred-tasks.md` → **oba POMINIĘTE** (`Skipped - Not affected`).
+    Do zestawienia, bez wniosku: dwa kolejne commity ruszające wyłącznie dokumentację — ten, który ruszał
+    też `CLAUDE.md`, zbudował oba projekty, ten bez `CLAUDE.md` pominął oba. To ten sam kształt co para
+    commitów w #71 (drugi run: `e176d9c` pominięty, `8fdbcae` zbudowany), ale nie usuwa sprzeczności z #58
+    (tylko-`docs/` i zbudowany). Żadnej teorii pod to nie podstawiam; pytanie zostaje otwarte.
+    (Zastrzeżenie do odczytu: commit, który dopisał tę obserwację, rusza `docs/` i `CLAUDE.md`, więc
+    jego własny wynik nie jest tu zapisany — zgodnie z zasadą zapisu w `CLAUDE.md`, żeby kronika się
+    kiedyś skończyła.)

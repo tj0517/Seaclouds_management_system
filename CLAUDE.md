@@ -74,132 +74,27 @@ Supabase, prod ref `tfbzivfsqsgebegcvfah`.
 - Oba projekty startują przy każdym pushu i każdym merge'u, ale Vercel bywa,
   że **auto-pomija** build: w checkach PR-a widać to jako
   `Skipped - Not affected`, w dashboardzie jako `CANCELED`. **Kiedy dokładnie
-  pomija — nie wiemy.** **Dziesięć obserwacji** (jedenaście punktów danych — #66
-  i #71 wnoszą po dwa commity), wszystkie z tego repo, których nie da się
-  złożyć w jedną regułę — a od #71 **nie da się ich już nawet uzgodnić między
-  sobą**:
-  - **PR #58** — nowa gałąź, wyłącznie `docs/` — **zbudował oba projekty**.
-  - **PR #64** — nowa gałąź, `supabase/` + `docs/`, bez `apps/`
-    i bez `packages/` — **pominął oba** (`Skipped - Not affected`).
-  - **PR #65** — nowa gałąź, wyłącznie ten plik (`CLAUDE.md`, nawet nie
-    `docs/`) — **zbudował oba projekty** (`Deployment has completed`).
-  - **PR #66** (DCS 1b.04, 18.09) — nowa gałąź, **dwa commity, i to one są tu
-    najciekawsze**, bo PR trzeba czytać w całości, nie po pierwszym pushu:
-    - `7c6a55e` — `apps/dcs/` + `supabase/` (migracje i testy) + `docs/`,
-      **bez zmian w `packages/`** (`pnpm db:gen` nie dał diffu) →
-      `dcs` **zbudował** (`Deployment has completed`),
-      `seaclouds-management-system` **pominięty** (`Skipped - Not affected`).
-    - `1c0d558` — wyłącznie `CLAUDE.md` i `docs/03-conventions.md`, czyli
-      **ściśle mniej** niż commit wyżej (żadnego `apps/`, żadnego
-      `supabase/`) → **oba projekty zbudowały się**
-      (`Deployment has completed`).
-
-    **To najostrzejszy punkt danych z tej listy**, bo trzyma stałe wszystko,
-    co zwykle się różni — to samo repo, ta sama gałąź, ten sam PR, ta sama
-    konfiguracja — i zmienia **wyłącznie commit**. Timesheet pominął commit,
-    który ruszył `apps/dcs` i `supabase/`, a zbudował następny, który ruszył
-    tylko dokumentację. Kształt jest ten sam co #64 vs #65, tylko tym razem
-    bez żadnej różnicy między PR-ami, na którą dałoby się to zrzucić.
-
-    **Wniosek jest negatywny i taki ma zostać: z listy zmienionych plików nie
-    da się przewidzieć, które projekty się zbudują.** Żadna z hipotez
-    zapisanych w `docs/03-conventions.md` (w tym ta o członkostwie
-    w workspace) nie tłumaczy wszystkich siedmiu obserwacji — `1c0d558`
-    ruszył zero pakietów workspace i zbudował oba projekty. **Pytanie
-    pozostaje otwarte**; nie wstawiaj tu nowej teorii na miejsce starej,
-    dopisuj obserwacje.
-  - **PR #67** (follow-up 1b.04, 19.09) — nowa gałąź, `apps/dcs/`
-    + `supabase/tests/`, bez `packages/` i bez `apps/timesheet/` → `dcs`
-    **zbudował**, `seaclouds-management-system` **pominięty**
-    (`Skipped - Not affected`). Ten sam kształt co commit `7c6a55e` z #66;
-    obserwacja potwierdza, nie komplikuje.
-  - **PR #68** (follow-up 1b.04, 19.09) — nowa gałąź, `apps/dcs/` + `docs/`
-    + `CLAUDE.md`, bez `packages/` → **oba projekty zbudowały się**
-    (`seaclouds-management-system`: `Deployment has completed`, nie
-    `Skipped`). Para faktów do zestawienia z #67 wyżej: oba PR-y ruszyły
-    `apps/dcs/`, #67 pominął Timesheeta, #68 nie.
-  - **PR #71** (docs 1b.05, 19.09) — nowa gałąź, **wyłącznie `docs/`**
-    (`03-conventions.md` + `deferred-tasks.md`), bez `apps/`, bez `packages/`,
-    bez `supabase/`, bez `CLAUDE.md` → **oba projekty POMINIĘTE**
-    (`Skipped - Not affected`). **To pierwszy przypadek WPROST sprzeczny
-    z listą powyżej**, i tak ma tu stać: **PR #58 był tylko-`docs/` i zbudował
-    oba**, a **#65 był tylko-`CLAUDE.md` i też zbudował oba**. Ten sam kształt
-    zmian, przeciwny wynik — nie „inny zestaw ścieżek", tylko ta sama
-    kategoria zmiany raz budująca, raz pomijana. Żadnej nowej teorii pod to
-    nie podstawiam; obserwacja dochodzi do listy i pytanie zostaje otwarte.
-    (Zastrzeżenie do odczytu: dotyczy PIERWSZEGO runu #71. Commit dopisujący
-    tę obserwację rusza `CLAUDE.md`, więc kolejny run tego PR-a nie jest już
-    tym samym kształtem i nie wolno go czytać jako powtórzenia tej próby.)
-  - **PR #71, DRUGI run** (19.09) — i jest dokładnie tym, co zastrzeżenie
-    wyżej zapowiadało, więc stoi jako **osobna obserwacja, a nie powtórzenie
-    pierwszej próby**. Ten sam PR, ta sama gałąź, ta sama konfiguracja;
-    zmienia się **wyłącznie zawartość commita**:
-    - `e176d9c` — wyłącznie `docs/` (`03-conventions.md` +
-      `deferred-tasks.md`), bez `CLAUDE.md` → **oba projekty POMINIĘTE**
-      (`Skipped - Not affected`).
-    - `8fdbcae` — `CLAUDE.md` + `docs/03-conventions.md` +
-      `docs/deferred-tasks.md`, czyli **ściśle więcej** niż commit wyżej →
-      **oba projekty zbudowały się** (`Deployment has completed`).
-
-    Odczytane z checków obu commitów (`gh api .../commits/<sha>/status`,
-    2026-09-19), nie z pamięci i nie z `gh pr checks`, które pokazuje stan
-    ostatniego commita i o pierwszym nic by nie powiedziało.
-
-    Kształt jest ten sam co para commitów w #66 — jeden PR, dwa commity,
-    przeciwne wyniki — tylko **z przeciwnym znakiem**: w #66 zbudował się
-    commit ruszający MNIEJ (`1c0d558`, tylko dokumentacja), a pominięty
-    został ten ruszający WIĘCEJ (`7c6a55e`, `apps/dcs` + `supabase`). Tutaj
-    zbudował się ten ruszający więcej. Dwie pary z tego samego repo,
-    trzymające stałe wszystko poza zawartością commita, wskazują w
-    **przeciwne** strony.
-
-    Żadnej nowej teorii pod to nie podstawiam — w szczególności nie
-    „`CLAUDE.md` wymusza build": #71 pierwszy run i #58 były tylko-`docs/`
-    z przeciwnymi wynikami, a `CLAUDE.md` nie należy do żadnego pakietu
-    workspace, więc hipoteza o członkostwie tłumaczyłaby tu pominięcie, nie
-    build. Obserwacja dochodzi do listy, **pytanie zostaje otwarte**.
-
-  - **PR #75** (DCS 1b.07, 20.09) — nowa gałąź, pierwszy commit `f741a5b`:
-    `apps/dcs/` (15 plików, w tym `apps/dcs/package.json`) + `docs/` (3 pliki)
-    + `supabase/fixtures/` + `pnpm-lock.yaml` w rootcie; **bez**
-    `apps/timesheet/`, **bez** `packages/`, bez migracji → **oba projekty
-    zbudowały się** (`Deployment has completed`). Odczytane z
-    `gh api .../commits/f741a5b/status` (2026-09-20), nie z `gh pr checks`.
-    Do zestawienia, bez wniosku: #67 i `7c6a55e` z #66 ruszyły `apps/dcs/`
-    bez `apps/timesheet/` i bez `packages/` — i pominęły Timesheeta. Ten
-    commit różni się od nich tym, że rusza też `pnpm-lock.yaml` i
-    `apps/dcs/package.json`. Żadnej teorii pod to nie podstawiam;
-    obserwacja dochodzi do listy. (Zastrzeżenie do odczytu: dotyczy
-    PIERWSZEGO commita. Commit dopisujący tę obserwację rusza `CLAUDE.md`,
-    więc kolejny run tego PR-a nie jest już tym samym kształtem.)
-  - **PR #76** (Timesheet 1a.25b, 20.09) — nowa gałąź, pierwszy commit
-    `683d17e`: `apps/timesheet/` (`app/mfa/page.tsx`, `lib/mfa-navigation.ts`,
-    nowy plik testowy) + `docs/deferred-tasks.md`; **bez** `apps/dcs/`, **bez**
-    `packages/`, bez `supabase/`, bez `pnpm-lock.yaml` →
-    `seaclouds-management-system` **zbudował** (`Deployment has completed`),
-    `dcs` **pominięty** (`Skipped - Not affected`). Odczytane z
-    `gh api .../commits/683d17e/status` (2026-09-20), nie z `gh pr checks`.
-    Ten sam kształt co #67 z odwróconymi rolami aplikacji; obserwacja
-    dochodzi do listy, bez wniosku. (Zastrzeżenie do odczytu: dotyczy
-    PIERWSZEGO commita. Commit dopisujący tę obserwację rusza `CLAUDE.md`,
-    więc kolejny run tego PR-a nie jest już tym samym kształtem.)
-
-  Sama „nowa gałąź" więc builda nie wymusza (to zdanie stało tu wcześniej jako
-  reguła i jest nieprawdziwe), ale i „mniej zmienionych plików = pominięty
-  build" nie działa: #64 ruszył **więcej** ścieżek niż #58 i #65, a zbudował się
-  jako jedyny z tamtych trzech **mniej**. Ustalone jest tylko tyle, że
-  bazą porównania bywa **ostatni deployment danego projektu**, a nie
-  commit-rodzic (`d1d1470`, wyłącznie `docs/`, zbudował się, bo poprzedni
-  deployment `dcs` był sprzed `3a08da3`; dwa kolejne commity tylko-`docs/` już
-  nie). Sprawdzone w repo: **nie ma tu żadnego `vercel.json` ani
-  `ignoreCommand`** — ale to mówi wyłącznie, gdzie mechanizmu NIE ma, i niczego
-  nie wyjaśnia. Nic w repo tego nie pilnuje i nikt nie dostanie alertu.
+  pomija — nie wiemy;** obserwacje, które nie składają się w regułę (PR #58–#79),
+  leżą w `docs/deferred-tasks.md` (aaa), pod otwartym pytaniem. Nic w repo tego
+  nie pilnuje i nikt nie dostanie alertu.
 
   **Konsekwencja praktyczna, niezależna od tego, czego nie wiemy:** nie zakładaj
   ani „to tylko docs, więc nic się nie wdroży", ani „to tylko migracje, więc
   build i tak zostanie pominięty". Przed podaniem URL-a i przed merge'em sprawdź
   faktyczny stan (`gh pr checks`, dashboard Vercela) — z listy zmienionych
   plików tego nie przewidzisz.
+
+  **Zasada zapisu (od PR #79):** wynik CI i Vercela wpisujemy tu wyłącznie dla PR-a
+  idącego do merge'a, w jednej linii nadpisywanej przy następnym PR-ze — bez
+  kroniki pushów i bez osobnego commita tylko po to, żeby ją dopisać albo zmienić w
+  niej hash przy niezmienionym drzewie (każdy taki commit jest kolejnym punktem
+  danych, więc kronika nigdy by się nie skończyła). Linia opisuje HEAD PR-a albo
+  ostatni commit ruszający `apps/` lub `packages/`, gdy drzewo `apps/` + `packages/`
+  w HEAD jest z nim identyczne — i mówi, który z tych dwóch przypadków to jest.
+  Kronika obserwacji (PR #58–#79) mieszka w `docs/deferred-tasks.md` (aaa), dopóki
+  pytanie jest otwarte; nie kasować jej bez zgody.
+
+  **Ostatni odczyt (jedna linia, nadpisywana):** PR #79 (DCS 1b.07b) — opisuje `7c40388`, ostatni commit ruszający `apps/`/`packages/`; drzewo `apps/` + `packages/` w HEAD jest z nim identyczne (`git diff --stat 7c40388 HEAD -- apps packages` puste), późniejsze commity ruszają tylko `docs/` i `CLAUDE.md`: `dcs` i `seaclouds-management-system` zbudowane (`Deployment has completed`), `ci` success (`gh api .../commits/7c40388/status`, 2026-09-21).
 - Różnica w ochronie, istotna przy podawaniu URL-i: `dcs` ma
   `ssoProtection = all_except_custom_domains`, więc Preview **i** produkcyjny
   `*.vercel.app` stoją za logowaniem Vercela, a publiczny jest wyłącznie

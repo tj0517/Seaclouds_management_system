@@ -28,6 +28,8 @@
 --                               browser can reach aal2. Secret: JBSWY3DPEHPK3PXP
 --   orig.profile@local.test     orig of SC2602 — the "plain member" session
 --   outsider.profile@local.test no role and no assignment anywhere — the 404 session
+--   e2e.admin@local.test        admin (profiles.role), with a VERIFIED TOTP factor, same
+--                               secret — DCS 1b.07b, for the /admin screens (aal2)
 -- plus the seed's own admin, tjezionekspam@gmail.com.
 --
 -- Rows: two documents on SC2602 (project 6c0909ce-…). One has a current
@@ -59,7 +61,8 @@ create temp table fx_users (id uuid, email text, full_name text) on commit drop;
 insert into fx_users values
   ('f1000000-0000-4000-8000-000000000001', 'dc.profile@local.test',       'Dorota Controller'),
   ('f1000000-0000-4000-8000-000000000002', 'orig.profile@local.test',     'Oskar Originator'),
-  ('f1000000-0000-4000-8000-000000000003', 'outsider.profile@local.test', 'Olga Outsider');
+  ('f1000000-0000-4000-8000-000000000003', 'outsider.profile@local.test', 'Olga Outsider'),
+  ('f1000000-0000-4000-8000-0000000000a1', 'e2e.admin@local.test',        'E2E Admin');
 
 insert into auth.users (
   instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -84,6 +87,8 @@ where not exists (select 1 from auth.identities i where i.user_id = u.id);
 -- The profile row is created by a trigger on auth.users, exactly as in seed.sql.
 update public.profiles p set full_name = u.full_name, role = 'employee'
 from fx_users u where p.id = u.id;
+-- DCS 1b.07b: the one admin of the cast (see the header).
+update public.profiles set role = 'admin' where id = 'f1000000-0000-4000-8000-0000000000a1';
 
 -- Without this the proxy sends the user back to the TES portal (hasModuleAccess).
 insert into public.module_permissions (user_id, module)
@@ -108,6 +113,14 @@ insert into auth.mfa_factors (id, user_id, friendly_name, factor_type, status, c
 select 'f2000000-0000-4000-8000-000000000001', 'f1000000-0000-4000-8000-000000000001',
        'fixture authenticator', 'totp', 'verified', now(), now(), 'JBSWY3DPEHPK3PXP'
 where not exists (select 1 from auth.mfa_factors where id = 'f2000000-0000-4000-8000-000000000001');
+
+-- DCS 1b.07b: the same for e2e.admin@local.test. The /admin screens of apps/dcs need
+-- aal2 for an admin (proxy.ts), and the seed's own admin has no factor and must stay
+-- that way. Same public secret as the DC's: this file only ever runs locally.
+insert into auth.mfa_factors (id, user_id, friendly_name, factor_type, status, created_at, updated_at, secret)
+select 'f2000000-0000-4000-8000-0000000000a1', 'f1000000-0000-4000-8000-0000000000a1',
+       'e2e authenticator', 'totp', 'verified', now(), now(), 'JBSWY3DPEHPK3PXP'
+where not exists (select 1 from auth.mfa_factors where id = 'f2000000-0000-4000-8000-0000000000a1');
 
 -- ============================================================
 -- SC2602 runs a CPY track (the seed has it off)

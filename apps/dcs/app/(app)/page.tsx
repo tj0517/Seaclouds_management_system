@@ -180,10 +180,11 @@ export default async function ProjectsPage() {
                               children are exactly the string 'Team', so a
                               sibling indicator inside it would fail a test
                               1a.24 must not edit — and useLinkStatus() only
-                              works from inside its own <Link>. The click is
-                              still acknowledged immediately: it lands on
-                              /admin/projects/[projectId], whose loading.tsx
-                              skeleton paints on the first frame. */}
+                              works from inside its own <Link>. Until DCS 1b.07b
+                              the click was still acknowledged by the
+                              loading.tsx skeleton of /admin/projects/[projectId];
+                              that file was removed (docs/deferred-tasks.md zz),
+                              so this link now has NO in-flight indicator. */}
                           Team
                         </Link>
                       )}
