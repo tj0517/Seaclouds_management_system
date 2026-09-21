@@ -2561,6 +2561,15 @@ test), now has none; the sidebar links keep theirs (`NavLinkStatus`).
   E2E_PROBE_N=60 E2E_REPEAT=60 pnpm --filter @scl/dcs e2e:pending`). Any non-zero count means it
   is not fixed for us.
 
+
+**Dopisek z DCS 1b.09 PR 2 (2026-09-21) — pierwsze zawieszenie na `/admin/dictionaries` od #79.**
+`e2e:pending` na buildzie produkcyjnym tej gałęzi (`feat/dcs-revision-files`, HEAD `4cb853b`),
+pełny zestaw: `dictionaries.toggle` **1 not-committed w 5** (`spinners=1 disabledButtons=24`,
+bez alertu — kształt wiszącej odświeżki, nie odmowy); ponowny pomiar tego samego site'u przy
+`E2E_REPEAT=30`: **0 w 30** (`dictionaries.add` też 0 w 30). Łącznie 1 w 35. To brakujący
+wcześniej dowód, że szkielet słowników zostawiony przy #79 nie jest wolny od tego samego
+mechanizmu — tylko rzadszy. Bez działania (decyzja z przeglądu PR #81): odnotowane, nie naprawiane.
+
 ## aaa) OPEN — when does Vercel auto-skip a build? (the chronicle, moved out of `CLAUDE.md` on 2026-09-21)
 
 **Status: open, unresolved.** Both Vercel projects (`dcs`, `seaclouds-management-system`) start on
@@ -2831,3 +2840,10 @@ series, never "flaky".
   one client component) did NOT help, so this is a guess.
 None is irreversible. `apps/dcs/e2e/document-profile.mjs` now prints the page URL and the last
 passed check with every error, which is what made the location findable.
+
+**A second lesson from the same PR, unrelated to hydration:** the local fixture
+(`supabase/fixtures/document_profile.sql`) inserted a `dcs.files` row with `storage_path` NULL,
+which PR 1 (#80) made impossible — and #80 merged green, because CI runs pgTAP on `db reset`
+and never loads `supabase/fixtures/` (that is by design, `03-conventions.md`, "Fixtury lokalne").
+A fixture can therefore stop loading without any check noticing; the next person to run a browser
+script finds out. Recorded here; the fixture is fixed in PR 2.

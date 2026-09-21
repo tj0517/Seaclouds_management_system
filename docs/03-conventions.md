@@ -324,6 +324,11 @@ Zapisane przy DCS 1b.07 (2026-09-20).
 - **Od 1b.09 fixtura niesie `storage_path` na swoim wierszu `dcs.files`** (kolumna jest NOT NULL
   od PR #80), ale **bez obiektu w buckecie** — to celowy przypadek „wiersz jest, bajtów nie ma":
   Download na nim daje to samo zdanie co odmowa. Fixtura sprzed #80 (NULL) nie ładuje się już.
+  **Konsekwencja, której CI nie widzi:** fixtur nie ładuje ani `supabase test db`, ani `ci.yml`,
+  więc migracja, która zaostrza schemat (jak NOT NULL w #80), może zmergować się na zielono z
+  fixturą, która od tej chwili nie ładuje się wcale — wyszło dopiero przy pierwszym skrypcie
+  przeglądarkowym 1b.09 PR 2. Po każdej migracji ruszającej tabelę, którą fixtura wypełnia,
+  załaduj ją lokalnie i sprawdź (`docs/deferred-tasks.md`, ccc).
 - **Bezpiecznik:** plik odmawia uruchomienia bez `app.local_fixture=yes`.
   Konsola SQL w dashboardzie ani MCP `execute_sql` go nie ustawią. To pas
   bezpieczeństwa, nie granica — ktoś, kto ustawi zmienną, może go uruchomić
