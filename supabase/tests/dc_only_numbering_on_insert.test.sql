@@ -66,8 +66,9 @@ select is(
     where tgrelid = 'dcs.revisions'::regclass and not tgisinternal
       and (tgtype & 2) = 2 and (tgtype & 4) = 4),   -- BEFORE, INSERT
   array['revisions_assign_scl_revision', 'revisions_cpy_numbering',
+        'revisions_locked_at_dc_only_insert', 'revisions_locked_at_final_step',
         'revisions_numbering_dc_only_insert', 'revisions_refuse_void_document'],
-  'revisions_cpy_numbering still sorts before revisions_numbering_dc_only_insert — and DCS 1b.08''s two BEFORE INSERT triggers sit around them, the generator first and the Void guard last');
+  'revisions_cpy_numbering still sorts before revisions_numbering_dc_only_insert — and DCS 1b.08''s two BEFORE INSERT triggers sit around them, the generator first and the Void guard last; DCS 1b.10''s two locked_at triggers sit between the CPY check and the numbering one');
 select is(
   (select tgname::text from pg_trigger
     where tgrelid = 'dcs.documents'::regclass and not tgisinternal

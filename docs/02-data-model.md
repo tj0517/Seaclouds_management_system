@@ -801,8 +801,9 @@ FK i trigger razem.
 `step_id (FK słownik `workflow_step`, NOT NULL)`, `reason_for_issue`,
 `revision_date date`, `acceptance_code_id (FK słownik `acceptance_code`,
 nullable)`, `status_id (FK słownik `workflow_status`, NOT NULL)`,
-`created_by (FK profiles)`, `created_at`, `updated_at`.
-`UNIQUE (document_id, scl_revision)`.
+`created_by (FK profiles)`, `created_at`, `updated_at`, **`locked_at timestamptz`
+(nullable, od 1b.10 — znacznik zatwierdzenia rewizji finalnej, patrz „Blokada
+rewizji finalnych” niżej)**. `UNIQUE (document_id, scl_revision)`.
 
 **O-15 rozstrzygnięte tutaj na rzecz słownika**, nie enuma `dcs.step`:
 `step_id` jest FK do `dcs.dictionaries` typu `workflow_step` (6 kodów:
@@ -832,8 +833,11 @@ Triggery: `revisions_numbering_dc_only` (`BEFORE UPDATE`, `scl_revision`
 `set_updated_at`, `audit_revisions` — oraz, **od 1b.08**,
 **`revisions_assign_scl_revision`** (`BEFORE INSERT`, numer rewizji),
 **`revisions_refuse_void_document`** (`BEFORE INSERT`) i
-**`revisions_promote_current`** (`AFTER INSERT`) — opisane niżej. RLS: sześć
-polityk, identycznie jak `documents`.
+**`revisions_promote_current`** (`AFTER INSERT`) — opisane niżej — oraz, **od
+1b.10**, cztery triggery blokady (`revisions_assert_not_locked`,
+`revisions_locked_at_dc_only` + `_insert`, `revisions_locked_at_final_step`) —
+patrz „Blokada rewizji finalnych”. RLS: sześć polityk, identycznie jak
+`documents`.
 
 Dwa triggery na jedną funkcję, a nie jeden `BEFORE INSERT OR UPDATE` jak na
 `documents`, bo **zestaw pilnowanych kolumn zależy tu od operacji**:
@@ -857,7 +861,103 @@ zdanie wskazywało generator numeracji dokumentów; przeniesione, bo 1b.02
 nadaje numer **dokumentu**, a `scl_revision` jest numerem **rewizji** —
 inny obiekt, inna reguła, inny ekran (`docs/deferred-tasks.md` pp).
 Niemodyfikowalność rewizji finalnych (IFC/IFI/IFB) egzekwowana triggerem
-w bazie — **1b.10**, nie tutaj.
+w bazie — ~~1b.10, nie tutaj~~ **zrobiona w 1b.10, patrz „Blokada rewizji
+finalnych” niżej**.
+
+#### Blokada rewizji finalnych (DCS 1b.10)
+
+Migracja `20260921150000_lock_final_revisions`, test
+`supabase/tests/final_revision_lock.test.sql` (108 asercji). Brief §3.5: pliki
+zatwierdzonej rewizji finalnej są niemodyfikowalne, a egzekwuje to baza, nie
+frontend — nikt nie obejdzie tego przez API.
+
+**Znacznik.** Statusu „Approved” w modelu nie ma (`status_id` wskazuje słownik
+`workflow_status`, a nowa rewizja dostaje status równy swojemu krokowi), więc
+„zatwierdzona” jest jawną kolumną `dcs.revisions.locked_at timestamptz NULL`.
+W Fazie 1 ustawia ją DC (przycisk w 1b.11), w Fazie 2 ustawi ją silnik obiegu.
+`locked_at` może być niepuste **tylko** na rewizji o kroku IFC, IFI lub IFB
+(trigger `revisions_locked_at_final_step`, 23514 — CHECK nie sięga do drugiej
+tabeli; kody kroków są niezmienne, więc reguła się nie rozjedzie).
+
+**Kto ustawia** (decyzja (a), 2026-09-21): wyłącznie DC projektu w sesji aal2.
+Nie Originator (polityka „Originators update revisions” dopuszcza UPDATE
+wiersza, więc bez tego mógłby zamrozić własną rewizję), nie admin bez roli
+`dc`. Bez nowej funkcji: `enforce_dc_only_numbering('locked_at')` podpięta
+drugi i trzeci raz (`revisions_locked_at_dc_only` na UPDATE,
+`revisions_locked_at_dc_only_insert` na INSERT), więc ten sam test roli i aal2
+co przy numeracji i ten sam wyjątek dla sesji bez użytkownika (migracja, psql,
+`service_role`) — 42501 dla pozostałych. Uwaga na Fazę 2: silnik ustawiający
+`locked_at` w sesji użytkownika jest oceniany jak ten użytkownik, więc musi
+działać bez sesji albo w imieniu DC na aal2.
+
+**Cofnięcie blokady: nigdy** (decyzja (b)). Żadna gałąź triggera nie czyści
+`locked_at` — dla nikogo, także DC ani admina. Błędnie zablokowaną rewizję
+naprawia się nową rewizją; awaryjnie właściciel tabeli wyłącza triggery
+migracją albo w psql, czyli świadomym, widocznym krokiem. Poluzowanie reguły
+później to zwykła migracja; zaostrzenie po fakcie nie — dlatego wchodzi wersja
+ścisła. UI z 1b.11 powinno prosić o potwierdzenie przed zablokowaniem.
+
+**Co blokują triggery** (wszystkie działają dla każdego wywołującego, także
+admina i `service_role`; `SECURITY DEFINER`, `search_path = ''`, bo kierunek
+błędu ma znaczenie — rewizja ukryta przez RLS nie może wyglądać na
+niezablokowaną; kod błędu `restrict_violation` 23001):
+
+| Trigger | Na | Reguła |
+|---|---|---|
+| `files_assert_revision_not_locked` | `dcs.files` BEFORE INSERT/UPDATE/DELETE | odmowa, gdy rewizja pliku ma `locked_at` (UPDATE: i stara, i nowa `revision_id` — plik nie wejdzie do zablokowanej rewizji ani z niej nie wyjdzie); `SELECT … FOR SHARE` na wierszu rewizji, żeby zapis pliku i zablokowanie się szeregowały (FK bierze tylko `KEY SHARE`, a `UPDATE locked_at` — `NO KEY UPDATE`, więc bez tego by się nie wykluczały) |
+| `revisions_assert_not_locked` | `dcs.revisions` BEFORE UPDATE/DELETE | wiersz z `locked_at` nie da się usunąć; jedyny dozwolony UPDATE to `status_id` → wiersz SUPERSEDED, **i tylko gdy istnieje inna rewizja tego dokumentu z późniejszym `created_at`** (reszta wiersza porównywana w całości jako jsonb, więc kolumna dodana później jest zamrożona bez pamiętania o niej); `locked_at` nie może się zmienić ani zniknąć |
+| `revisions_locked_at_dc_only` / `_insert` | `dcs.revisions` BEFORE UPDATE / INSERT | kto ustawia (wyżej) |
+| `revisions_locked_at_final_step` | `dcs.revisions` BEFORE INSERT/UPDATE | tylko IFC/IFI/IFB (wyżej) |
+
+Wszystkie nazwy sortują się przed `set_updated_at`, więc odrzucony zapis nie
+zostawia ani podbitego `updated_at`, ani wpisu w `audit_log`;
+`revisions_assert_not_locked` sortuje się przed `revisions_cpy_numbering`, więc
+zmiana zablokowanej rewizji jest zgłaszana jako „zablokowana”.
+
+**„Nowsza” to `created_at`, nie `documents.current_revision_id`.**
+`promote_new_revision()` robi `UPDATE dcs.revisions SET status_id = SUPERSEDED`
+(migracja `20260920134800`, linie 133–136) **przed** `UPDATE dcs.documents SET
+current_revision_id = new.id` (linie 152–155), więc gdy odpala się trigger
+blokady, wskaźnik nadal wskazuje starą rewizję i nie może służyć do tego
+sprawdzenia. Nowa rewizja jest wtedy już wstawiona (AFTER INSERT) i widoczna, a
+`created_at` to kolejność, po której Revisions tab i tak sortuje. Skutki: ręczne
+ustawienie SUPERSEDED na zablokowanej rewizji, której nic nie zastępuje, jest
+odmawiane (23001) — także dla Originatora i admina (luka zamknięta w przeglądzie
+1b.10); rewizja wstawiona z jawnym `created_at` **starszym** niż zastępowana nie
+może jej zastąpić i sam INSERT jest odmawiany (domyślnie `created_at` = `now()`,
+aplikacja go nie ustawia).
+
+**`promote_new_revision()` nie zmieniła się.** Jej `UPDATE … status_id =
+SUPERSEDED` na poprzedniej bieżącej rewizji (jako definer) przechodzi przez
+`revisions_assert_not_locked` jak każdy zapis i jest tym jednym, który ten
+trigger przepuszcza (nowa rewizja jest już wtedy nowsza). Dowód: Originator i DC (aal2) dodają rewizję do dokumentu
+z zablokowaną rewizją bieżącą; stara kończy jako SUPERSEDED z niezmienionym
+`locked_at` i resztą kolumn.
+
+**Import** (`dcs.import_mode = 'on'`, wzorzec `refuse_revision_on_void_document`):
+INSERT i UPDATE przechodzą przez triggery blokady (historyczne IFC przychodzą
+z plikami i z blokadą); DELETE jest odmawiany także wtedy. Reguły
+`locked_at` → krok finalny import **nie** uchyla — to fakt o wierszu.
+
+**DELETE a RLS.** `dcs.files` i `dcs.revisions` mają politykę DELETE wyłącznie
+dla admina (FOR ALL). DELETE Originatora lub DC jest ukryty przez RLS — 0
+wierszy — i nigdy nie dochodzi do triggera; test mówi to wprost (rzucają admin
+i sesja bez RLS; orig/DC kasują 0 wierszy).
+
+**Kaskady** (odczytane z `pg_constraint` lokalnie i na scl-dev 2026-09-21,
+`confdeltype = c`): `public.projects` → `dcs.documents`, `dcs.revisions` i
+`dcs.files` (każda tabela ma własny FK `project_id` z `ON DELETE CASCADE`);
+`dcs.documents` → `dcs.revisions` (złożony FK `(document_id, project_id)`);
+`dcs.revisions` → `dcs.files` (złożony FK `(revision_id, project_id)`). Kaskada
+odpala triggery wierszowe, więc usunięcie projektu **naprawdę** schodzi do
+`dcs.revisions`, a zablokowana rewizja blokuje usunięcie swojego dokumentu i
+swojego projektu (`public.projects`). To zamierzone (Void, nie delete), ale
+operatorzy na to trafią: `delete` dokumentu albo projektu z zablokowaną rewizją
+kończy się 23001; oba przypadki są w teście. Produkcji nie czytałem — stan ten
+sam wynika z migracji, które tam idą.
+
+**Czego to nie robi** — patrz `docs/deferred-tasks.md` (ddd): bajty w
+`storage.objects` nie są chronione przed `service_role`.
 
 #### Numeracja rewizji i bieżąca rewizja (DCS 1b.08)
 
@@ -945,7 +1045,9 @@ O-09 (automatyczne rendition PDF) może dopisać rodzaj bez zmiany typu.
 
 `project_id` jak w `revisions`: kolumna trzymana złożonym FK
 `(revision_id, project_id) → revisions (id, project_id)`, `ON DELETE
-CASCADE`. Blokada zapisu dla rewizji finalnych — **1b.10**.
+CASCADE`. Blokada zapisu dla rewizji finalnych — **od 1b.10**: trigger
+`files_assert_revision_not_locked` odmawia INSERT/UPDATE/DELETE, gdy rewizja
+pliku ma `locked_at` (patrz „Blokada rewizji finalnych” przy `dcs.revisions`).
 
 **Storage (DCS 1b.09 PR 1, migracja `20260921112840_create_dcs_documents_bucket`):**
 bucket `dcs-documents` — prywatny, `file_size_limit` 104857600 (100 MiB),
@@ -1012,6 +1114,11 @@ następną server action POST-em na ten adres (`server-action-reducer.js`,
 `fetch(state.canonicalUrl)`), a pobranie z `Content-Disposition: attachment`
 nie wyładowuje strony, więc do przeładowania każde Add File po pobraniu
 lądowało 400 w storage-api.
+**Każda przyszła polityka UPDATE lub DELETE na tym buckecie musi respektować
+`dcs.revisions.locked_at`** (1b.10): dziś żadna nie istnieje, więc upsert i
+usunięcie obiektu pod ścieżką zablokowanej rewizji są odmawiane przez sam brak
+polityki (dowodzi tego test, a nie trigger na `storage.objects`); polityka,
+która by je dopuściła, otworzyłaby bajty rewizji finalnej.
 `service_role` nie występuje w żadnym z tych kroków — polityki bucketa SĄ
 kontrolą dostępu. Testy: `apps/dcs/lib/files.test.ts` (reguła nazwy, NN,
 parsowanie, zdania błędów), `apps/dcs/e2e/revision-files.mjs` (`e2e:files`).

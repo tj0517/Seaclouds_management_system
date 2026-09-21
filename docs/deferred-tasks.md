@@ -2356,6 +2356,9 @@ proved. None of them is started.
   system itself makes when the next revision arrives. The lock trigger has to
   allow `status_id` -> SUPERSEDED, or creating a revision on a document whose
   current revision is final will start failing.
+  **Done in 1b.10** (2026-09-21): `revisions_assert_not_locked` lets exactly that
+  UPDATE through and `promote_new_revision()` is unchanged — proved in
+  `supabase/tests/final_revision_lock.test.sql`; see (ddd).
 - **Turning `cpy_numbering` off strands a document.** If the previous current
   revision carries a `cpy_revision` and the project has since set
   `dcs.mdr_settings.cpy_numbering = false`, the supersede UPDATE is refused by
@@ -2876,3 +2879,52 @@ which PR 1 (#80) made impossible — and #80 merged green, because CI runs pgTAP
 and never loads `supabase/fixtures/` (that is by design, `03-conventions.md`, "Fixtury lokalne").
 A fixture can therefore stop loading without any check noticing; the next person to run a browser
 script finds out. Recorded here; the fixture is fixed in PR 2.
+
+## ddd) Follow-ups noted during DCS 1b.10 (lock on final revisions)
+
+Recorded 2026-09-21. The lock itself is done and proved
+(`20260921150000_lock_final_revisions`, `final_revision_lock.test.sql`, and
+`docs/02-data-model.md`, "Blokada rewizji finalnych"). These are the edges that
+were found while building it and deliberately left alone. None is started.
+
+- ~~**Anyone who may UPDATE a locked revision can mark it SUPERSEDED by hand.**~~
+  **Closed in the review of 1b.10 (2026-09-21), not deferred.**
+  `revisions_assert_not_locked` now allows `status_id` -> SUPERSEDED on a locked
+  revision only when another revision of the same document with a later
+  `created_at` exists. `documents.current_revision_id` is not usable for this:
+  `promote_new_revision()` updates the old revision's status before it moves the
+  pointer. Side effect, intended: a revision inserted with an explicit
+  `created_at` older than the one it replaces is refused. Tests 74-79 in
+  `final_revision_lock.test.sql`.
+- **The bytes in `storage.objects` are not protected against `service_role`.** No
+  UPDATE or DELETE policy exists for `dcs-documents` (1b.09), so no API role can
+  touch an object under a locked revision — the test proves the denial — but
+  `service_role` bypasses RLS and no trigger on `storage.objects` was added (out of
+  scope). "Immutable" therefore covers the index and the revision, not the bytes
+  against the service key. `apps/dcs` never uses that key for files. Any future
+  UPDATE/DELETE policy on the bucket must respect `locked_at` (`02-data-model.md`).
+- **A locked revision blocks deleting its document and its project.** Accepted
+  in review; the cascade was read from `pg_constraint` (all `ON DELETE CASCADE`).
+  The cascade fires the row triggers, so `delete from dcs.documents` (or from
+  `public.projects`) fails with 23001 as soon as one revision is locked. Intended
+  (Void, not delete) but new: cleanup on scl-dev of a document with a locked
+  revision needs the triggers disabled by the table owner, a deliberate act.
+- **No concurrent proof of "lock vs file write".** The files trigger takes
+  `FOR SHARE` on the revision row so a file written while the DC locks the
+  revision waits for the lock and is then refused; a single-transaction pgTAP file
+  cannot race itself, so only the presence of the clause is asserted. A case in
+  `scripts/revision-proofs.py` (two sessions, not in CI) would close it.
+- **`dcs.import_mode` is settable by any SQL connection.** As for
+  `refuse_revision_on_void_document` and the revision generator; the API cannot
+  run `set_config`, so it is not reachable through PostgREST. For an immutability
+  rule it is a wider bypass than for numbering (it lifts INSERT and UPDATE of a
+  locked revision's files), so whoever hands out direct database credentials
+  should know.
+- **Phase 2 (2.03, 2.05): who sets `locked_at`.** The workflow engine that will set
+  it inside a user session is judged by `enforce_dc_only_numbering` as that user —
+  it must run session-less (definer / service key) or act for a DC at aal2.
+- **Two existing pgTAP files needed a one-line edit** because they pin the exact
+  column set of `dcs.revisions` (`rls_document_register.test.sql`, `locked_at`) and
+  its BEFORE INSERT trigger list (`dc_only_numbering_on_insert.test.sql`, the two
+  new `locked_at` triggers). Expected for any schema change there; noted so the
+  diff is not a surprise.
