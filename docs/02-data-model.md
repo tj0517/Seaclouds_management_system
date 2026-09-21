@@ -972,7 +972,26 @@ i DELETE — nadpisania ani usunięcia przez API nie ma, także dla admina
 czyta `public.projects`, do którego `anon` nie ma grantu (a `anon` i tak
 dostaje 42501 na `storage.objects` od 2026-08-31 przez `is_admin()` w
 politykach Timesheeta). Dostęp do bajtów tylko przez signed URL — PR 2.
-Test: `supabase/tests/storage_dcs_documents.test.sql` (68 asercji: bucket,
+**Aplikacja (DCS 1b.09 PR 2, `apps/dcs/lib/files.ts`):** nazwa pliku
+`[SCL_DOC_NUMBER]_[SCL_REV]_[STEP]_[YYYY-MM-DD]_[NN].[ext]` — data to
+`revisions.revision_date`, a gdy NULL, data wgrania w UTC; NN = największe NN
+na rewizji + 1 (czytane z wierszy `dcs.files` **i** z listingu folderu w
+buckecie, żeby obiekt bez wiersza nie blokował numeru), dwie cyfry, bez
+UNIQUE — kolizja to 409 `Duplicate` storage-api zamieniane na zdanie;
+rozszerzenie małymi literami, tylko `[a-z0-9]`, non-ASCII wycięte; nazwa
+użytkownika trafia do `original_name` i jest podpowiedzią. Klucz obiektu
+`{project_code}/{scl_doc_number}/{revision}/{file_name}`. Wgranie: server
+action generuje nazwę i podpisuje URL wgrania **na sesji użytkownika**
+(`createSignedUploadUrl`), przeglądarka robi PUT prosto do Storage, potem
+server action wstawia wiersz (`sort_order` = NN, `uploaded_by` z sesji).
+Pobranie: server action sprawdza dostęp odczytem (`dcs.files` pod RLS,
+`createSignedUrl(path, 60, { download: file_name })` na sesji użytkownika),
+odmowa i „nie ma obiektu" to jedno zdanie, sukces to `redirect()` na URL.
+`service_role` nie występuje w żadnym z tych kroków — polityki bucketa SĄ
+kontrolą dostępu. Testy: `apps/dcs/lib/files.test.ts` (reguła nazwy, NN,
+parsowanie, zdania błędów), `apps/dcs/e2e/revision-files.mjs` (`e2e:files`).
+
+Test bazy: `supabase/tests/storage_dcs_documents.test.sql` (68 asercji: bucket,
 pięć polityk i brak UPDATE/DELETE, NOT NULL z 23502, odczyt jako 8
 użytkowników gołym `count(*)` — członek TES bez roli DCS 0 wierszy przy
 widocznym wierszu `dcs.files`, VIEW 2 wiersze — INSERT 42501 dla

@@ -321,6 +321,9 @@ Zapisane przy DCS 1b.07 (2026-09-20).
   `docker exec -i -e PGOPTIONS='-c app.local_fixture=yes'
   supabase_db_Seaclouds_management_system psql -U postgres -v ON_ERROR_STOP=1
   < supabase/fixtures/<plik>.sql`.
+- **Od 1b.09 fixtura niesie `storage_path` na swoim wierszu `dcs.files`** (kolumna jest NOT NULL
+  od PR #80), ale **bez obiektu w buckecie** — to celowy przypadek „wiersz jest, bajtów nie ma":
+  Download na nim daje to samo zdanie co odmowa. Fixtura sprzed #80 (NULL) nie ładuje się już.
 - **Bezpiecznik:** plik odmawia uruchomienia bez `app.local_fixture=yes`.
   Konsola SQL w dashboardzie ani MCP `execute_sql` go nie ustawią. To pas
   bezpieczeństwa, nie granica — ktoś, kto ustawi zmienną, może go uruchomić
@@ -395,6 +398,33 @@ Zapisane przy DCS 1b.07 (2026-09-20).
   | `MdrToolbar` (zapisz, zmień nazwę, domyślny, usuń; eksport tylko `run`) | `/mdr` | `e2e:pending` |
   | `CreateProjectWizard`, `DocumentCreateForm` | `/admin/projects/new`, `/documents/new` | `e2e:pending` |
   | `NewRevisionDialog` | `/documents/[id]` | `e2e:revision` |
+  | `AddFileDialog` (panel i rozwinięty wiersz zakładki Revisions) | `/documents/[id]` | `e2e:pending` (`addfile`, `E2E_PROBE_N`), `e2e:files` |
+- **Czwarty skrypt, `e2e:files` (DCS 1b.09 PR 2):** `apps/dcs/e2e/revision-files.mjs`, te same
+  wymagania, ta sama fixtura (od 1b.09 zakłada też `tes.profile@local.test` — członek TES bez
+  roli DCS — i `view.profile@local.test`, rola `view`). Tworzy własny dokument z dwiema rewizjami
+  i sprząta go razem z wierszami `storage.objects` swojego folderu (lokalnie odstawia na jedną
+  instrukcję `storage.protect_delete` przez `storage.allow_delete_query`). Pokrywa: wgranie przez
+  wiersz zakładki i przez panel, nazwę generowaną (data rewizji albo data wgrania UTC, NN 01→02→03,
+  rozszerzenie małymi literami, brak rozszerzenia), `original_name` jako podpowiedź, pobranie
+  jako realny download przeglądarki pod nazwą generowaną, wygaśnięcie URL-a po 60 s (czeka
+  61 s; `E2E_SKIP_EXPIRY=1` pomija), brak publicznego URL-a, i odmowy dowiedzione **dwa razy** —
+  przez ekran i przez bezpośrednie wywołanie storage-api / PostgREST jako ten użytkownik:
+  `view` pobiera, nie wgrywa; członek TES bez roli widzi wiersze `dcs.files`, nie dostaje bajtów
+  (O-16); outsider 404 i 0 wierszy; DC na aal1 odmowa, na aal2 wgrywa; kolizja NN = 409
+  `Duplicate` przy podpisywaniu, a obiekt-sierota w folderze (bez wiersza) nie blokuje numeru,
+  bo NN czyta się z wierszy **i** z listingu folderu. Przypadek `DownloadFileButton` nie używa
+  hooka (`useTransition`), więc nie ma go w tabeli wyżej; jego dowód to `e2e:files`.
+- **`e2e:profile` bywa czerwone na ostatniej asercji („no console or hydration errors") z powodu
+  niezależnego od zmiany pod testem: przerywanego hydrowania panelu (React #418), zmierzonego i
+  nierozstrzygniętego w `docs/deferred-tasks.md` (ccc) — ok. 3 na 100 ładowań w sekwencji RED 3,
+  ok. 1 na 80 na `origin/main`. Skrypt drukuje przy błędzie URL i ostatnią zaliczoną asercję;
+  podawaj surowe liczby serii, nie „flaky".
+- **Pobranie to `redirect()` z server action do podpisanego URL-a z `Content-Disposition:
+  attachment` — zmierzone na buildzie produkcyjnym, że przeglądarka pobiera plik, a strona
+  zostaje żywa** (zakładki przełączają się, przycisk wraca do stanu enabled; `e2e:files` a/5).
+  Obawa, że router Next zawiesi drzewo po nawigacji zewnętrznej, która nie wyładowuje strony,
+  nie potwierdziła się w tej wersji (Next 16.1.1) — asercja stoi w skrypcie, żeby regresja
+  wyszła w pomiarze, nie w produkcji.
 - **Dowód przeglądarkowy: build produkcyjny (`next build` + `next start`), nigdy
   `next dev` (DCS 1b.07b, 2026-09-21).** Dwa razy błąd po stronie klienta przeszedł
   na `next dev` i wyszedł dopiero na buildzie produkcyjnym: Timesheet `/mfa`

@@ -33,6 +33,8 @@ export const IDS = {
   ORIG: 'f1000000-0000-4000-8000-000000000002',
   OUTSIDER: 'f1000000-0000-4000-8000-000000000003',
   E2E_ADMIN: 'f1000000-0000-4000-8000-0000000000a1',
+  TES: 'f1000000-0000-4000-8000-000000000004', // DCS 1b.09: TES member of SC2602, no DCS role
+  VIEW: 'f1000000-0000-4000-8000-000000000005', // DCS 1b.09: view on SC2602
 }
 export const TOTP_SECRET = 'JBSWY3DPEHPK3PXP'
 
@@ -47,6 +49,28 @@ export function guardLocal() {
 }
 
 export const psql = (sql) => execSync(`docker exec -i ${DB_CONTAINER} psql -U postgres -tA`, { input: sql }).toString().trim()
+
+/** The local anon key, for calls made straight to PostgREST or the storage-api: E2E_ANON_KEY, else the env, else apps/dcs/.env.local. */
+export function anonKey() {
+  if (process.env.E2E_ANON_KEY) return process.env.E2E_ANON_KEY
+  if (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) return process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  const envFile = path.join(here, '..', '.env.local')
+  const line = fs.existsSync(envFile)
+    ? fs.readFileSync(envFile, 'utf8').split('\n').find((l) => l.startsWith('NEXT_PUBLIC_SUPABASE_ANON_KEY='))
+    : undefined
+  if (!line) throw new Error('No anon key: set E2E_ANON_KEY or NEXT_PUBLIC_SUPABASE_ANON_KEY, or fill apps/dcs/.env.local')
+  return line.slice(line.indexOf('=') + 1).trim()
+}
+
+/** A session's access token from the local GoTrue, for the same direct calls. */
+export async function accessToken(email, password = 'password123') {
+  const r = await fetch(`${API}/auth/v1/token?grant_type=password`, {
+    method: 'POST',
+    headers: { apikey: anonKey(), 'content-type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  })
+  return (await r.json()).access_token
+}
 
 const base32 = (s) => {
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'

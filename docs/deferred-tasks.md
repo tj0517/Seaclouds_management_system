@@ -2721,6 +2721,15 @@ including its own introduction. The counts in it ("Dziesięć obserwacji…") ar
     (Zastrzeżenie do odczytu: commit, który dopisał tę obserwację, rusza `docs/` i `CLAUDE.md`, więc
     jego własny wynik nie jest tu zapisany — zgodnie z zasadą zapisu w `CLAUDE.md`, żeby kronika się
     kiedyś skończyła.)
+- **PR #80 (DCS 1b.09 PR 1, `feat/dcs-files-storage`, 2026-09-21)** — dwa pushe, odczyt `gh pr checks`:
+    - pierwszy push, HEAD `fb02536` (trzy commity `3563f0e`..`fb02536`): `supabase/` (dwie migracje, test
+      pgTAP, `config.toml`) + `packages/db/src/database.ts` (regeneracja typów) + `docs/` → **oba projekty
+      zbudowały się** (`Deployment has completed`), `ci` 4m48s.
+    - drugi push, HEAD `15c4b18` (jeden commit): wyłącznie `supabase/` (migracja, test) + `docs/` →
+      **oba POMINIĘTE** (`Skipped - Not affected`), `ci` 4m0s.
+    Zgodne z tym, co mówi sekcja „Workspace (pnpm)” w `03-conventions.md`: zmiana w `packages/db` przebudowuje
+    oba produkty, zmiana ograniczona do pakietów-atrap (`supabase`, `docs`) nie buduje żadnego. Nadal bez
+    wyjaśnienia dla #58 i dla pary z #71/#79 (sam `CLAUDE.md` zbudował oba).
 
 ## bbb) Audyt pobrań plików DCS — obietnica z `02-data-model.md`, której `public.audit_log` nie może spełnić (DCS 1b.09 PR 1, 2026-09-21)
 
@@ -2760,3 +2769,65 @@ CHECK-a ani `audit_trigger()`. Bucket i polityki storage nie logują niczego.
 
 **Nieodwracalne:** żadna. (a) i (b) to zwykłe migracje; (a) zmienia CHECK, co jest tanie
 w obie strony, dopóki nie ma wierszy z nową wartością.
+
+## ccc) DCS 1b.09 PR 2 — an intermittent hydration error (React #418) on the document profile, measured, not explained (2026-09-21)
+
+**What it is.** On a production build, a full load of `/documents/[documentId]` sometimes logs
+`Minified React error #418` (hydration mismatch). The page still renders — React regenerates the
+tree on the client — so a person sees nothing; `e2e:profile` fails its last check ("no console or
+hydration errors") on that run. Found while proving 1b.09 PR 2 (`feat/dcs-revision-files`), which
+asks for 10 consecutive green `e2e:profile` runs.
+
+**What the dev build says.** One mismatch, under `<RevisionPanelActions>` in the current-revision
+panel: client `+ <ul className="grid gap-3 …">`, server `- <li className="space-y-1">` — React's
+hydration cursor is INSIDE the actions list when it expects the list itself.
+
+**What was measured** (local stack, `next build` + `next start`, Node 20.20.0, one DC session at
+aal2; the sequence is `current_revision_id := NULL` → load → restore → load, which is what
+`e2e:profile` does at its RED 3; raw counts, never ratios):
+
+| build | condition | null-load | restored-load | plain repeat |
+|---|---|---|---|---|
+| `origin/main` (`5f8e1e6`) | unthrottled, N=40 (+40 with a screenshot between) | 1 of 80 | 0 of 80 | — |
+| `origin/main` | 800 kbps, N=20 | 0 | 0 | 0 |
+| PR 2 as first written | unthrottled, N=40 ×2 | 0 | 8 of 80 | — |
+| PR 2 | 800 kbps, N=20 | 0 | 5 | 3 |
+| PR 2 without the Download buttons (A) | 800 kbps, N=20 | 0 | 10 | — |
+| PR 2 without the panel Add File dialog (B) | 800 kbps, N=20 | 0 | 5 | — |
+| PR 2 without both (AB) | 800 kbps, N=20 | 0 | 2 | 6 |
+| PR 2 with `RevisionPanelActions` as a client component (D) | 800 kbps, N=20 | 4 | 5 | 3 |
+| PR 2 with the "Uploaded as" hint as ONE text node (E, **kept**) | 800 kbps N=20 + unthrottled N=40 | 0 | 1 + 2 | 0 + 3 |
+| E + `<Suspense fallback={null}>` around the panel (F, **rejected**) | 800 kbps N=20 + unthrottled N=40 | 6 + 0 | 6 + 1 | 5 + 1 |
+
+Also measured and ruled out: the served HTML of a failing load is byte-identical to a passing one
+(the `<aside>` compared after stripping comments); a MutationObserver shows the parser building
+`<section><h2>Actions</h2><ul>` + six `<li>` at ~8 ms with nothing ever removing the `<ul>` before
+React reports the error at ~49 ms; the route's client-reference manifest assigns every profile
+component to the same chunk on both builds; `caret: 'initial'` on screenshots (the trap in
+`03-conventions.md`) changed nothing — that trap is real, but this is not it.
+
+**What this is consistent with, and what it is not.** Not the served markup (identical), not the
+DOM (built correctly, untouched), not chunk loading (same chunks), not one of the two new client
+components (removing both leaves it). The rate moves with how much hydration work the panel
+carries — two adjacent text nodes with a `<!-- -->` between them (React's separator) cost ~4× —
+and the same error exists on `origin/main` at ~1 in 80. The shape is React resuming an
+interrupted or suspended hydration with its cursor left one level deep; which interruption is
+unknown and was not proven. A Suspense boundary made it worse, not better, so the "hydrate before
+the stream ends" reading is out too.
+
+**Decision taken in PR 2:** keep variant E (one text node), keep everything else, and record.
+`e2e:profile` is the gate and it remains a coin with a small bias: at ~3 loads in 100 on the
+RED-3 sequence, a run of 10 passes about three times in four. Report the raw count of every
+series, never "flaky".
+
+**Open, for a decision (MD):**
+- (a) Leave it: a person never sees it (client regeneration), the test names it when it happens.
+  Cost: `e2e:profile` occasionally red for a reason unrelated to the change under test.
+- (b) Chase it upstream: reduce to a minimal Next 16.1.1 / React 19.2.3 reproduction (a server
+  list with two client dialogs and a file list beside it) and search / file the issue. Cost: a
+  day; may be fixed by a version bump, which is its own measured task (`.nvmrc`, Next).
+- (c) Restructure the panel so that its actions list is not hydrated at all on load (e.g. render
+  the dialogs only after mount). Cost: the buttons appear a frame late; and D (the whole list as
+  one client component) did NOT help, so this is a guess.
+None is irreversible. `apps/dcs/e2e/document-profile.mjs` now prints the page URL and the last
+passed check with every error, which is what made the location findable.

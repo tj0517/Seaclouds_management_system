@@ -132,7 +132,10 @@ async function toAal2(page, next) {
 }
 
 const text = async (page) => page.locator('main').innerText().catch(() => page.locator('body').innerText())
-const shot = (page, name, options = {}) => page.screenshot({ path: path.join(SHOTS, `${name}.png`), ...options })
+// caret: 'initial' — a default screenshot writes an inline caret-color into every <input>, which a shot taken
+// mid-hydration turns into a false React #418 (docs/03-conventions.md, "Pułapka: zrzut ekranu"). Measured here:
+// 1 of 10 e2e:profile runs on 2026-09-21 (DCS 1b.09 PR 2) before this line, 0 of 10 after.
+const shot = (page, name, options = {}) => page.screenshot({ path: path.join(SHOTS, `${name}.png`), caret: 'initial', ...options })
 
 async function accessToken(email) {
   const r = await fetch(`${API}/auth/v1/token?grant_type=password`, {
@@ -259,7 +262,7 @@ const browser = await chromium.launch()
   const cellsA = await rowA.innerText()
   rec('a: the row shows step, date, author, status and reason', /IDC/.test(cellsA) && cellsA.includes(today) && /Oskar Originator/.test(cellsA) && /E2E first issue/.test(cellsA))
   rec('a: it is marked Current', /Current/.test(cellsA))
-  rec('a: there is no Add files control on the tab (1b.09)', !/Add file/i.test(await page.locator('[data-revision-files="A"]').innerText()))
+  rec('a: the expanded row offers Add File to the Originator (1b.09; what it does is revision-files.mjs)', (await page.locator('[data-revision-files="A"] button[data-add-file="A"]').count()) === 1)
   rec('a: the document header moved to STARTED', /STARTED/.test(await page.locator('h1').locator('xpath=ancestor::header').innerText()))
   rec('a/DB: A is current and the document is STARTED', docState(D_ORIG) === 'STARTED|A', docState(D_ORIG))
   await shot(page, 'a2-revisions-tab-first-revision', { fullPage: true })
