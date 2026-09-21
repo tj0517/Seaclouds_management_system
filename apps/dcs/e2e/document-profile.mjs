@@ -115,11 +115,11 @@ async function go(page, url) {
 }
 
 /** aal1 -> aal2 through the real /mfa page, with a code computed from the fixture secret. */
-async function toAal2(page, next) {
+async function toAal2(page, next, landing = '/documents') {
   await page.goto(`${BASE}/mfa?next=${encodeURIComponent(next)}`)
   await page.waitForSelector('input[inputmode=numeric]')
   await page.fill('input[inputmode=numeric]', totp())
-  await Promise.all([page.waitForURL((u) => u.pathname.startsWith('/documents'), { timeout: 15000 }), page.keyboard.press('Enter')])
+  await Promise.all([page.waitForURL((u) => u.pathname.startsWith(landing), { timeout: 15000 }), page.keyboard.press('Enter')])
   await page.waitForLoadState('networkidle')
   await page.waitForSelector('h1', { timeout: 15000 })
 }
@@ -289,11 +289,25 @@ const browser = await chromium.launch()
   rec('RED 3: restored, the panel shows the revision again', /SCL revision/.test(await text(page)))
 
   // RED PROOF 2: an id that is not there, and one that is not even a uuid -> the 404 page.
-  // Not asserted on the HTTP status: loading.tsx streams the shell first, so it is 200 (deferred-tasks vv).
+  // The HTTP status is PINNED at 404 (DCS 1b.07b). While (app)/loading.tsx existed the shell was
+  // streamed before notFound() ran and the same request answered 200 (deferred-tasks vv, zz);
+  // the boundary is gone, and this is what stops it coming back unnoticed.
   for (const id of [RANDOM_UUID, 'abc']) {
     const response = await go(page, `${BASE}/documents/${id}`)
     const body = await text(page)
-    rec(`RED 2: /documents/${id} shows the 404 page`, /could not be found/i.test(body) && !/SC2602/.test(body), `HTTP ${response.status()}`)
+    rec(
+      `RED 2: /documents/${id} shows the 404 page and answers HTTP 404`,
+      /could not be found/i.test(body) && !/SC2602/.test(body) && response.status() === 404,
+      `HTTP ${response.status()}`,
+    )
+  }
+  {
+    const response = await go(page, `${BASE}/projects/${RANDOM_UUID}/documents`)
+    rec(
+      'RED 2: /projects/<unknown uuid>/documents shows the 404 page and answers HTTP 404',
+      /could not be found/i.test(await text(page)) && response.status() === 404,
+      `HTTP ${response.status()}`,
+    )
   }
   await go(page, `${BASE}/documents/${RANDOM_UUID}`)
   await shot(page, 'r2-random-uuid-404')
@@ -383,6 +397,21 @@ const browser = await chromium.launch()
   const t = await text(page)
   rec('4: an admin sees the History entries too', /cpy_doc_number/.test(t) && /CPY-TEST-0042/.test(t))
   await shot(page, 'd1-admin-history', { fullPage: true })
+  await ctx.close()
+}
+
+// ---------------- (e) the fourth notFound() route, which needs an admin at aal2 (DCS 1b.07b) ----------------
+// /admin/* asks an admin for a second factor (proxy.ts), and the seed's own admin has none; the fixture's
+// e2e.admin@local.test does. Same pinned status as the profile routes above.
+{
+  const { ctx, page } = await session(browser, 'e2e.admin@local.test')
+  await toAal2(page, `/admin/projects/${PEJ}`, '/admin')
+  const response = await go(page, `${BASE}/admin/projects/${RANDOM_UUID}`)
+  rec(
+    'RED 2: /admin/projects/<unknown uuid> (admin, aal2) shows the 404 page and answers HTTP 404',
+    /could not be found/i.test(await text(page)) && response.status() === 404,
+    `HTTP ${response.status()}`,
+  )
   await ctx.close()
 }
 

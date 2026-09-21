@@ -342,8 +342,10 @@ Zapisane przy DCS 1b.07 (2026-09-20).
   przeglądarka. Koszt zapisany wprost: zależność dev zmienia `pnpm-lock.yaml`,
   wspólny z Timesheetem.
 - **Jak uruchomić** (wszystko lokalnie): `supabase start` i `supabase db reset`;
-  fixtura jak wyżej; `pnpm --filter @scl/dcs dev` (port 3001, `.env.local` na
-  lokalny stack); przeglądarka: `pnpm --filter @scl/dcs exec playwright install
+  fixtura jak wyżej; **build produkcyjny na Node 20** (`.nvmrc`; dowód na
+  `next dev` się nie liczy — reguła niżej): `pnpm --filter @scl/dcs exec next
+  build`, potem `pnpm --filter @scl/dcs exec next start --port 3001`
+  (`.env.local` na lokalny stack); przeglądarka: `pnpm --filter @scl/dcs exec playwright install
   chromium` (sam `pnpm add` przeglądarek nie pobiera; na Linuksie bez
   bibliotek systemowych — u nas brakowało `libnspr4`, `libnss3`, `libasound2` —
   potrzebne `--with-deps` z sudo albo rozpakowane lokalnie paczki `.deb` i
@@ -355,12 +357,66 @@ Zapisane przy DCS 1b.07 (2026-09-20).
   te same wymagania i ta sama fixtura; tworzy własne dokumenty (stałe id) i sprząta
   je na początku i na końcu, więc nie zużywa fixtury. Pokrywa okno New Revision i
   zakładkę Revisions (A, potem B, krok IFR → `00`, nadpisanie kodu przez DC,
-  odmowy: Void, kod podany przez ORIG wprost do PostgREST). **`e2e:profile` da się dziś
-  uruchomić tylko przeciw `next dev`, i to jest DEFEKT, nie konwencja:** zapis numeru
-  CPY zawiesza się na buildzie produkcyjnym na „Saving…” — także na niezmienionym
-  `origin/main` (`docs/deferred-tasks.md` yy, zadanie priorytetowe). Zielony wynik na
-  `next dev` jest niepełnym dowodem dla przejść po stronie klienta (por. 1a.25b).
-  `e2e:revision` przechodzi na obu.
+  odmowy: Void, kod podany przez ORIG wprost do PostgREST). `e2e:profile` i
+  `e2e:revision` przechodzą na buildzie produkcyjnym (DCS 1b.07b naprawiło
+  zawieszony zapis numeru CPY, który przez to nie dawał się sprawdzić inaczej niż na
+  `next dev`; przyczyna i pomiary: `docs/deferred-tasks.md` zz). **`e2e:profile`
+  czyta 200 najnowszych wierszy audytu dokumentu z fixtury** (`HISTORY_LIMIT`) i
+  sprawdza, że widać wśród nich wiersze „System (no session)” z jego założenia —
+  skrypt, który dopisuje setki wierszy audytu do `DOC_A`, wypycha je poza limit i
+  psuje tę jedną asercję (zdarzyło się przy pisaniu `e2e:pending`, patrz niżej).
+  `e2e:profile` **przypina też HTTP 404** na czterech trasach `notFound()` (nieznany
+  uuid i `abc` pod `/documents/`, `/projects/<nieznany>/documents`, oraz
+  `/admin/projects/<nieznany>` dla admina z aal2): z przywróconym
+  `app/(app)/loading.tsx` wszystkie cztery odpowiadają 200.
+- **Trzeci skrypt, `e2e:pending` (DCS 1b.07b):** `apps/dcs/e2e/pending-action.mjs`
+  + wspólne helpery `apps/dcs/e2e/support.mjs` (wyjęte, bo to trzeci skrypt — wpis
+  (yy); dwa starsze skrypty nadal mają własne kopie). Dowodzi, że zapis przez
+  `hooks/use-pending-action.ts` **dochodzi do skutku** na każdym ekranie, który go
+  używa. Zapis liczy się, gdy (a) odświeżone drzewo jest w DOM — coś, co renderuje
+  serwer (wiersz, nazwa, opcja, zremontowany `<input>`) — **i** (b) znikł
+  wskaźnik pending; sam znikający spinner nie wystarcza. Powtarza każdy ekran
+  (`E2E_REPEAT`, domyślnie 5; `E2E_PROBE_N`, domyślnie 30, dla pola CPY i `/mdr`),
+  drukuje surowe liczby (`not-committed`, `stuck-pending`, `not-stored`,
+  `step-errors`) i kończy się kodem 1 przy jakimkolwiek zawieszeniu. Wymaga
+  `e2e.admin@local.test` — admina z zweryfikowanym faktorem TOTP, którego
+  `/admin` wymaga (aal2), założonego przez fixturę **a nie przez `seed.sql`**:
+  dwa pliki pgTAP (`dcs_profile_directory`, `rls_module_permissions`) przypinają
+  skład seeda, więc dodanie do niego użytkownika łamie trzy asercje. CPY bije w
+  **własnym dokumencie** (`DOC_PENDING`), nie w `DOC_A` — patrz uwaga o
+  `HISTORY_LIMIT` wyżej. Pokrycie dwunastu miejsc wywołania hooka:
+
+  | Komponent | Ekran | Dowód |
+  |---|---|---|
+  | `CpyNumberField` | `/documents/[id]` | `e2e:pending` (`cpy`), `e2e:profile` |
+  | `AddMemberForm`, `RoleCheckboxGroup`, `EditProjectDialog` | `/admin/projects/[id]` | `e2e:pending` |
+  | `ClientDialog` (dodaj, edytuj), `ClientsTable` | `/admin/clients` | `e2e:pending` |
+  | `DictionaryEntryDialog`, `DictionaryTypeTable` | `/admin/dictionaries` | `e2e:pending` |
+  | `MdrToolbar` (zapisz, zmień nazwę, domyślny, usuń; eksport tylko `run`) | `/mdr` | `e2e:pending` |
+  | `CreateProjectWizard`, `DocumentCreateForm` | `/admin/projects/new`, `/documents/new` | `e2e:pending` |
+  | `NewRevisionDialog` | `/documents/[id]` | `e2e:revision` |
+- **Dowód przeglądarkowy: build produkcyjny (`next build` + `next start`), nigdy
+  `next dev` (DCS 1b.07b, 2026-09-21).** Dwa razy błąd po stronie klienta przeszedł
+  na `next dev` i wyszedł dopiero na buildzie produkcyjnym: Timesheet `/mfa`
+  (1a.25b → 1a.25c; stawki nie mierzono) i zapis numeru CPY w DCS (1b.07 → 1b.07b:
+  `e2e:profile` 36/36 na `next dev`; na buildzie produkcyjnym 3 z 10 przebiegów
+  czerwone, sonda zapisu 16 z 40 zawieszeń, w `e2e:pending` po resecie bazy 5 z
+  30). Dowód, który nie poszedł na buildzie produkcyjnym, jest zgłaszany jako
+  `next dev` i nie liczy się jako dowód przejść po stronie klienta. Błąd bywa
+  losowy (17–83% zapisów, ta sama baza kodu, różne sesje — powodu rozrzutu nie
+  znamy), więc **jeden zielony przebieg niczego nie dowodzi**: licz próby (N ≥ 30),
+  podawaj surowe liczby, nie stosunek, i sprawdzaj, że odświeżone drzewo trafiło
+  do DOM, a nie tylko że zniknął spinner.
+- **`loading.tsx` nad stroną, której akcje serwerowe wołają `revalidatePath`,
+  wymaga pomiaru zawieszeń na buildzie produkcyjnym (N ≥ 30) przed merge'em.**
+  Next 16.1.1 potrafi wtedy nigdy nie zatwierdzić odświeżonego drzewa
+  (transition lane zawieszony i nie „pingnięty”, mimo kompletnej odpowiedzi):
+  [vercel/next.js#98303](https://github.com/vercel/next.js/issues/98303), także
+  [#86055](https://github.com/vercel/next.js/issues/86055). Zmierzone
+  w 1b.07b, że to nie jest reguła „każdy `loading.tsx` + każdy `revalidatePath`”:
+  `/mdr` woła `revalidatePath` w pięciu akcjach, leży pod tą samą granicą i nie
+  wisi (0/30 na akcję). Mechanizmu, który to rozstrzyga, nie znamy — stąd pomiar,
+  nie wnioskowanie. Usunięte szkielety i ich liczby: `docs/deferred-tasks.md` zz.
 - **Dowody, których nie da się zrobić w pgTAP: `scripts/revision-proofs.py`
   (DCS 1b.08).** Wyścigi (dwa zamki, równoległe sesje psql) i „zepsuj każdą
   kontrolę po kolei i pokaż, że jej test czerwienieje”. Też lokalnie, też poza CI;

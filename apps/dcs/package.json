@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test:unit": "vitest run",
     "e2e:profile": "node e2e/document-profile.mjs",
-    "e2e:revision": "node e2e/new-revision.mjs"
+    "e2e:revision": "node e2e/new-revision.mjs",
+    "e2e:pending": "node e2e/pending-action.mjs"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",
