@@ -3,8 +3,19 @@
 // DCS 1b.09 (PR 2): one file's Download control. A button, not a link: the
 // signed URL is minted on click by the downloadFile action, as the signed-in
 // user, lives sixty seconds, and is never rendered into the page. On success
-// the action redirects the browser to it; on refusal it returns the one
-// sentence (lib/files.ts, FILE_NOT_AVAILABLE_MESSAGE), shown in place.
+// the action returns it and this button sends the browser there with
+// window.location.assign — the URL answers with Content-Disposition:
+// attachment, so the browser saves the file and the page stays. On refusal
+// the action returns the one sentence (lib/files.ts,
+// FILE_NOT_AVAILABLE_MESSAGE), shown in place.
+//
+// Not redirect() from the action (PR #81 review 5): the Next client router
+// records an external action redirect as its canonical URL and expects the
+// page to unload; a download does not unload it, and every later server
+// action on the page was then POSTed to the storage URL. The plain
+// location.assign here never touches the router, so the next Add File after a
+// download posts to the app — e2e:files h/0 and h/2 prove it, and prove this
+// button is enabled again once the action has returned.
 //
 // Who may read the bytes is the bucket's SELECT policy (holders of a DCS role
 // on the project, and admins — O-16). A Timesheet-only member sees this row
@@ -29,9 +40,12 @@ export default function DownloadFileButton({ fileId, fileName }: { fileId: strin
         onClick={() => {
           setError(null)
           start(async () => {
-            // On success the action redirects and never returns here.
             const result = await downloadFile({ fileId })
-            if (result && !result.ok) setError(result.message ?? 'This file is not available to you.')
+            if (!result.ok) {
+              setError(result.message ?? 'This file is not available to you.')
+              return
+            }
+            window.location.assign(result.data.url)
           })
         }}
       >

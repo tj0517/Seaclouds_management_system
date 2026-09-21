@@ -443,12 +443,20 @@ Zapisane przy DCS 1b.07 (2026-09-20).
   nierozstrzygniętego w `docs/deferred-tasks.md` (ccc) — ok. 3 na 100 ładowań w sekwencji RED 3,
   ok. 1 na 80 na `origin/main`. Skrypt drukuje przy błędzie URL i ostatnią zaliczoną asercję;
   podawaj surowe liczby serii, nie „flaky".
-- **Pobranie to `redirect()` z server action do podpisanego URL-a z `Content-Disposition:
-  attachment` — zmierzone na buildzie produkcyjnym, że przeglądarka pobiera plik, a strona
-  zostaje żywa** (zakładki przełączają się, przycisk wraca do stanu enabled; `e2e:files` a/5).
-  Obawa, że router Next zawiesi drzewo po nawigacji zewnętrznej, która nie wyładowuje strony,
-  nie potwierdziła się w tej wersji (Next 16.1.1) — asercja stoi w skrypcie, żeby regresja
-  wyszła w pomiarze, nie w produkcji.
+- **Pobranie: server action zwraca podpisany URL jako dane, a przycisk kieruje przeglądarkę
+  przez `window.location.assign`; nigdy `redirect()` z server action na URL zewnętrzny.**
+  Do rundy 5 przeglądu PR #81 pobranie było `redirect()`-em i strona „zostawała żywa"
+  (zakładki się przełączały), ale router Next zapisywał zewnętrzny redirect jako
+  `canonicalUrl` (`handleExternalUrl`, `mpaNavigation`), a `Content-Disposition: attachment`
+  nie wyładowuje strony — więc **każda następna server action na tej stronie szła POST-em na
+  URL storage** (`server-action-reducer.js`: `fetch(state.canonicalUrl)`), storage-api
+  odpowiadał 400, a przycisk Download zostawał wyłączony (tranzycja nigdy nie kończyła się).
+  Na Preview wyglądało to jak „JPG po pobraniu nie wgrywa się". Dowód: `e2e:files` h/0 i h/2
+  (dwa pobrania, wgranie bez przeładowania; wgranie, pobranie, wgranie) rejestrują każdy POST
+  z nagłówkiem `next-action` i wymagają adresu aplikacji; czerwony dowód na buildzie
+  `b25d34d`: POST na `…/storage/v1/object/sign/…`. Powtórzone w WebKicie (Playwright) — ta sama
+  ścieżka, bo mechanizm jest w routerze Next, nie w przeglądarce. Asercja a/5 („strona
+  zostaje żywa") stoi, ale nie jest dowodem na nic więcej.
 - **Dowód przeglądarkowy: build produkcyjny (`next build` + `next start`), nigdy
   `next dev` (DCS 1b.07b, 2026-09-21).** Dwa razy błąd po stronie klienta przeszedł
   na `next dev` i wyszedł dopiero na buildzie produkcyjnym: Timesheet `/mfa`

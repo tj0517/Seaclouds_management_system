@@ -1004,7 +1004,14 @@ którym odświeżone drzewo z nowym wierszem jest w DOM** (stan wyprowadzony:
 na ekranie bez wskaźnika (reguła w `03-conventions.md`, „Stany ładowania").
 Pobranie: server action sprawdza dostęp odczytem (`dcs.files` pod RLS,
 `createSignedUrl(path, 60, { download: file_name })` na sesji użytkownika),
-odmowa i „nie ma obiektu" to jedno zdanie, sukces to `redirect()` na URL.
+odmowa i „nie ma obiektu" to jedno zdanie, sukces to URL zwrócony jako dane,
+na który przycisk kieruje przeglądarkę przez `window.location.assign` — **nie
+`redirect()` z server action** (PR #81, runda 5): router kliencki Next
+zapisuje zewnętrzny redirect akcji jako swój `canonicalUrl` i wysyła każdą
+następną server action POST-em na ten adres (`server-action-reducer.js`,
+`fetch(state.canonicalUrl)`), a pobranie z `Content-Disposition: attachment`
+nie wyładowuje strony, więc do przeładowania każde Add File po pobraniu
+lądowało 400 w storage-api.
 `service_role` nie występuje w żadnym z tych kroków — polityki bucketa SĄ
 kontrolą dostępu. Testy: `apps/dcs/lib/files.test.ts` (reguła nazwy, NN,
 parsowanie, zdania błędów), `apps/dcs/e2e/revision-files.mjs` (`e2e:files`).

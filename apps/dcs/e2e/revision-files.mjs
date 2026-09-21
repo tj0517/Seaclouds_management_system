@@ -125,8 +125,9 @@ async function uploadVia(page, trigger, { name, mimeType, content, kind, filePat
 /** Clicks Download and returns the browser's download (or null) plus the page's alert text. */
 async function download(page, name) {
   const button = page.locator(`button[data-download="${name}"]`).first()
-  const dl = await Promise.all([page.waitForEvent('download', { timeout: 10000 }).catch(() => null), button.click()]).then(([d]) => d)
-  const alert = dl ? '' : await page.locator('[role=alert]').first().innerText().catch(() => '')
+  // A click that cannot happen (the button still disabled from a previous download) is reported, not thrown.
+  const dl = await Promise.all([page.waitForEvent('download', { timeout: 10000 }).catch(() => null), button.click({ timeout: 8000 }).catch(() => null)]).then(([d]) => d)
+  const alert = dl ? '' : (await page.locator('[role=alert]').first().innerText().catch(() => '')) || (await button.isDisabled().catch(() => false) ? 'Download button disabled' : '')
   return { dl, alert }
 }
 
@@ -382,6 +383,22 @@ let firstSignedAt = 0
   const objectsA = () => Number(psql(`select count(*) from storage.objects where bucket_id = 'dcs-documents' and name like '${FOLDER_A}/%'`))
   rec('h: setup — revision A carries one row and one object (a/4)', rowsA() === 1 && objectsA() === 1, `${rowsA()} rows, ${objectsA()} objects`)
 
+  // Every server-action POST from here on (PR #81 review 5): after a download, WITHOUT a reload, the next
+  // action must still be posted to the app — not to the signed storage URL the download redirected to.
+  const actionPosts = []
+  page.on('request', (r) => { if (r.method() === 'POST' && r.headers()['next-action']) actionPosts.push(r.url()) })
+  const postsSince = (n) => actionPosts.slice(n)
+  const wrongHost = (urls) => urls.filter((u) => !u.startsWith(`${BASE}/documents/${DOC}`))
+
+  // ---- 0. two downloads on a fresh page, then an upload without a reload ----
+  const NAME_A1 = `${SCL}_A_IDC_2026-09-19_01.dwg`
+  const dl1 = await download(page, NAME_A1)
+  const enabledAgain = await holds(page, (n) => { const b = document.querySelector(`button[data-download="${n}"]`); return !!b && !b.disabled }, NAME_A1, 5000)
+  rec('h/0: after a download the Download button is enabled again within 5 s (the action returned, the transition settled)', dl1.dl !== null && enabledAgain, dl1.alert || (enabledAgain ? '' : 'still disabled'))
+  const dl2 = await download(page, NAME_A1)
+  rec('h/0: two downloads in a row from the row list (fresh page, no upload before them)', dl1.dl !== null && dl2.dl !== null && dl1.dl.suggestedFilename() === NAME_A1, dl1.alert || dl2.alert)
+  const mark0 = actionPosts.length
+
   // ---- 1. a real double click on Upload: the second click meets a disabled button ----
   const NAME_A2 = `${SCL}_A_IDC_2026-09-19_02.pdf`
   const big = Buffer.alloc(4 * 1024 * 1024, 1) // 4 MiB: the first upload is still in flight when the second click lands
@@ -390,15 +407,19 @@ let firstSignedAt = 0
   })
   // Give a second upload, had one started, time to finish before counting.
   await page.waitForTimeout(1500)
+  rec('h/0: the upload after two downloads, without a reload, posts its server actions to the app and lands (NN 02)', dbl.landed && postsSince(mark0).length >= 2 && wrongHost(postsSince(mark0)).length === 0, wrongHost(postsSince(mark0)).length ? `action POST went to: ${wrongHost(postsSince(mark0))[0].slice(0, 120)}` : `${postsSince(mark0).length} action POSTs, all to ${BASE}/documents/${DOC}`)
   rec('h/1: a double click on Upload stores exactly one row and one object (NN 02, no 03)', dbl.landed && dbl.pendingGone && rowsA() === 2 && objectsA() === 2 && fileRow(`${SCL}_A_IDC_2026-09-19_03.pdf`) === '', `${rowsA()} rows, ${objectsA()} objects`)
 
-  // ---- 2. two submits in one task (Enter held down, a flaky trackpad): the latch, not the disabled attribute ----
+  // ---- 2. upload, download it, then upload again without a reload; two submits in one task ----
+  const dl3 = await download(page, NAME_A2)
+  const mark2 = actionPosts.length
   // form.requestSubmit() ignores a disabled submit button, so this is the hook's latch alone being tested.
   const NAME_A3 = `${SCL}_A_IDC_2026-09-19_03.pdf`
   const twice = await uploadVia(page, trigger, { name: 'two-submits.pdf', mimeType: 'application/pdf', content: big, kind: 'original' }, NAME_A3, {
     submit: (dialog) => dialog.locator('form').evaluate((form) => { form.requestSubmit(); form.requestSubmit() }),
   })
   await page.waitForTimeout(1500)
+  rec('h/2: the just-uploaded file downloads, and the upload after it (no reload) posts its server actions to the app', dl3.dl !== null && dl3.dl.suggestedFilename() === NAME_A2 && twice.landed && postsSince(mark2).length >= 2 && wrongHost(postsSince(mark2)).length === 0, dl3.alert || (wrongHost(postsSince(mark2)).length ? `action POST went to: ${wrongHost(postsSince(mark2))[0].slice(0, 120)}` : `${postsSince(mark2).length} action POSTs, all to the app`))
   rec('h/2: two synchronous submits store exactly one row and one object (NN 03, no 04) — the single-flight latch', twice.landed && twice.pendingGone && rowsA() === 3 && objectsA() === 3 && fileRow(`${SCL}_A_IDC_2026-09-19_04.pdf`) === '', `${rowsA()} rows, ${objectsA()} objects`)
 
   // ---- 3. a 50 MiB file: the bar, the percent, the disabled button, the stored row ----

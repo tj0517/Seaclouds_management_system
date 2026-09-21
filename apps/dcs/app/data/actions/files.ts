@@ -12,8 +12,16 @@
 // narrowing that keeps file bytes from Timesheet-only members — and is never used.
 //
 // No route handler: the download is a server action that returns the refusal
-// as data and, on success, redirects the browser to the short-lived signed URL.
-import { redirect } from 'next/navigation'
+// as data and, on success, the short-lived signed URL as data — the button
+// then navigates the browser to it itself (window.location.assign). NOT
+// redirect(): a server-action redirect to an external URL makes the Next
+// client router treat it as a full-page navigation (handleExternalUrl →
+// location.assign) and record that URL as the router's canonical URL. The
+// signed URL answers with Content-Disposition: attachment, so the page never
+// unloads, and every later server action on the page was POSTed to the
+// storage URL (400) until a reload — PR #81 review 5, seen on a Preview as
+// "a JPG upload after a download fails". server-action-reducer.js posts to
+// state.canonicalUrl, so nothing short of a reload recovers from it.
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@scl/db/server'
 import {
@@ -44,17 +52,14 @@ export async function recordFileUpload(input: unknown): Promise<FileResult<{ id:
 
 /**
  * Checks access by asking the database and the storage-api as the caller
- * (lib/files.ts downloadUrl), then redirects to the signed URL. A refusal —
- * a row RLS hides, an object the SELECT policy hides, an object that is not
- * there — is returned as { ok: false, error: 'forbidden' } with the one
- * sentence, and the caller shows it in place.
- *
- * redirect() throws, so it stays outside any try/catch (Next.js rule) and
- * this function only returns on refusal.
+ * (lib/files.ts downloadUrl) and returns the signed URL for the caller to
+ * navigate to. A refusal — a row RLS hides, an object the SELECT policy
+ * hides, an object that is not there — is returned as
+ * { ok: false, error: 'forbidden' } with the one sentence, shown in place.
  */
-export async function downloadFile(input: unknown): Promise<FileResult<never>> {
+export async function downloadFile(input: unknown): Promise<FileResult<{ url: string }>> {
   const supabase = await createClient()
   const result = await downloadWith(supabase, input)
   if (!result.ok) return result
-  redirect(result.data.url)
+  return { ok: true, data: { url: result.data.url } }
 }
