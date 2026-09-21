@@ -205,6 +205,18 @@ export function uploadNetworkError(): { ok: false; error: FileError; message?: s
   return fail('storage_error', UPLOAD_NETWORK_MESSAGE)
 }
 
+/**
+ * One of the two server-action calls of an upload threw instead of answering
+ * (the request never reached the app, or the app answered something that is
+ * not a server-action response — a sign-in page, a gateway error). Shown as a
+ * sentence so the dialog never sits on "Adding…" with nothing to read.
+ */
+export const UPLOAD_REQUEST_MESSAGE = 'The request to the server failed. Reload the page and try again.'
+
+export function uploadRequestError(): { ok: false; error: FileError; message?: string } {
+  return fail('storage_error', UPLOAD_REQUEST_MESSAGE)
+}
+
 export function isFileKind(value: unknown): value is FileKind {
   return typeof value === 'string' && (FILE_KINDS as readonly string[]).includes(value)
 }

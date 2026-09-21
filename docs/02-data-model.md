@@ -993,9 +993,15 @@ pliku (żadnego `arrayBuffer()`, `FileReader`, hashowania ani kopii `Blob`;
 czytane są tylko `name`, `size`, `type`). PUT bez odpowiedzi HTTP (zerwane
 połączenie, abort) to osobne zdanie z zachętą do ponowienia
 (`UPLOAD_NETWORK_MESSAGE`) — nic nie zostało zapisane, następna próba
-podpisuje nowy URL i liczy NN od nowa. Od kliknięcia do odświeżonej listy
-przycisk jest wyłączony i pokazuje „Adding…", a drugi klik w tym oknie
-odrzuca zatrzask hooka (`lib/single-flight.ts`).
+podpisuje nowy URL i liczy NN od nowa; server action, który rzuci zamiast
+odpowiedzieć (żądanie nie doszło do aplikacji albo odpowiedź nie jest
+odpowiedzią server action), to zdanie `UPLOAD_REQUEST_MESSAGE`, nigdy dialog
+zawieszony na „Adding…". Od kliknięcia do odświeżonej listy przycisk jest
+wyłączony i pokazuje „Adding…", a drugi klik w tym oknie odrzuca zatrzask
+hooka (`lib/single-flight.ts`); **dialog zamyka się dopiero w renderze, w
+którym odświeżone drzewo z nowym wierszem jest w DOM** (stan wyprowadzony:
+`open && !(closeWhenRefreshed && !pending)`), więc stara lista nigdy nie jest
+na ekranie bez wskaźnika (reguła w `03-conventions.md`, „Stany ładowania").
 Pobranie: server action sprawdza dostęp odczytem (`dcs.files` pod RLS,
 `createSignedUrl(path, 60, { download: file_name })` na sesji użytkownika),
 odmowa i „nie ma obiektu" to jedno zdanie, sukces to `redirect()` na URL.

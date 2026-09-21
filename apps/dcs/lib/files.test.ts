@@ -24,7 +24,9 @@ import {
   TOO_LARGE_MESSAGE,
   UPLOAD_FORBIDDEN_MESSAGE,
   UPLOAD_NETWORK_MESSAGE,
+  UPLOAD_REQUEST_MESSAGE,
   uploadNetworkError,
+  uploadRequestError,
 } from './files'
 
 const REV = '33333333-3333-4333-8333-333333333333'
@@ -203,6 +205,43 @@ describe('mapUploadHttpError', () => {
   it('gives a PUT that got no HTTP answer its own sentence, which invites a retry', () => {
     expect(uploadNetworkError()).toEqual({ ok: false, error: 'storage_error', message: UPLOAD_NETWORK_MESSAGE })
     expect(UPLOAD_NETWORK_MESSAGE).toMatch(/try again/)
+  })
+
+  // PR #81 review round 4: a server-action call that throws (no answer, or an answer that is not a
+  // server-action response) is a sentence as well — never a dialog left on "Adding…".
+  it('gives a server-action call that threw its own sentence', () => {
+    expect(uploadRequestError()).toEqual({ ok: false, error: 'storage_error', message: UPLOAD_REQUEST_MESSAGE })
+    expect(UPLOAD_REQUEST_MESSAGE).toMatch(/try again/)
+  })
+})
+
+// PR #81 review round 4: a JPG upload failed on a Preview. Realistic image names through the
+// name rule — every one of them yields a lower-case extension and an ordinary generated name.
+describe('image file names (JPG review case)', () => {
+  const images: Array<[string, string]> = [
+    ['photo.jpg', 'jpg'],
+    ['IMG_4123.JPG', 'jpg'],
+    ['IMG_4124.jpeg', 'jpeg'],
+    ['Zdjęcie z budowy 12.09 (v2).jpg', 'jpg'],
+    ['IMG_0007.HEIC', 'heic'],
+    ['screenshot.png', 'png'],
+    ['Screenshot 2026-09-21 at 17.53.08.png', 'png'],
+  ]
+  it.each(images)('%s → extension %s', (name, ext) => {
+    expect(normaliseExtension(name)).toBe(ext)
+    const fileName = buildFileName({ ...parts, index: 6, ext: normaliseExtension(name) })
+    expect(fileName).toBe(`${parts.sclDocNumber}_A_IDC_2026-09-21_06.${ext}`)
+    expect(fileIndexOf(fileName)).toBe(6)
+    expect(buildStoragePath({ projectCode: 'SC2602', sclDocNumber: parts.sclDocNumber, sclRevision: 'A', fileName })).toBe(`SC2602/${parts.sclDocNumber}/A/${fileName}`)
+  })
+
+  it.each(images)('%s passes the prepare and record input checks with image MIME types', (name) => {
+    const prepared = parsePrepareUploadInput({ revisionId: REV, fileKind: 'original', originalName: name })
+    expect(prepared).toEqual({ ok: true, data: { revisionId: REV, fileKind: 'original', originalName: name } })
+    const mimeType = /\.png$/i.test(name) ? 'image/png' : /\.heic$/i.test(name) ? 'image/heic' : 'image/jpeg'
+    const recorded = parseRecordUploadInput({ revisionId: REV, fileKind: 'original', originalName: name, fileName: 'x_06.jpg', storagePath: 'SC2602/x/A/x_06.jpg', sizeBytes: 469979, mimeType })
+    expect(recorded.ok).toBe(true)
+    if (recorded.ok) expect(recorded.data.mimeType).toBe(mimeType)
   })
 })
 

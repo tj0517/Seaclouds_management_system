@@ -417,15 +417,25 @@ Zapisane przy DCS 1b.07 (2026-09-20).
   `view` pobiera, nie wgrywa; członek TES bez roli widzi wiersze `dcs.files`, nie dostaje bajtów
   (O-16); outsider 404 i 0 wierszy; DC na aal1 odmowa, na aal2 wgrywa; kolizja NN = 409
   `Duplicate` przy podpisywaniu, a obiekt-sierota w folderze (bez wiersza) nie blokuje numeru,
-  bo NN czyta się z wierszy **i** z listingu folderu. Sekcja (h) (PR #81, runda 3) to UX wgrywania
-  na rewizji A: podwójny klik w „Upload" i dwa `form.requestSubmit()` w jednym tasku dają **dokładnie
-  jeden** obiekt i jeden wiersz (liczone `count(*)` w `dcs.files` i `storage.objects`); plik 50 MiB
-  (zapisywany do katalogu tymczasowego OS, upload dławiony przez CDP do 16 MiB/s, żeby pasek miał
-  wartości pośrednie) — `MutationObserver` w stronie loguje każdą zmianę `aria-valuenow` razem ze
-  stanem przycisku: pasek startuje od 0, ma wartości między, dochodzi do 100, a przy każdej z nich
-  (dopóki dialog ma `data-state="open"`) przycisk jest `disabled` i pokazuje „Adding…"; PUT
-  przerwany przez `page.route` → zdanie o sieci zamiast paska, przycisk wraca do „Upload", nic nie
-  zapisane, ten sam plik z tego samego dialogu ląduje przy ponownym kliknięciu. Przypadek
+  bo NN czyta się z wierszy **i** z listingu folderu. Sekcja (h) (PR #81, rundy 3 i 4) to UX
+  wgrywania na rewizji A: podwójny klik w „Upload" i dwa `form.requestSubmit()` w jednym tasku dają
+  **dokładnie jeden** obiekt i jeden wiersz (liczone `count(*)` w `dcs.files` i `storage.objects`);
+  plik 50 MiB (zapisywany do katalogu tymczasowego OS, upload dławiony przez CDP do 16 MiB/s, żeby
+  pasek miał wartości pośrednie) — `MutationObserver` w stronie (`armSampler`) loguje każdą mutację
+  DOM razem ze stanem paska, przycisku i listy: pasek startuje od 0, ma wartości między, dochodzi
+  do 100, a przy każdej z nich (dopóki dialog ma `data-state="open"`) przycisk jest `disabled` i
+  pokazuje „Adding…"; PUT przerwany przez `page.route` → zdanie o sieci zamiast paska, przycisk
+  wraca do „Upload", nic nie zapisane, ten sam plik z tego samego dialogu ląduje przy ponownym
+  kliknięciu; **reguła nieaktualnej listy** (h/5): w każdej próbce od kliknięcia do pojawienia się
+  nowego wiersza jest wskaźnik albo wiersz, dialog jest otwarty w każdej z nich, a zamyka się dopiero
+  po wierszu (czerwony dowód: dialog zamykany przed odświeżeniem, jak do rundy 3, łamie tę asercję);
+  server action, którego POST przerywa `page.route` (h/6) → zdanie „The request to the server
+  failed…", przycisk wraca do „Upload", nic nie zapisane, ponowne kliknięcie ląduje. Sekcja (i)
+  (runda 4, po nieudanym wgraniu JPG na Preview, którego przyczyny nie udało się ustalić — żadne
+  żądanie tej próby nie dotarło ani do Vercela, ani do Supabase): pięć realnych plików graficznych
+  (`photo.jpg`, `IMG_4123.JPG` 4032×3024, `IMG_4124.jpeg`, `Zdjęcie z budowy 12.09 (v2).jpg`,
+  `screenshot.png`; generowane przez `sips`, albo z `E2E_IMAGES_DIR`) — każdy ląduje z nazwą
+  generowaną, `original_name`, rozmiarem, `image/jpeg`/`image/png` i obiektem. Przypadek
   `DownloadFileButton` nie używa hooka (`useTransition`), więc nie ma go w tabeli wyżej; jego dowód
   to `e2e:files`.
 - **`e2e:profile` bywa czerwone na ostatniej asercji („no console or hydration errors") z powodu
@@ -539,6 +549,32 @@ Zapisane przy DCS 1b.07 (2026-09-20).
   server actions w katalogu akcji aplikacji z `'use server'`.
 - `apps/dcs`: klient Supabase zawsze z generykiem `<Database>`; zakaz
   `as any` na zapytaniach (dług Timesheet nie przechodzi do DCS).
+
+## Stany ładowania w UI (decyzja z przeglądu PR #81, 2026-09-21)
+
+- **Każda akcja użytkownika zmieniająca dane pokazuje stan „w toku” od kliknięcia
+  do chwili, gdy wynik jest widoczny** — czyli odświeżone dane są w DOM (nowy
+  wiersz, nowa wartość, zremontowany `<input>`), a nie tylko do chwili, gdy
+  żądanie wróciło. Techniczny odpowiednik: `hooks/use-pending-action.ts` trzyma
+  `pending` przez `router.refresh()` w tranzycji; dialog, który zamyka się
+  wcześniej, łamie regułę, bo przez długość odświeżenia (400–470 ms na scl-dev)
+  użytkownik widzi starą listę bez żadnego znaku.
+- **Wyzwalacz akcji jest przez ten czas wyłączony**, więc podwójne wysłanie jest
+  niemożliwe — atrybut `disabled` jest tym, co użytkownik widzi, a zatrzask
+  `lib/single-flight.ts` tym, co trzyma (flipuje synchronicznie w handlerze
+  kliknięcia, zanim DOM dostanie `disabled`).
+- **Żaden ekran nie pokazuje po akcji nieaktualnych danych bez wskaźnika.** W
+  każdej chwili między kliknięciem a odświeżonym DOM na ekranie jest wskaźnik
+  (spinner, pasek, etykieta „Adding…/Saving…”) albo już nowe dane.
+- **Nowe UI nie jest przyjmowane bez dowodu w przeglądarce na buildzie
+  produkcyjnym** — skrypt `e2e:*` próbkuje DOM przy każdej mutacji od kliknięcia
+  do nowego wiersza i wymaga w każdej próbce wskaźnika albo wiersza (wzór:
+  `e2e:files` h/5, `armSampler` w `apps/dcs/e2e/revision-files.mjs`).
+- Stan: **DCS 1b.09 (Add File) jest pierwszym przepływem zgodnym z regułą** —
+  dialog zostaje otwarty z paskiem na 100% i przyciskiem „Adding…” aż do
+  odświeżonej listy. **Znana luka: New Revision (`NewRevisionDialog`) — zadanie
+  DCS 1b.08b**, nie ruszane w PR #81. Pozostałe ekrany z tabeli hooka niżej
+  mają wskaźnik na przycisku, ale nie były sprawdzane pod kątem trzeciego punktu.
 
 ## Dostęp do ekranów `/admin` w DCS
 

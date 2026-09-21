@@ -27,15 +27,24 @@
 // local only). The bytes on the local storage volume are overwritten on the
 // next run. It WRITES to the local database and refuses any host but localhost.
 //
-// Section (h) (PR #81 review round 3) is the upload UX: a double click stores
+// Section (h) (PR #81 review rounds 3 and 4) is the upload UX: a double click stores
 // exactly one object and one row; a 50 MiB file shows a progress bar that
 // reaches 100% while the submit button is disabled and reads "Adding…"; a PUT
-// that never gets an answer gives way to a sentence and can be retried. The
-// 50 MiB file is written to the OS temp directory and removed at the end.
+// that never gets an answer gives way to a sentence and can be retried; from the
+// click until the new row is in the DOM every DOM change shows an in-progress
+// indicator or the row already there (never the old list alone); a server-action
+// call that throws gives way to a sentence and can be retried. The 50 MiB file is
+// written to the OS temp directory and removed at the end.
+// Section (i) (round 4) uploads realistic image files — .jpg, .JPG, .jpeg, a name
+// with spaces and Polish letters, a PNG — generated with macOS `sips` into the OS
+// temp directory (E2E_IMAGES_DIR points at a directory of your own instead; the
+// five names below must exist there).
 //
 // Optional environment: E2E_BASE_URL, E2E_SUPABASE_URL, E2E_ANON_KEY, E2E_DB_CONTAINER,
-// E2E_SHOTS, E2E_SKIP_EXPIRY=1 (skips the 61 s wait for the expired-URL check).
+// E2E_SHOTS, E2E_SKIP_EXPIRY=1 (skips the 61 s wait for the expired-URL check),
+// E2E_IMAGES_DIR (see above).
 /* global document, window, MutationObserver */
+import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -119,6 +128,44 @@ async function download(page, name) {
   const dl = await Promise.all([page.waitForEvent('download', { timeout: 10000 }).catch(() => null), button.click()]).then(([d]) => d)
   const alert = dl ? '' : await page.locator('[role=alert]').first().innerText().catch(() => '')
   return { dl, alert }
+}
+
+/**
+ * Arms a MutationObserver in the page. From now until readSamples(), every DOM
+ * change records whether an in-progress indicator is on screen (a progress bar
+ * in the dialog, a spinner, "Adding…") and whether the row `rowSelector` names
+ * is already in the list. The stale-list rule: every sample has one or the other.
+ */
+async function armSampler(page, rowSelector) {
+  await page.evaluate((selector) => {
+    // One observer at a time: the previous one would keep answering for ITS row.
+    window.__sampler?.disconnect()
+    window.__samples = []
+    const snap = () => {
+      const dialog = document.querySelector('[role=dialog]')
+      const bar = document.querySelector('[role=dialog] [role=progressbar]')
+      const button = document.querySelector('[role=dialog] button[type=submit]')
+      window.__samples.push({
+        open: dialog?.getAttribute('data-state') === 'open',
+        value: bar ? Number(bar.getAttribute('aria-valuenow')) : null,
+        text: bar?.parentElement?.querySelector('p')?.textContent ?? '',
+        label: button?.textContent?.trim() ?? '',
+        disabled: button ? button.disabled : null,
+        indicator: !!bar || !!document.querySelector('.animate-spin') || /Adding…/.test(document.body.innerText),
+        row: !!document.querySelector(selector),
+      })
+    }
+    window.__sampler = new MutationObserver(snap)
+    window.__sampler.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['aria-valuenow', 'disabled', 'data-state'] })
+  }, rowSelector)
+}
+const readSamples = (page) => page.evaluate(() => window.__samples)
+/** The samples between the click (first one with the dialog busy) and the first one with the row present, inclusive. */
+function fromClickToRow(samples) {
+  const start = samples.findIndex((e) => e.indicator)
+  if (start < 0) return []
+  const end = samples.findIndex((e, i) => i >= start && e.row)
+  return samples.slice(start, end < 0 ? samples.length : end + 1)
 }
 
 const signDownload = (jwt, path) =>
@@ -361,24 +408,7 @@ let firstSignedAt = 0
   const NAME_A4 = `${SCL}_A_IDC_2026-09-19_04.bin`
   // Every change of the bar (and its appearance) is logged in the page together with what the submit
   // button showed at that moment — a polling loop from here could miss a fast local upload.
-  await page.evaluate(() => {
-    window.__uploadLog = []
-    const snap = () => {
-      const dialog = document.querySelector('[role=dialog]')
-      const bar = document.querySelector('[role=dialog] [role=progressbar]')
-      const button = document.querySelector('[role=dialog] button[type=submit]')
-      window.__uploadLog.push({
-        // Radix keeps the closing dialog in the DOM for its exit animation (data-state="closed"); by then
-        // the list may already be refreshed and the button back to "Upload" — that is after "done".
-        open: dialog?.getAttribute('data-state') === 'open',
-        value: bar ? Number(bar.getAttribute('aria-valuenow')) : null,
-        text: bar?.parentElement?.querySelector('p')?.textContent ?? '',
-        label: button?.textContent?.trim() ?? '',
-        disabled: button ? button.disabled : null,
-      })
-    }
-    new MutationObserver(snap).observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['aria-valuenow', 'disabled'] })
-  })
+  await armSampler(page, `[data-revision-files="A"] [data-file-row="${NAME_A4}"]`)
   // Localhost takes 50 MiB in well under a second, which leaves the bar no time to show a value between 0
   // and 100. Chromium's network emulation (CDP) caps the upload at 16 MiB/s for this one case: ~3 s.
   const cdp = await ctx.newCDPSession(page)
@@ -386,7 +416,10 @@ let firstSignedAt = 0
   const large = await uploadVia(page, trigger, { filePath: largePath, kind: 'attachment' }, NAME_A4, { timeout: 90000 })
   await cdp.send('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 })
   await cdp.detach()
-  const log = (await page.evaluate(() => window.__uploadLog)).filter((e) => e.value !== null && e.open)
+  const samples4 = await readSamples(page)
+  // Radix keeps the closing dialog in the DOM for its exit animation (data-state="closed"); by then the
+  // list is refreshed and the button may be back to "Upload" — that is after "done".
+  const log = samples4.filter((e) => e.value !== null && e.open)
   const values = log.map((e) => e.value)
   const maxSeen = values.length ? Math.max(...values) : -1
   const idle = log.filter((e) => !(e.disabled === true && e.label === 'Adding…'))
@@ -398,6 +431,8 @@ let firstSignedAt = 0
   const between = values.filter((v) => v > 0 && v < 100)
   rec('h/3: the progress bar appears at 0, shows values between, and reaches 100% (aria-valuenow), with the percent as text', values[0] === 0 && between.length > 0 && maxSeen === 100 && percentShown, `values seen: ${[...new Set(values)].join(',')}`)
   rec('h/3: while the dialog is open, at every value of the bar (0 to 100) the submit button is disabled and reads "Adding…"', log.length >= 2 && idle.length === 0, idle.length ? `not busy at: ${JSON.stringify(idle)}` : `${log.length} samples, values ${[...new Set(values)].join(',')}`)
+  const stale4 = fromClickToRow(samples4).filter((e) => !e.indicator && !e.row)
+  rec('h/3: no sample between the click and the new row shows the old list without an indicator (50 MiB)', fromClickToRow(samples4).length > 0 && stale4.length === 0, stale4.length ? `stale samples: ${JSON.stringify(stale4.slice(0, 3))}` : `${fromClickToRow(samples4).length} samples from the click to the row`)
   fs.rmSync(largePath, { force: true })
 
   // ---- 4. the PUT never gets an answer: the sentence replaces the bar, nothing is stored, the same file can be retried ----
@@ -420,7 +455,75 @@ let firstSignedAt = 0
   await dialog.getByRole('button', { name: 'Upload' }).click()
   const retried = await holds(page, (n) => !!document.querySelector(`[data-file-row="${n}"]`), NAME_A5, 15000)
   rec('h/4: the same file, submitted again from the same dialog, lands as NN 05 (a fresh URL, NN recomputed)', retried && fileRow(NAME_A5).startsWith(`${NAME_A5}|retry-me.pdf|${FOLDER_A}/${NAME_A5}|5|`), fileRow(NAME_A5))
+
+  // ---- 5. the stale-list rule on an ordinary small upload: sampled at every DOM change ----
+  const NAME_A6 = `${SCL}_A_IDC_2026-09-19_06.pdf`
+  await armSampler(page, `[data-revision-files="A"] [data-file-row="${NAME_A6}"]`)
+  const small = await uploadVia(page, trigger, { name: 'small.pdf', mimeType: 'application/pdf', content: 'small', kind: 'original' }, NAME_A6)
+  const samples6 = await readSamples(page)
+  const window6 = fromClickToRow(samples6)
+  const stale6 = window6.filter((e) => !e.indicator && !e.row)
+  const closedEarly = window6.filter((e) => !e.open && !e.row)
+  rec('h/5: from the click until the new row is in the DOM every DOM change shows an in-progress indicator or the row — the old list is never on screen alone', small.landed && small.pendingGone && window6.length > 0 && stale6.length === 0 && closedEarly.length === 0, stale6.length || closedEarly.length ? `stale: ${JSON.stringify(stale6.slice(0, 3))} closed-early: ${JSON.stringify(closedEarly.slice(0, 3))}` : `${window6.length} samples from the click to the row, dialog open in all of them`)
+  const afterRow6 = samples6.slice(samples6.findIndex((e) => e.row))
+  rec('h/5: once the row is in the DOM the dialog closes and the pending state clears', afterRow6.length > 0 && afterRow6.some((e) => !e.open) && (await holds(page, () => !document.querySelector('[role=dialog]'), null, 5000)), `${afterRow6.length} samples after the row`)
+  await shot(page, 'files-h5-list-refreshed', { fullPage: true })
+
+  // ---- 6. the server-action call throws (the POST never gets a server-action answer): a sentence, a retry ----
+  const NAME_A7 = `${SCL}_A_IDC_2026-09-19_07.pdf`
+  const actionMatcher = (url) => url.pathname === `/documents/${DOC}`
+  await page.route(actionMatcher, (route) => (route.request().method() === 'POST' ? route.abort('failed') : route.continue()))
+  await trigger.click()
+  const dialog6 = page.getByRole('dialog')
+  await dialog6.waitFor()
+  await dialog6.locator('input[type=file]').setInputFiles({ name: 'action-fails.pdf', mimeType: 'application/pdf', buffer: Buffer.from('action') })
+  await dialog6.getByRole('button', { name: 'Upload' }).click()
+  const alert6 = await holds(page, () => /request to the server failed/.test(document.querySelector('[role=dialog] [role=alert]')?.textContent ?? ''), null, 10000)
+  const enabled6 = alert6 && (await holds(page, () => { const b = document.querySelector('[role=dialog] button[type=submit]'); return !!b && !b.disabled && b.textContent.trim() === 'Upload' }, null, 5000))
+  rec('h/6: a server-action call that throws gives way to a sentence — no bar, Upload enabled again, no stuck "Adding…"', alert6 && enabled6 && (await dialog6.locator('[role=progressbar]').count()) === 0, await dialog6.locator('[role=alert]').innerText().catch(() => '(no alert)'))
+  rec('h/6: nothing was stored by the failed attempt (still 6 rows, 6 objects on A)', rowsA() === 6 && objectsA() === 6 && fileRow(NAME_A7) === '', `${rowsA()} rows, ${objectsA()} objects`)
+  await page.unroute(actionMatcher)
+  await dialog6.getByRole('button', { name: 'Upload' }).click()
+  const retried7 = await holds(page, (n) => !!document.querySelector(`[data-file-row="${n}"]`), NAME_A7, 15000)
+  rec('h/6: the same file, submitted again, lands as NN 07', retried7 && fileRow(NAME_A7).startsWith(`${NAME_A7}|action-fails.pdf|${FOLDER_A}/${NAME_A7}|6|`), fileRow(NAME_A7))
   await ctx.close()
+}
+
+// =================================================================
+// (i) Realistic image files (PR #81 review round 4: a JPG upload failed on a Preview)
+// =================================================================
+{
+  const IMAGES = ['photo.jpg', 'IMG_4123.JPG', 'IMG_4124.jpeg', 'Zdjęcie z budowy 12.09 (v2).jpg', 'screenshot.png']
+  let imagesDir = process.env.E2E_IMAGES_DIR
+  if (!imagesDir) {
+    // A 4032x3024 JPEG (the size of a phone photo) and a 2400x1600 PNG, made by macOS sips from a 1x1 PNG.
+    imagesDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dcs-e2e-images-'))
+    const onePixel = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64')
+    fs.writeFileSync(path.join(imagesDir, 'seed.png'), onePixel)
+    execFileSync('sips', ['-s', 'format', 'jpeg', '-z', '3024', '4032', path.join(imagesDir, 'seed.png'), '--out', path.join(imagesDir, 'IMG_4123.JPG')], { stdio: 'ignore' })
+    execFileSync('sips', ['-s', 'format', 'png', '-z', '1600', '2400', path.join(imagesDir, 'seed.png'), '--out', path.join(imagesDir, 'screenshot.png')], { stdio: 'ignore' })
+    fs.copyFileSync(path.join(imagesDir, 'IMG_4123.JPG'), path.join(imagesDir, 'photo.jpg'))
+    fs.copyFileSync(path.join(imagesDir, 'IMG_4123.JPG'), path.join(imagesDir, 'IMG_4124.jpeg'))
+    fs.copyFileSync(path.join(imagesDir, 'IMG_4123.JPG'), path.join(imagesDir, 'Zdjęcie z budowy 12.09 (v2).jpg'))
+  }
+  const { ctx, page } = await session(browser, 'orig.profile@local.test', errors)
+  await go(page, `${BASE}/documents/${DOC}?tab=revisions&open=${REV_A}`)
+  const trigger = page.locator('[data-revision-files="A"] button[data-add-file="A"]')
+  let nn = 8
+  for (const image of IMAGES) {
+    const filePath = path.join(imagesDir, image)
+    const size = fs.statSync(filePath).size
+    const ext = image.slice(image.lastIndexOf('.') + 1).toLowerCase()
+    const mime = ext === 'png' ? 'image/png' : 'image/jpeg'
+    const expected = `${SCL}_A_IDC_2026-09-19_${String(nn).padStart(2, '0')}.${ext}`
+    const up = await uploadVia(page, trigger, { filePath, kind: 'original' }, expected, { timeout: 30000 })
+    const row = fileRow(expected)
+    rec(`i: ${image} (${size} B) lands as ${expected} — row with original_name, size, ${mime}, and the object`, up.landed && up.pendingGone && row === `${expected}|${image}|${FOLDER_A}/${expected}|${size}|${mime}|original|${nn}|${IDS.ORIG}` && objectRow(`${FOLDER_A}/${expected}`) === `${FOLDER_A}/${expected}|${size}`, up.alert || `${row} / ${objectRow(`${FOLDER_A}/${expected}`)}`)
+    nn += 1
+  }
+  await shot(page, 'files-i-images', { fullPage: true })
+  await ctx.close()
+  if (!process.env.E2E_IMAGES_DIR) fs.rmSync(imagesDir, { recursive: true, force: true })
 }
 
 // =================================================================

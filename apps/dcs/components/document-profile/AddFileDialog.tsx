@@ -28,13 +28,22 @@
 //
 // Rendered twice: in the current-revision panel (for the current revision) and
 // in each expanded row of the Revisions tab (for that row's revision). Both
-// finish the same way: the dialog closes and the page tree is refreshed, so
-// the new row appears in the list — that refreshed list is what "done" means
-// (hooks/use-pending-action.ts; e2e:pending measures it). From the click until
-// then the submit button is disabled and reads "Adding…" (`pending`), and a
-// second click in that window is refused by the hook's latch (lib/single-flight.ts)
-// before the DOM has even committed `disabled` — e2e:files proves a double click
-// stores exactly one object and one row.
+// finish the same way: the page tree is refreshed and the dialog closes only
+// once that refreshed tree — with the new row in the list — has committed
+// (hooks/use-pending-action.ts keeps `pending` true until then; e2e:pending
+// measures it). Closing the dialog first left the old list on screen for the
+// length of the refresh with nothing to say that anything was happening (PR #81
+// review round 4), so from the click until the new row is in the DOM the dialog
+// stays open with the bar at 100% and the submit button disabled on "Adding…",
+// and a second click in that window is refused by the hook's latch
+// (lib/single-flight.ts) before the DOM has even committed `disabled` —
+// e2e:files proves a double click stores exactly one object and one row, and
+// samples every DOM change from the click to the new row for an indicator.
+//
+// A server-action call that throws (the request never reached the app, or the
+// app answered with something that is not a server-action response) is caught
+// inside the action and shown as a sentence too; the hook's latch and pending
+// state are released the ordinary way because the action resolved.
 import { useState } from 'react'
 import { Loader2, Plus } from 'lucide-react'
 import { SELECT_CLASS } from '@/components/AddMemberForm'
@@ -51,7 +60,7 @@ import {
 import { Label } from '@/components/ui/label'
 import { prepareFileUpload, recordFileUpload } from '@/app/data/actions/files'
 import { SKIPPED, usePendingAction } from '@/hooks/use-pending-action'
-import { FILE_KIND_LABELS, FILE_KINDS, mapUploadHttpError, uploadNetworkError, type FileKind, type FileResult } from '@/lib/files'
+import { FILE_KIND_LABELS, FILE_KINDS, mapUploadHttpError, uploadNetworkError, uploadRequestError, type FileKind, type FileResult } from '@/lib/files'
 import { formatFileSize } from '@/lib/document-profile'
 
 export type AddFileDialogProps = {
@@ -101,6 +110,11 @@ export default function AddFileDialog({ revisionId, revisionLabel, documentNumbe
   // null: no bar (nothing has been sent yet, or the last attempt was refused). 0–100 while the
   // bytes go out and, at 100, while the row is written and the tree refreshed.
   const [progress, setProgress] = useState<number | null>(null)
+  // Set when the row is written. The dialog is then shown closed on the first render in which the
+  // refreshed tree has committed (`pending` false again) — derived, so no effect and no extra render;
+  // `reset()` clears it when the dialog is opened next.
+  const [closeWhenRefreshed, setCloseWhenRefreshed] = useState(false)
+  const shown = open && !(closeWhenRefreshed && !pending)
   // A new key remounts the <input type=file> when the dialog reopens: a file input cannot be cleared by value.
   const [inputKey, setInputKey] = useState(0)
 
@@ -109,6 +123,7 @@ export default function AddFileDialog({ revisionId, revisionLabel, documentNumbe
     setFileKind('original')
     setError(null)
     setProgress(null)
+    setCloseWhenRefreshed(false)
     setInputKey((key) => key + 1)
   }
 
@@ -121,23 +136,28 @@ export default function AddFileDialog({ revisionId, revisionLabel, documentNumbe
     const chosen = file
     const mimeType = chosen.type || null
     const result = await run<FileResult<{ id: string; documentId: string; fileName: string }>>(async () => {
-      const prepared = await prepareFileUpload({ revisionId, fileKind, originalName: chosen.name })
-      if (!prepared.ok) return prepared
-      // Straight to Storage, with the token the server signed into the URL.
-      setProgress(0)
-      const response = await putToSignedUrl(prepared.data.signedUrl, chosen, mimeType ?? 'application/octet-stream', setProgress)
-      if (!response) return uploadNetworkError()
-      if (response.status < 200 || response.status >= 300) return mapUploadHttpError(response.status, response.body)
-      setProgress(100)
-      return recordFileUpload({
-        revisionId,
-        fileKind,
-        originalName: chosen.name,
-        fileName: prepared.data.fileName,
-        storagePath: prepared.data.storagePath,
-        sizeBytes: chosen.size,
-        mimeType,
-      })
+      try {
+        const prepared = await prepareFileUpload({ revisionId, fileKind, originalName: chosen.name })
+        if (!prepared.ok) return prepared
+        // Straight to Storage, with the token the server signed into the URL.
+        setProgress(0)
+        const response = await putToSignedUrl(prepared.data.signedUrl, chosen, mimeType ?? 'application/octet-stream', setProgress)
+        if (!response) return uploadNetworkError()
+        if (response.status < 200 || response.status >= 300) return mapUploadHttpError(response.status, response.body)
+        setProgress(100)
+        return await recordFileUpload({
+          revisionId,
+          fileKind,
+          originalName: chosen.name,
+          fileName: prepared.data.fileName,
+          storagePath: prepared.data.storagePath,
+          sizeBytes: chosen.size,
+          mimeType,
+        })
+      } catch {
+        // A server-action call that threw: no answer, or not a server-action answer.
+        return uploadRequestError()
+      }
     })
     if (result === SKIPPED) return
     if (!result.ok) {
@@ -146,13 +166,14 @@ export default function AddFileDialog({ revisionId, revisionLabel, documentNumbe
       setError(result.message ?? result.error)
       return
     }
-    setOpen(false)
+    // Stay open, bar at 100%, button on "Adding…", until the refreshed list is in the DOM.
+    setCloseWhenRefreshed(true)
     refresh()
   }
 
   return (
     <Dialog
-      open={open}
+      open={shown}
       onOpenChange={(next) => {
         if (!next && pending) return
         setOpen(next)
@@ -235,7 +256,7 @@ export default function AddFileDialog({ revisionId, revisionLabel, documentNumbe
               >
                 <div className="h-full bg-primary transition-[width] duration-150" style={{ width: `${progress}%` }} />
               </div>
-              <p className="text-xs text-muted-foreground">{progress < 100 ? `Uploading… ${progress}%` : 'Uploaded 100% — saving the file…'}</p>
+              <p className="text-xs text-muted-foreground">{progress < 100 ? `Uploading… ${progress}%` : 'Uploaded 100% — saving the file and refreshing the list…'}</p>
             </div>
           ) : null}
 
