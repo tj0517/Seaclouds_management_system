@@ -524,7 +524,7 @@ describe('toRevisionRows', () => {
       null,
       new Map(),
     )
-    expect(row.files).toEqual([{ id: 'f1', name: 'report.pdf', kind: 'original', size: '1.5 KB', uploaded: '—' }])
+    expect(row.files).toEqual([{ id: 'f1', name: 'report.pdf', originalName: '', kind: 'original', size: '1.5 KB', uploaded: '—' }])
     expect(toRevisionRows([revision], null, new Map())[0].files).toEqual([])
   })
 })

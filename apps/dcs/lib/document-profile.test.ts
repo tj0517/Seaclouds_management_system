@@ -160,27 +160,18 @@ describe('fileDisplayName', () => {
 })
 
 // 1b.07 acceptance 6: every action present, with the tooltip the task specifies.
-// DCS 1b.08 turned New Revision into a live dialog, so it left this list: the
-// five below are what is still disabled.
+// DCS 1b.08 turned New Revision into a live dialog and DCS 1b.09 did the same
+// for Add File, so both left this list: the four below are what is still disabled.
 describe('PANEL_ACTIONS', () => {
   const byLabel = new Map(PANEL_ACTIONS.map((action) => [action.label, action.hint]))
 
-  it('lists the five actions that are still disabled — New Revision is a live dialog now', () => {
-    expect([...byLabel.keys()]).toEqual([
-      'Add File',
-      'Distribute for IDC',
-      'Initiate Review',
-      'Initiate Approval',
-      'Create Transmittal',
-    ])
+  it('lists the four actions that are still disabled — New Revision and Add File are live dialogs now', () => {
+    expect([...byLabel.keys()]).toEqual(['Distribute for IDC', 'Initiate Review', 'Initiate Approval', 'Create Transmittal'])
     expect(byLabel.has('New Revision')).toBe(false)
+    expect(byLabel.has('Add File')).toBe(false)
   })
 
-  it('names 1b.09 on Add File, which arrives next', () => {
-    expect(byLabel.get('Add File')).toMatch(/1b\.09/)
-  })
-
-  it('says "Phase 2/3" on the other four', () => {
+  it('says "Phase 2/3" on all four', () => {
     for (const label of ['Distribute for IDC', 'Initiate Review', 'Initiate Approval', 'Create Transmittal']) {
       expect(byLabel.get(label)).toBe('Phase 2/3')
     }
@@ -234,7 +225,14 @@ describe('toFileRows', () => {
       toFileRows([
         { id: 'f1', file_kind: 'original', file_name: 'doc.pdf', original_name: null, storage_path: null, size_bytes: 2048, uploaded_at: '2026-09-19T14:33:10Z' },
       ]),
-    ).toEqual([{ id: 'f1', name: 'doc.pdf', kind: 'original', size: '2.0 KB', uploaded: '2026-09-19 14:33 UTC' }])
+    ).toEqual([{ id: 'f1', name: 'doc.pdf', originalName: '', kind: 'original', size: '2.0 KB', uploaded: '2026-09-19 14:33 UTC' }])
+  })
+  it('keeps the uploaded name as a hint when it differs from the generated one', () => {
+    const [row] = toFileRows([
+      { id: 'f1', file_kind: 'original', file_name: 'X_A_IDC_2026-09-21_01.pdf', original_name: 'Survey report.pdf', storage_path: 'SC2602/X/A/X_A_IDC_2026-09-21_01.pdf', size_bytes: 1, uploaded_at: null },
+    ])
+    expect(row.name).toBe('X_A_IDC_2026-09-21_01.pdf')
+    expect(row.originalName).toBe('Survey report.pdf')
   })
   it('is empty for no files', () => {
     expect(toFileRows([])).toEqual([])

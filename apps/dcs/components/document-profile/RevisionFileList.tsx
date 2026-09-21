@@ -1,13 +1,16 @@
-// DCS 1b.08: one revision's files, read-only — shared by the current-revision
+// DCS 1b.08 / 1b.09: one revision's files — shared by the current-revision
 // panel (1b.07) and each expanded row of the Revisions tab, so the two cannot
-// drift. No download link and no signed URL: the rows are metadata only, and
-// turning a storage_path into something a person can open is 1b.09. Today every
-// list is empty (nothing uploads files yet), and the empty sentence says so.
+// drift. Each row lists the generated name, the uploaded name as a hint, the
+// kind, the size and the upload time, and carries a Download button (1b.09).
+// No link and no signed URL are ever rendered: the URL is minted on click, as
+// the signed-in user, by the downloadFile action (DownloadFileButton).
 //
-// No hooks and no 'use client': it is markup, usable from a server component and
-// from the client table alike.
+// No hooks and no 'use client' here: it is markup, usable from a server
+// component and from the client table alike; the button is its own client
+// component.
 import { Badge } from '@/components/ui/badge'
 import type { FileRowView } from '@/lib/document-profile'
+import DownloadFileButton from './DownloadFileButton'
 
 export default function RevisionFileList({ files }: { files: readonly FileRowView[] }) {
   if (files.length === 0) {
@@ -16,17 +19,24 @@ export default function RevisionFileList({ files }: { files: readonly FileRowVie
   return (
     <ul className="divide-y rounded-md border bg-card">
       {files.map((file) => (
-        <li key={file.id} className="space-y-1 px-3 py-2">
-          <p className="break-all text-sm font-medium">{file.name}</p>
-          {/* A <div>, not a <p>: Badge renders a <div>, and a <div> inside a <p> is invalid
-              HTML that React reports as a hydration error. */}
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-            <Badge variant="outline" className="px-1.5 py-0 text-[11px] font-medium">
-              {file.kind}
-            </Badge>
-            <span>{file.size}</span>
-            <span>{file.uploaded}</span>
+        <li key={file.id} data-file-row={file.name} className="flex items-start justify-between gap-3 px-3 py-2">
+          <div className="min-w-0 space-y-1">
+            <p className="break-all text-sm font-medium">{file.name}</p>
+            {/* ONE text node, on purpose: `Uploaded as {name}` would be two adjacent text nodes with a
+                comment between them, and that measurably raised an intermittent hydration error on the
+                profile (docs/deferred-tasks.md, ccc: ~13 of 100 loads with two nodes, ~3 of 100 with one). */}
+            {file.originalName ? <p className="break-all text-xs text-muted-foreground">{`Uploaded as ${file.originalName}`}</p> : null}
+            {/* A <div>, not a <p>: Badge renders a <div>, and a <div> inside a <p> is invalid
+                HTML that React reports as a hydration error. */}
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+              <Badge variant="outline" className="px-1.5 py-0 text-[11px] font-medium">
+                {file.kind}
+              </Badge>
+              <span>{file.size}</span>
+              <span>{file.uploaded}</span>
+            </div>
           </div>
+          <DownloadFileButton fileId={file.id} fileName={file.name} />
         </li>
       ))}
     </ul>

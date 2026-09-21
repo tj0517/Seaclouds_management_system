@@ -1,16 +1,15 @@
-// DCS 1b.07 / 1b.08: the right-hand panel — the document's current revision and its
-// files, read-only.
+// DCS 1b.07 / 1b.08 / 1b.09: the right-hand panel — the document's current revision
+// and its files, each with a Download button, and the Add File action for it.
 //
 // Built against the schema, not against dev data: on scl-dev every
 // current_revision_id is NULL (read 2026-09-19), so the populated branch is
 // proven on a local fixture (supabase/fixtures/document_profile.sql)
 // and the empty branch is the one real documents show today.
 //
-// No download link and no signed URL anywhere in here: the file rows are
-// metadata only. Turning storage_path into something a person can open is
-// 1b.09.
+// No signed URL anywhere in here: the file rows are metadata, and the URL is
+// minted on click by the downloadFile action (DownloadFileButton, 1b.09).
 import { EmptyState } from '@/components/page-chrome'
-import RevisionPanelActions, { type NewRevisionControl } from './RevisionPanelActions'
+import RevisionPanelActions, { type AddFileControl, type NewRevisionControl } from './RevisionPanelActions'
 import { mdrStatusColor } from '@/lib/mdr'
 import RevisionFileList from './RevisionFileList'
 import { dictionaryLabel, toFileRows } from '@/lib/document-profile'
@@ -31,9 +30,11 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 export default function CurrentRevisionPanel({
   current,
   newRevision,
+  addFile,
 }: {
   current: RevisionWithFiles | null
   newRevision: NewRevisionControl
+  addFile: AddFileControl
 }) {
   return (
     <aside aria-label="Current revision" className="space-y-5 rounded-lg border bg-card p-4">
@@ -44,7 +45,7 @@ export default function CurrentRevisionPanel({
 
       <section className="space-y-2 border-t pt-4">
         <h2 className="text-sm font-semibold">Actions</h2>
-        <RevisionPanelActions newRevision={newRevision} />
+        <RevisionPanelActions newRevision={newRevision} addFile={addFile} />
       </section>
     </aside>
   )
@@ -54,7 +55,7 @@ function NoRevision() {
   return (
     <EmptyState title="No revision yet">
       This document has been registered and numbered, but nothing has been issued. Use New Revision below to issue the
-      first one; files arrive with DCS 1b.09.
+      first one; files are added to a revision.
     </EmptyState>
   )
 }
