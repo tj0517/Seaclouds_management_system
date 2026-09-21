@@ -7,9 +7,9 @@
 //
 // The session client is the point, not a convenience: both signing calls are
 // made as the signed-in user, so the storage-api applies the bucket policies of
-// PR 1 (migration 20260921112840) as that user before it signs. A service_role
-// client here would bypass them — including the O-16 narrowing that keeps file
-// bytes from Timesheet-only members — and is never used.
+// PR 1 (migration 20260921112840) as that user before it signs. An admin client
+// (the key that bypasses RLS) here would bypass them — including the O-16
+// narrowing that keeps file bytes from Timesheet-only members — and is never used.
 //
 // No route handler: the download is a server action that returns the refusal
 // as data and, on success, redirects the browser to the short-lived signed URL.

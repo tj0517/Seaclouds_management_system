@@ -19,8 +19,9 @@
 // BOTH signing calls below run on the caller's own session client. That is the
 // whole design: the storage-api evaluates those policies as the caller when it
 // signs (an upload URL is refused to someone the INSERT policy refuses; a
-// download URL to someone the SELECT policy refuses). A service_role client
-// would sign anything and undo PR 1 — never here.
+// download URL to someone the SELECT policy refuses). An admin client — one
+// holding the key that bypasses RLS — would sign anything and undo PR 1;
+// this module is imported by client components and never holds such a key.
 //
 // What this file does decide, because nothing in the database does yet:
 //   - the generated file name  [SCL_DOC_NUMBER]_[SCL_REV]_[STEP]_[YYYY-MM-DD]_[NN].[ext]
