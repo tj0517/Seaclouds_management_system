@@ -2482,7 +2482,7 @@ unchanged. The skeleton comes back when upstream fixes this — and before it do
 | File removed | Rate WITH it | Rate WITHOUT it |
 |---|---|---|
 | `app/(app)/loading.tsx` (the "Project list" skeleton, group level) | CPY: 16/40 saves stuck (probe: 9/20, 7/20) and 3/10 `e2e:profile` runs red before any change; later, `e2e:pending` CPY 5/30 (DOC_A), then 25/30 (own document) with all three files restored | CPY: 0/30 in each of three runs with both files removed (the dictionaries file was also out at that time; it does not touch the CPY page); the probe also 0/30 |
-| `app/(app)/admin/projects/[projectId]/loading.tsx` | project page (addmember + roles + editproject) 7/120 with the group file already gone, 5/120 (+2 blocked steps) with all three present | 0/120 in the experiment that removed it alone; with both files removed 4/120 in one run, then 0/120, 0/120, 0/30, 0/30 — **see "unexplained" below** |
+| `app/(app)/admin/projects/[projectId]/loading.tsx` | project page (addmember + roles + editproject) 7/120 with the group file already gone, 5/120 (+2 blocked steps) with all three present | 0/120 in the experiment that removed it with the group file already gone; with both files removed 4/120 in one run, then 0/120, 0/120, 0/30, 0/30 — **see "unexplained" below** |
 
 **Tried and reverted — `app/(app)/admin/dictionaries/loading.tsx`.** It was removed first, on the
 strength of one hang in about 120 saves with the skeleton (add 1/30, toggle 0/30). The red proof
