@@ -2841,6 +2841,35 @@ series, never "flaky".
 None is irreversible. `apps/dcs/e2e/document-profile.mjs` now prints the page URL and the last
 passed check with every error, which is what made the location findable.
 
+**Diagnostic round (PR #81 review, 2026-09-21) — the node is known; owned by DCS 1b.09b.**
+`onRecoverableError` was patched locally (in `node_modules`, after Next's bailout filter, not in
+the PR) to log React's `componentStack` on a production build; `e2e:profile` ran until three
+failing loads (3 in 32 completed runs). All three stacks are identical:
+
+```
+Minified React error #418
+    at ul (<anonymous>)  ·  at section (<anonymous>)  ·  at aside (<anonymous>)
+    at div ×3 (<anonymous>)  ·  Next layout-router internals … ·  at main  ·  app-shell client wrapper
+```
+
+- **The mismatching node is the actions `<ul>`** in `aside[aria-label="Current revision"] >
+  section` — a host element in server-component markup, with **no client component and no
+  text node** between it and the router. (Same node the dev diff named: `+ <ul className="grid
+  gap-3 …">` against `- <li className="space-y-1">`.)
+- **All three failing loads were at an auth transition:** the first load of the profile after
+  login, at aal1 (×2), and the load right after `/mfa`, at aal2 (×1).
+- **The time / time-zone audit came back clean:** everything the profile renders was searched
+  for `toLocale*`, `Intl.`, `Date.now(`, `new Date(`. `formatTimestamp` formats through
+  `toISOString()` (UTC on both sides); `todayLocalIso()` runs in the New Revision dialog's open
+  handler, not in render; the file-name date fallback runs server-side at upload time and is
+  stored; the "Uploaded as" hint carries no date. No `toLocale*` / `Intl.DateTimeFormat`
+  anywhere on the page, on this branch or on `main`.
+- **Criterion 5b of 1b.09 PR 2 accepted as NOT met, knowingly** (review decision). The
+  follow-up is **DCS 1b.09b**, with the working hypothesis that an auth-event
+  `router.refresh()` in the app shell (the Supabase auth listener firing on the first load
+  after login and after `/mfa`) races hydration of the page and leaves React's cursor inside
+  the list. Not investigated in PR 2; the panel was not restructured.
+
 **A second lesson from the same PR, unrelated to hydration:** the local fixture
 (`supabase/fixtures/document_profile.sql`) inserted a `dcs.files` row with `storage_path` NULL,
 which PR 1 (#80) made impossible — and #80 merged green, because CI runs pgTAP on `db reset`
