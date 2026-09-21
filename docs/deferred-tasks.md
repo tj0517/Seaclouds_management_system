@@ -2721,3 +2721,42 @@ including its own introduction. The counts in it ("Dziesięć obserwacji…") ar
     (Zastrzeżenie do odczytu: commit, który dopisał tę obserwację, rusza `docs/` i `CLAUDE.md`, więc
     jego własny wynik nie jest tu zapisany — zgodnie z zasadą zapisu w `CLAUDE.md`, żeby kronika się
     kiedyś skończyła.)
+
+## bbb) Audyt pobrań plików DCS — obietnica z `02-data-model.md`, której `public.audit_log` nie może spełnić (DCS 1b.09 PR 1, 2026-09-21)
+
+**Co było napisane.** `docs/02-data-model.md` przy `public.audit_log` mówiło: „Zdarzenie
+„pobranie pliku” loguje server action w 1b, nie trigger". Poprawione w 1b.09 PR 1
+(`feat/dcs-files-storage`); tu jest powód i to, co zostało do zdecydowania.
+
+**Dlaczego nie da się tak, jak było napisane.** Trzy rzeczy w `20260903173128_create_audit_log`,
+każda z osobna wystarczająca:
+1. CHECK na `action` dopuszcza wyłącznie `INSERT` / `UPDATE` / `DELETE` — „pobranie" nie jest
+   żadnym z nich, a widok History czyta te trzy wartości dosłownie.
+2. Tabela nie ma polityki INSERT, a role `authenticated` i `service_role` mają odebrane
+   INSERT/UPDATE/DELETE/TRUNCATE (1a.08, celowo: „z warstwy aplikacji nikt nie zmieni śladu").
+   Server action, nawet przez klienta `service_role`, dostanie 42501.
+3. Jedynym pisarzem jest `public.audit_trigger()` jako właściciel tabeli, odpalany przez
+   triggery wierszowe — pobranie pliku nie zmienia żadnego wiersza, więc nie ma czego
+   triggerować. (Signed URL jest wystawiany przez storage-api; samo pobranie bajtów nie
+   przechodzi przez Postgresa w ogóle.)
+
+**Czego 1b.09 nie zrobiło, z decyzji (prompt 1b.09, pkt 5):** nie ruszyło `public.audit_log`,
+CHECK-a ani `audit_trigger()`. Bucket i polityki storage nie logują niczego.
+
+**Opcje do decyzji (MD), żadna nie jest wybrana:**
+- (a) Rozszerzyć CHECK o wartość `DOWNLOAD` i dodać funkcję SECURITY DEFINER
+  `public.log_file_download(file_id)` (search_path `''`, `EXECUTE` dla `authenticated`,
+  +1 do lintu 0029), wołaną z server action **przed** wystawieniem signed URL-a. Koszt:
+  ślad „wystawiono URL", nie „pobrano bajty" — URL żyje N sekund i może zostać użyty wiele
+  razy albo wcale; History musi nauczyć się czwartej akcji. Ryzyko: pierwsza droga zapisu do
+  `audit_log` spoza triggera, więc reguła „pisze wyłącznie trigger" przestaje być prawdziwa
+  i trzeba ją przepisać w `02-data-model.md` i w `03-conventions.md`.
+- (b) Osobna tabela `dcs.file_access_log` (project_id, file_id, user_id, at, kind) z własnym
+  RLS i własną retencją, pisana tą samą funkcją. Koszt: druga tabela śladu, drugi ekran
+  albo zakładka; zaleta: `public.audit_log` zostaje dowodem zmian danych, a nie logiem
+  dostępu — dwa różne reżimy retencji (O-04) bez mieszania.
+- (c) Zostawić logom platformy (Supabase Storage logs). Krótka retencja, brak RLS, brak
+  `project_id`, nie do pokazania klientowi — odnotowane tylko dla kompletności.
+
+**Nieodwracalne:** żadna. (a) i (b) to zwykłe migracje; (a) zmienia CHECK, co jest tanie
+w obie strony, dopóki nie ma wierszy z nową wartością.

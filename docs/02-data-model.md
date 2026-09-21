@@ -207,7 +207,13 @@ daty Planned, więc „kto skrócił cykl z 10 na 3 dni” musi mieć odpowiedź
 wpisy w politykę „DC czyta audyt swoich projektów” z 1a.09 bez dodatkowej
 pracy. Celowo NIE: żadna tabela TES (izolacja TES/DCS), przyszłe
 `dcs.documents`/`revisions` (Faza 1b).
-Zdarzenie „pobranie pliku” loguje server action w 1b, nie trigger.
+Zdarzenia „pobranie pliku” **nie da się** zapisać z server action do tej
+tabeli: CHECK na `action` dopuszcza wyłącznie INSERT/UPDATE/DELETE, nie ma
+polityki INSERT, a role API mają odebrane INSERT — pisze wyłącznie trigger
+jako właściciel tabeli (patrz niżej). Wcześniejsza wersja tego zdania
+obiecywała logowanie pobrań przez server action w 1b; obietnica była
+nie do spełnienia. Audyt pobrań jest poza 1b.09 — odłożony wpis
+`docs/deferred-tasks.md` (bbb).
 RLS: SELECT — `is_admin()` (wszystko) oraz od 1a.09 „Doc controllers read
 own project audit log”: `project_id IS NOT NULL AND
 is_doc_controller(project_id)` — DC widzi ślad swoich projektów, wpisy
@@ -924,10 +930,10 @@ d.current_revision_id` sam podnosi `scl_revision`, `cpy_revision` i `issue_date`
 
 ### ✅ `dcs.files`
 `id`, `revision_id`, `project_id`, `file_name`, `original_name`,
-`storage_path` (wszystkie trzy **nullable do 1b.09**, które jest
-właścicielem generowanej nazwy
-`[SCL_DOC_NUMBER]_[REV]_[STEP]_[YYYY-MM-DD]_[NN].[ext]`, bucketa i signed
-URL-i), `file_kind`, `sort_order int NOT NULL default 0` (CHECK ≥ 0),
+`storage_path` (wszystkie trzy **NOT NULL od 1b.09**, migracja
+`20260921112841_files_paths_not_null`; 1b.09 jest właścicielem generowanej
+nazwy `[SCL_DOC_NUMBER]_[REV]_[STEP]_[YYYY-MM-DD]_[NN].[ext]`, bucketa i
+signed URL-i), `file_kind`, `sort_order int NOT NULL default 0` (CHECK ≥ 0),
 `size_bytes bigint` (CHECK ≥ 0), `mime_type`, `uploaded_by (FK profiles)`,
 `uploaded_at`. Bez `updated_at` i bez `set_updated_at` — `uploaded_at` jest
 jedynym potrzebnym znacznikiem czasu.
@@ -939,9 +945,39 @@ O-09 (automatyczne rendition PDF) może dopisać rodzaj bez zmiany typu.
 
 `project_id` jak w `revisions`: kolumna trzymana złożonym FK
 `(revision_id, project_id) → revisions (id, project_id)`, `ON DELETE
-CASCADE`. Pliki w Supabase Storage, dostęp tylko przez signed URL —
-buckety i polityki storage to **1b.09**. Blokada zapisu dla rewizji
-finalnych — **1b.10**.
+CASCADE`. Blokada zapisu dla rewizji finalnych — **1b.10**.
+
+**Storage (DCS 1b.09 PR 1, migracja `20260921112840_create_dcs_documents_bucket`):**
+bucket `dcs-documents` — prywatny, `file_size_limit` 104857600 (100 MiB),
+`allowed_mime_types` NULL; `[storage].file_size_limit` w `config.toml`
+podniesione do `100MiB`, bo na platformie limit bucketa jest sufitem POD
+limitem globalnym, nigdy nad nim (storage-api `getFileSizeLimit()` =
+`min(global, bucket)`). Na lokalnym stacku ten klucz jest martwy — CLI
+wpisuje do kontenera `UPLOAD_FILE_SIZE_LIMIT=52428800000` na sztywno i
+storage-api czyta go przed `FILE_SIZE_LIMIT` (zmierzone 2026-09-21: przy
+`1MiB` w `config.toml` 60 MB weszło do bucketa bez limitu). Klucz obiektu
+zaczyna się od `projects.project_code` (niezmienny od `20260915081813`),
+a polityki na `storage.objects` rozwiązują go do `project_id` przez
+`public.projects` i wołają funkcje z 1a.09 bez zmian. Zestaw = `dcs.files`
+bez połówki UPDATE i z **jedną celową różnicą w SELECT**: bajty czyta
+posiadacz **dowolnego** wiersza `dcs.project_roles` w projekcie
+(`has_project_role` z dosłowną listą sześciu ról `orig, rev, chk, app, dc,
+view`; test porównuje ją z `enum_range`) albo admin — **nie**
+`is_project_member`, którą spełnia już wiersz `project_assignments` z
+Timesheeta i której `dcs.files` nadal używa dla metadanych (O-16,
+rozstrzygnięte dla bajtów na PR #80; metadane wciąż otwarte). INSERT ORIG
+projektu (dowolny aal), DC projektu (aal2), admin; **zero** polityk UPDATE
+i DELETE — nadpisania ani usunięcia przez API nie ma, także dla admina
+(Void, nie delete). Polityki są `TO authenticated`: podzapytanie
+czyta `public.projects`, do którego `anon` nie ma grantu (a `anon` i tak
+dostaje 42501 na `storage.objects` od 2026-08-31 przez `is_admin()` w
+politykach Timesheeta). Dostęp do bajtów tylko przez signed URL — PR 2.
+Test: `supabase/tests/storage_dcs_documents.test.sql` (68 asercji: bucket,
+pięć polityk i brak UPDATE/DELETE, NOT NULL z 23502, odczyt jako 8
+użytkowników gołym `count(*)` — członek TES bez roli DCS 0 wierszy przy
+widocznym wierszu `dcs.files`, VIEW 2 wiersze — INSERT 42501 dla
+outsidera / członka TES / VIEW / ORIG cudzego projektu / DC na aal1 /
+anon, UPDATE i DELETE 0 wierszy także dla admina).
 
 RLS: sześć polityk, identycznie jak `documents`. Trigger `audit_files`.
 

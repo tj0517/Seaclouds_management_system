@@ -172,43 +172,43 @@ export type Database = {
       files: {
         Row: {
           file_kind: string
-          file_name: string | null
+          file_name: string
           id: string
           mime_type: string | null
-          original_name: string | null
+          original_name: string
           project_id: string
           revision_id: string
           size_bytes: number | null
           sort_order: number
-          storage_path: string | null
+          storage_path: string
           uploaded_at: string
           uploaded_by: string | null
         }
         Insert: {
           file_kind: string
-          file_name?: string | null
+          file_name: string
           id?: string
           mime_type?: string | null
-          original_name?: string | null
+          original_name: string
           project_id: string
           revision_id: string
           size_bytes?: number | null
           sort_order?: number
-          storage_path?: string | null
+          storage_path: string
           uploaded_at?: string
           uploaded_by?: string | null
         }
         Update: {
           file_kind?: string
-          file_name?: string | null
+          file_name?: string
           id?: string
           mime_type?: string | null
-          original_name?: string | null
+          original_name?: string
           project_id?: string
           revision_id?: string
           size_bytes?: number | null
           sort_order?: number
-          storage_path?: string | null
+          storage_path?: string
           uploaded_at?: string
           uploaded_by?: string | null
         }
