@@ -1,7 +1,7 @@
 ---
 id: DCS-1b.11
 title: "Ręczna zmiana statusu dokumentu przez DC + Void dokumentu (Faza 1: bez silnika obiegu)"
-status: review
+status: done
 difficulty: S
 model: Sonnet
 model_approved: tj
@@ -61,8 +61,10 @@ Silnik obiegu (approval_tasks, IDC/IFR) to Faza 2. Żeby system był używalny p
 - 2026-09-22: zaimportowane z Notion (https://app.notion.com/p/3c7c2fbc059581a5ac06e0c412ac0592).
 - 2026-09-22: PR #84 (migracja + testy, część 1 z 2) zmergowany; migracja 20260922074250 na scl-dev; na prod wdraża tj ręcznie; część 2 (UI) — gałąź feat/manual-status-void-ui.
 - 2026-09-22 (z DCS-1b.09b): `e2e:revision` pada w setupie na main — `new-revision.mjs:171` wstawia dokument VOID bez `void_reason`, co od migracji 20260922074250 (7a5050c) odrzuca baza; poprawka należy do PR-a UI (feat/manual-status-void-ui), `docs/deferred-tasks.md` ggg.
-- 2026-09-22 (review, tj): pierwotny opis Zakresu („Status rewizji: Draft / In Review / Approved / Rejected / Superseded / Void") nie odpowiada schematowi — te kody nigdy nie istniały w `workflow_status`. Zbudowano DC-only kontrolkę statusu na bieżącej rewizji z tego samego słownika co krok (`REVISION_STATUS_CODES` w `lib/revisions.ts`: IDC/IFR/RETCOM/IFC/IFI/IFB), zamrożoną po Approve (`forbid_change_of_locked_revision`, 1b.10). Wcześniejsza propozycja w tej samej rozmowie (AskUserQuestion) brzmiała „bez osobnej kontrolki" — tj cofnął tę decyzję w tym samym review i poprosił o kontrolkę wprost.
+- 2026-09-22 (review, tj): pierwotny opis Zakresu („Status rewizji: Draft / In Review / Approved / Rejected / Superseded / Void") nie odpowiada schematowi — te kody nigdy nie istniały w `workflow_status`. Zbudowano DC-only kontrolkę statusu na bieżącej rewizji z tego samego słownika co krok (`REVISION_STATUS_CODES` w `lib/revisions.ts`: IDC/IFR/RETCOM/IFC/IFI/IFB), zamrożoną po Approve (`forbid_change_of_locked_revision`, 1b.10). Kontrolkę dodano po liście braków z review, która nie znała wcześniejszej decyzji; tj 2026-09-22 świadomie potwierdził: kontrolka zostaje.
 - 2026-09-22 (tj): na dokumencie Void w UI nie ma kontrolki statusu dla nikogo, także admina; wyjście z Void zostaje tylko w bazie (admin, aal2) — decyzja o Un-Void dalej w deferred (eee). Zaimplementowane: `DocumentInformationTab.tsx` nie renderuje `DocumentStatusControl` ani przycisku Void, gdy `document.workflow_status.code === 'VOID'`, niezależnie od roli; `documentStatusAccess()` w `lib/documents.ts` nadal poprawnie zwraca `enabled` dla admina na aal2 w tym stanie (wierne odbicie bazy), ale nic w UI tego nie używa.
 - 2026-09-22 (review, tj): czytelnik spoza DC (i spoza admina, dla Void/Approve) nie widzi kontrolki statusu/Void/Approve w ogóle — nie tylko wyłączonej z podpisem, jak New Revision/Add File. Zaimplementowane w `DocumentInformationTab.tsx` i `RevisionPanelActions.tsx`; `ApproveControl` niesie osobne pole `eligible` (= isDc), bo `lockRevisionAccess` sprawdza blokadę i krok finalny PRZED rolą, więc sam powód odmowy nie odróżnia „nie-DC" od „DC, ale zły krok".
 - 2026-09-22: dodano `e2e:status` (`apps/dcs/e2e/manual-status.mjs`) — drabinka statusu, status rewizji, Approve, Void, dwa dowody RED wprost przez PostgREST, wszystko potwierdzone odczytem z bazy. `docs/03-conventions.md` (szósty skrypt e2e).
+- 2026-09-22 (review, tj): kontrolka statusu rewizji pozwala DC ustawić `status_id` niezależnie od `step_id` — baza na to pozwala, nic tego nie uzgadnia aż do silnika obiegu w Fazie 2. Odnotowane, nie naprawione: `docs/deferred-tasks.md` (hhh).
+- 2026-09-22 (tj): odbiór — przyjęte; merge dopiero po wdrożeniu migracji 20260922074250 na prod.
 - 2026-09-22: odbiór części 2 (UI) — PR w przygotowaniu (`feat/manual-status-void-ui`). `e2e:profile` i `e2e:revision` bez regresji (40/40 każdy). Migracja 20260922074250 (PR #84, część 1) NIE jest jeszcze zastosowana na prod (odczyt `supabase-prod` MCP, `list_migrations`, 2026-09-22 — ostatnia widoczna to `20260921150000_lock_final_revisions`); zgodnie z CLAUDE.md, prod dostaje ją ręcznie od tj.

@@ -97,7 +97,7 @@ Supabase, prod ref `tfbzivfsqsgebegcvfah`.
   Kronika obserwacji (PR #58–#79) mieszka w `docs/deferred-tasks.md` (aaa), dopóki
   pytanie jest otwarte; nie kasować jej bez zgody.
 
-  **Ostatni odczyt (jedna linia, nadpisywana):** PR #88 (DCS 1b.09b), po merge'u — opisuje merge commit `83ba4cb` (HEAD `main`); drzewo `apps/` + `packages/` jest w nim identyczne z `5277326`, ostatnim commitem PR-a ruszającym `apps/`/`packages/` (`git diff --stat 5277326 83ba4cb -- apps packages` puste): `dcs` i `seaclouds-management-system` wdrożone (`Deployment has completed`); `ci` na merge commicie nie biegnie (`ci.yml` tylko na PR) — ostatni przebieg `success` na HEAD PR-a przy merge'u `2c96817` (tam też oba projekty `Deployment has completed`, mimo że commit ruszał tylko `docs/` i `CLAUDE.md`) (`gh api .../commits/83ba4cb…/status` i `/check-runs`, 2026-09-22).
+  **Ostatni odczyt (jedna linia, nadpisywana):** PR #89 (DCS 1b.11 UI), przed merge'em — opisuje HEAD PR-a `d1e5b5c`; drzewo `apps/` + `packages/` jest w nim identyczne z `fb68e92`, ostatnim commitem PR-a ruszającym `apps/`/`packages/` (`git diff --stat fb68e92 d1e5b5c -- apps packages` puste, dwa kolejne commity ruszały wyłącznie `docs/tasks/`): `ci` `success` (4m58s); oba projekty Vercel `Skipped - Not affected` (`gh pr checks 89`, 2026-09-22).
 - Różnica w ochronie, istotna przy podawaniu URL-i: `dcs` ma
   `ssoProtection = all_except_custom_domains`, więc Preview **i** produkcyjny
   `*.vercel.app` stoją za logowaniem Vercela, a publiczny jest wyłącznie

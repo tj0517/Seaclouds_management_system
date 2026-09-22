@@ -3018,3 +3018,15 @@ proven by e2e on Next 16.2.12 in 1b.09b — checked manually by tj on Preview.
 `void_reason` for the `D_VOID` row (a fourth value in the same VALUES list), matching the trigger's rule
 instead of relying on a bypass — `dcs.import_mode` was not used, since this row is meant to already be Void
 when the script starts, the same as a real DC-voided document, not an imported historical one.
+
+## hhh) DCS 1b.11 — a revision's status can drift from its step, with nothing to reconcile them (2026-09-22)
+
+The revision status control added in PR 2 (`feat/manual-status-void-ui`) lets the project's DC set
+`dcs.revisions.status_id` on the current revision independently of `step_id` — the database allows it
+(`revisions_status_dc_only` guards WHO may write the column, not what value, and decision 5 of migration
+20260922074250 already established that a DC-supplied status need not match the step at INSERT either).
+So a revision can end up with, say, step `IFR` and status `IFC`, set by hand through the UI control, and
+nothing in the schema or the app reconciles the two — no CHECK ties them together, no trigger nudges one
+back toward the other. Recorded, not fixed: the Phase 2 workflow engine is expected to own this
+relationship properly; until then the DC is trusted to keep them sensible, the same trust the manual status
+ladder on the document itself already relies on.
