@@ -61,3 +61,5 @@ Przed 1b.15 (import na prod, 30.09), od kiedy na prodzie pojawią się pierwsi u
 - 2026-09-22 tj: runda 1 przyjęta — mechanizm (błąd replay hydratacji w React, naprawiony upstream w react#35494) udowodniony odtworzeniem: czysty build 20/20 błędnych, z poprawką upstream 0/20.
 - 2026-09-22 tj, decyzja 1: poprawka = opcja A — Next w `apps/dcs` podbity do 16.2.12 (razem z `eslint-config-next`); Timesheet zostaje na 16.1.1.
 - 2026-09-22 tj, decyzja 2: odtworzenie zostaje w repo jako skrypt e2e poza CI.
+- 2026-09-22 tj, decyzja: `e2e:revision` — opcja B, fixtura nie jest poprawiana w tym PR (skrypt pada w setupie na main od 1b.11 PR 1; `docs/deferred-tasks.md` ggg). New Revision not proven on 16.2.12 by e2e (script broken on main, see deferred); checked manually by tj on Preview.
+- 2026-09-22 tj, decyzja: czerwonego dowodu nie powtarzamy. Logi czerwonego dowodu (main 16.1.1: 30/30 z #418; 16.2.12: 0/30) i serii 1 `e2e:profile` (10/10) przepadły przy restarcie sesji; liczby są cytowane z wyjścia przechwyconego przed restartem, a skrypt `e2e:hydration-replay` jest w repo, żeby je powtórzyć.

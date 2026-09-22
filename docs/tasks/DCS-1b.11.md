@@ -52,3 +52,4 @@ Silnik obiegu (approval_tasks, IDC/IFR) to Faza 2. Żeby system był używalny p
 - przed 2026-09-22 (z DCS-1b.02): luki nie są uzupełniane — numer Void nigdy nie wraca; SEQ = max łącznie z Void, +1; numer niezmienny (trigger BEFORE UPDATE odrzuca zmianę `scl_doc_number`); błędny dokument → Void + nowy numer.
 - 2026-09-22: zaimportowane z Notion (https://app.notion.com/p/3c7c2fbc059581a5ac06e0c412ac0592).
 - 2026-09-22: PR #84 (migracja + testy, część 1 z 2) zmergowany; migracja 20260922074250 na scl-dev; na prod wdraża tj ręcznie; część 2 (UI) — gałąź feat/manual-status-void-ui.
+- 2026-09-22 (z DCS-1b.09b): `e2e:revision` pada w setupie na main — `new-revision.mjs:171` wstawia dokument VOID bez `void_reason`, co od migracji 20260922074250 (7a5050c) odrzuca baza; poprawka należy do PR-a UI (feat/manual-status-void-ui), `docs/deferred-tasks.md` ggg.

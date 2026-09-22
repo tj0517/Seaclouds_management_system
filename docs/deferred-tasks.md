@@ -2991,3 +2991,18 @@ bumped in `apps/dcs` only).
   profile load is a full document load; the post-`/mfa` load has no push/refresh and failed
   identically in the reproduction), but it is the same two-concurrent-navigations pattern
   that hung `/mfa` twice (1a.25, 1a.25b) — recorded as a pattern worth removing.
+
+## ggg) DCS 1b.11 — `e2e:revision` fails in setup on `main` since 1b.11 PR 1 (found in DCS 1b.09b, 2026-09-22)
+
+`apps/dcs/e2e/new-revision.mjs:171` inserts its fixture document `f5000000-0000-4000-8000-000000000003`
+with workflow status `VOID` and no `void_reason`. Since migration `20260922074250_dc_manual_status_and_void`
+(1b.11 PR 1, `7a5050c`) the database refuses that row, so the script fails before any page loads:
+
+```
+ERROR:  dcs.documents.void_reason is required and must not be blank whenever workflow status is VOID (document f5000000-0000-4000-8000-000000000003).
+CONTEXT:  PL/pgSQL function public.enforce_document_void() line 52 at RAISE
+```
+
+Unrelated to the Next.js version (setup SQL, rejected by the trigger). tj's decision in 1b.09b: not fixed
+there; the fix belongs to the 1b.11 UI PR (`feat/manual-status-void-ui`). Consequence: New Revision was not
+proven by e2e on Next 16.2.12 in 1b.09b — checked manually by tj on Preview.
