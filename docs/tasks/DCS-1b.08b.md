@@ -47,3 +47,4 @@ Ten sam problem w Add File naprawiany w PR #81 (1b.09); tu dotyczy kodu z 1b.08,
 
 ## Notatki z realizacji
 - 2026-09-22: zaimportowane z Notion (https://app.notion.com/p/3e2c2fbc059581f084eee5e9b40f9310).
+- 2026-09-22 tj (Preview, next 16.2.12): po zapisie New Revision okno znika ~1 s przed pojawieniem się rewizji na liście — ta luka należy do 1b.08b; okno ma zostać otwarte (stan „w toku”) do momentu, gdy odświeżona lista jest w DOM (reguła z 1b.09, 03-conventions).

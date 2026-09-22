@@ -2745,6 +2745,13 @@ including its own introduction. The counts in it ("Dziesięć obserwacji…") ar
     Zgodne z tym, co mówi sekcja „Workspace (pnpm)” w `03-conventions.md`: zmiana w `packages/db` przebudowuje
     oba produkty, zmiana ograniczona do pakietów-atrap (`supabase`, `docs`) nie buduje żadnego. Nadal bez
     wyjaśnienia dla #58 i dla pary z #71/#79 (sam `CLAUDE.md` zbudował oba).
+- **PR #88 (DCS 1b.09b, `fix/dcs-1b09b-hydration-race`, 2026-09-22)** — odczyt `gh api .../commits/<sha>/status`,
+  dwa kolejne pushe, każdy z jednym commitem ruszającym wyłącznie dokumentację:
+    - HEAD `a29d9f4`: wyłącznie `docs/tasks/DCS-1b.09b.md` + `docs/tasks/INDEX.md` → **oba POMINIĘTE**
+      (`Skipped - Not affected`).
+    - HEAD `2c96817`: `CLAUDE.md` + `docs/tasks/DCS-1b.09b.md` + `docs/tasks/INDEX.md` → **oba zbudowały
+      się** (`Deployment has completed`).
+  Same fakty, bez wniosku; pytanie zostaje otwarte.
 
 ## bbb) Audyt pobrań plików DCS — obietnica z `02-data-model.md`, której `public.audit_log` nie może spełnić (DCS 1b.09 PR 1, 2026-09-21)
 
