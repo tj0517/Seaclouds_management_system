@@ -50,6 +50,7 @@ export default function DocumentInformationTab({
   documentStatus,
   voidAccess,
 }: Props) {
+  const isVoid = document.workflow_status?.code === 'VOID'
   return (
     <div className="space-y-4">
       <dl className="grid gap-4 rounded-lg border bg-card p-4 sm:grid-cols-2">
@@ -81,31 +82,44 @@ export default function DocumentInformationTab({
       </dl>
 
       <div className="space-y-3 rounded-lg border bg-card p-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <Field label="Workflow status">
-            <DocumentStatusControl
-              documentId={document.id}
-              currentStatusId={documentStatus.currentStatusId}
-              currentStatusLabel={documentStatus.currentStatusLabel}
-              access={documentStatus.access}
-              options={documentStatus.options}
-            />
-          </Field>
-          {voidAccess.mode === 'enabled' ? (
-            <VoidDocumentDialog documentId={document.id} documentNumber={document.scl_doc_number} />
-          ) : (
-            <div className="space-y-1 text-right">
-              <span title={voidAccess.hint}>
-                <Button type="button" variant="outline" disabled aria-describedby="void-action-hint">
-                  Void document
-                </Button>
-              </span>
-              <p id="void-action-hint" className="max-w-[16rem] text-xs text-muted-foreground">
-                {voidAccess.hint}
-              </p>
-            </div>
-          )}
-        </div>
+        {isVoid ? (
+          // 2026-09-22 (tj): on a Void document, no role sees a status control at
+          // all — including admin. Leaving Void stays a database-level fact only
+          // (enforce_document_void, decision 4 of migration 20260922074250); an
+          // Un-Void UI is a decision deferred (eee). documentStatusAccess() still
+          // reports 'enabled' for an admin at aal2 here (it correctly mirrors what
+          // the database allows), but nothing in this component renders that.
+          <Field label="Workflow status">{documentStatus.currentStatusLabel}</Field>
+        ) : (
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <Field label="Workflow status">
+              <DocumentStatusControl
+                documentId={document.id}
+                currentStatusId={documentStatus.currentStatusId}
+                currentStatusLabel={documentStatus.currentStatusLabel}
+                access={documentStatus.access}
+                options={documentStatus.options}
+              />
+            </Field>
+            {voidAccess.mode === 'enabled' ? (
+              <VoidDocumentDialog documentId={document.id} documentNumber={document.scl_doc_number} />
+            ) : voidAccess.reason !== 'not_allowed' ? (
+              // Shown only to a DC who could act if the one thing standing in
+              // the way changed (aal2) — hidden entirely for a reader who could
+              // never Void a document at all (Scope: "sees no ... controls").
+              <div className="space-y-1 text-right">
+                <span title={voidAccess.hint}>
+                  <Button type="button" variant="outline" disabled aria-describedby="void-action-hint">
+                    Void document
+                  </Button>
+                </span>
+                <p id="void-action-hint" className="max-w-[16rem] text-xs text-muted-foreground">
+                  {voidAccess.hint}
+                </p>
+              </div>
+            ) : null}
+          </div>
+        )}
         {document.void_reason ? (
           <Field label="Void reason" className="space-y-0.5">
             {document.void_reason}

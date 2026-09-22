@@ -60,6 +60,8 @@ import {
   listRevisionsWithFiles,
   lockRevisionAccess,
   newRevisionAccess,
+  revisionStatusAccess,
+  revisionStatusOptions,
   revisionStepOptions,
   sclCodeField,
   toRevisionRows,
@@ -207,7 +209,16 @@ export default async function DocumentProfilePage({
   // and revisions_locked_at_final_step — no admin escape on this column.
   const approve = {
     access: lockRevisionAccess({ isDc: isProjectDc, aal2, stepCode: current?.revision.step?.code, isLocked: current?.revision.locked_at != null }),
+    eligible: isProjectDc,
     config: current ? { documentId: document.id, revisionId: current.revision.id, revisionLabel: current.revision.scl_revision } : null,
+  }
+
+  // Revision status (DCS 1b.11, Scope item 4). MIRRORS revisions_status_dc_only
+  // and forbid_change_of_locked_revision — DC only, no admin escape, frozen
+  // once the revision is Approved.
+  const revisionStatus = {
+    access: revisionStatusAccess({ isDc: isProjectDc, aal2, isLocked: current?.revision.locked_at != null }),
+    options: revisionStatusOptions(statusDictionary),
   }
 
   const projectLabel = project ? `${project.project_code} — ${project.name}` : 'Project'
@@ -290,7 +301,14 @@ export default async function DocumentProfilePage({
           </Tabs>
 
           <div className="min-w-0">
-            <CurrentRevisionPanel current={current} newRevision={newRevision} addFile={addFile} approve={approve} />
+            <CurrentRevisionPanel
+              current={current}
+              newRevision={newRevision}
+              addFile={addFile}
+              approve={approve}
+              revisionStatus={revisionStatus}
+              documentId={document.id}
+            />
           </div>
         </div>
       </PageBody>
