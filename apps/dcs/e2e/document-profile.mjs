@@ -185,8 +185,10 @@ const browser = await chromium.launch()
 
   // 1b.07 acceptance 6, as amended by DCS 1b.08 and 1b.09: New Revision and Add File are LIVE dialogs now
   // (the DC at aal2 gets enabled buttons; new-revision.mjs and revision-files.mjs prove what they do), so the
-  // disabled actions are the other four — each with its tooltip (title on the wrapper) AND the same sentence
-  // printed under the button and tied to it with aria-describedby.
+  // disabled actions are the other five (DCS 1b.11 adds Approve, disabled here since the
+  // fixture's current revision is on step IDC, not a final step) — each with its tooltip
+  // (title on the wrapper) AND the same sentence printed under the button and tied to it
+  // with aria-describedby.
   rec(
     'a/6 (1b.08): New Revision is an ENABLED button for the DC at aal2',
     (await page.locator(`${PANEL} button:has-text("New Revision")`).count()) === 1 &&
@@ -211,14 +213,15 @@ const browser = await chromium.launch()
     }),
   )
   const expected = [
+    ['Approve', 'Only a final revision (step IFC, IFI or IFB) can be approved.'],
     ['Distribute for IDC', 'Phase 2/3'],
     ['Initiate Review', 'Phase 2/3'],
     ['Initiate Approval', 'Phase 2/3'],
     ['Create Transmittal', 'Phase 2/3'],
   ]
   rec(
-    'a/6: four disabled actions, each with its tooltip, its caption and aria-describedby',
-    actions.length === 4 &&
+    'a/6: five disabled actions, each with its tooltip, its caption and aria-describedby',
+    actions.length === 5 &&
       expected.every(([label, hint], i) => {
         const a = actions[i]
         return a.label === label && a.disabled && a.title === hint && a.caption === hint && a.described

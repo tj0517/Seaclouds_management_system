@@ -157,19 +157,25 @@ if (!psql(`select 1 from auth.users where email = 'orig.profile@local.test'`)) {
 const clean = () => psql(`delete from dcs.documents where id in (${MY_DOCS.map((d) => `'${d}'`).join(',')})`)
 clean()
 // Written as postgres, so no session: the 1b.02 generator numbers them, and the status is set directly.
+// void_reason is required on the VOID row since migration 20260922074250
+// (DCS 1b.11 PR 1): enforce_document_void() has no `auth.uid() is null` bypass
+// like the other guards in that migration, so even this session-less insert
+// is checked — only dcs.import_mode = 'on' would skip it, and this fixture
+// does not set that. docs/deferred-tasks.md (ggg).
 psql(`
-  insert into dcs.documents (id, project_id, title, doc_type_id, discipline_id, area_id, language_id, workflow_status_id)
+  insert into dcs.documents (id, project_id, title, doc_type_id, discipline_id, area_id, language_id, workflow_status_id, void_reason)
   select v.id, '${PEJ}', v.title,
          (select id from dcs.dictionaries where dict_type = 'doc_type' and code = 'RA'),
          (select id from dcs.dictionaries where dict_type = 'discipline' and code = 'A00'),
          (select id from dcs.dictionaries where dict_type = 'area' and code = '00'),
          (select id from dcs.dictionaries where dict_type = 'language' and code = 'EN'),
-         (select id from dcs.dictionaries where dict_type = 'workflow_status' and code = v.status)
+         (select id from dcs.dictionaries where dict_type = 'workflow_status' and code = v.status),
+         v.void_reason
     from (values
-      ('${D_ORIG}'::uuid, 'E2E 1b.08 Originator ladder', 'NOT_STARTED'),
-      ('${D_DC}'::uuid,   'E2E 1b.08 Document Controller override', 'NOT_STARTED'),
-      ('${D_VOID}'::uuid, 'E2E 1b.08 Void document', 'VOID')
-    ) as v(id, title, status);
+      ('${D_ORIG}'::uuid, 'E2E 1b.08 Originator ladder', 'NOT_STARTED', null::text),
+      ('${D_DC}'::uuid,   'E2E 1b.08 Document Controller override', 'NOT_STARTED', null::text),
+      ('${D_VOID}'::uuid, 'E2E 1b.08 Void document', 'VOID', 'E2E fixture: pre-voided for the ladder''s Void case')
+    ) as v(id, title, status, void_reason);
 `)
 const today = (() => {
   const d = new Date()
