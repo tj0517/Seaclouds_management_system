@@ -11,7 +11,7 @@ Format zadania: [README.md](README.md). Zadania zaimportowane z Notion 2026-09-2
 | [1a.19](DCS-1a.19.md) | Import 9 brakujących projektów z arkusza Projects (klient, cykl, role z Orig/Ch'd/App'd) | todo | M | — | — | 2026-09-09 |
 | [1a.20](DCS-1a.20.md) | Potwierdzić backupy Supabase zgodnie z O-04 | todo | S | — | O-04 | 2026-09-09 |
 | [1a.21](DCS-1a.21.md) | Demo / bramka 1a→1b: login 2FA, role w SC2601, nowy projekt w kreatorze, edycja słownika, audit log | todo | S | — | — | 2026-09-09 |
-| [1a.25c](DCS-1a.25c.md) | Timesheet /mfa: test regresji w repo (Playwright, trzy tryby) | in_progress | M | 1a.25b, 1b.07 | — | — |
+| [1a.25c](DCS-1a.25c.md) | Timesheet /mfa: test regresji w repo (Playwright, trzy tryby) | done | M | 1a.25b, 1b.07 | — | — |
 | [1a.27](DCS-1a.27.md) | Skan sekretów w CI (gitleaks) | todo | S | — | — | — |
 | [1b.04b](DCS-1b.04b.md) | New Document: stan „w toku”, projekt z kontekstu, informacja o nawigacji w toku | todo | S | — | — | 2026-09-29 |
 | [1b.08b](DCS-1b.08b.md) | Stan „w toku" w oknie New Revision (przycisk zapisu bez informacji zwrotnej) | todo | S | — | — | 2026-09-29 |

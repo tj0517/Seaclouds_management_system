@@ -1,18 +1,18 @@
 ---
 id: DCS-1a.25c
 title: "Timesheet /mfa: test regresji w repo (Playwright, trzy tryby)"
-status: in_progress
+status: done
 difficulty: M
 model: null
 model_approved: null
 effort: null
-branch: null
+branch: test/tes-1a25c-mfa-regression
 due: null
 depends_on: [DCS-1a.25b, DCS-1b.07]
 blocked_by_questions: []
 touches_db: false
 touches_prod: true
-pr: null
+pr: 77
 notion: https://app.notion.com/p/3e1c2fbc0595817eae35ff537c8aed7a
 ---
 
@@ -76,3 +76,4 @@ Dodatkowe kryterium: test jednostkowy pokazany **na czerwono** na celowo zepsuty
   - **Ustalenie, które zmienia zasadę odbioru:** na `next dev` zrewertowana strona **i tak kończy na `/admin`** — asercja na samym URL-u przeszłaby przy obecnym błędzie. Zawieszenie odtwarza wyłącznie build produkcyjny.
   - **Decyzje tj:** commit + PR, STOP przed merge'em (patrz Bramki STOP); **build produkcyjny jako domyślny tryb** w `docs/03-conventions.md`, dev jako wariant szybki; braki pokrycia (ścieżka roli DC, głębszy `next` niż `/admin`) → wpis w `docs/deferred-tasks.md`.
 - 2026-09-22: zaimportowane z Notion (https://app.notion.com/p/3e1c2fbc0595817eae35ff537c8aed7a).
+- 2026-09-22: odbiór końcowy — PR #77 zmergowany 20.09 (104b237); kryteria udowodnione (czerwone przebiegi wg odbioru 1. rundy); status done.
