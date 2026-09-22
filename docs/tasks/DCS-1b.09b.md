@@ -1,7 +1,7 @@
 ---
 id: DCS-1b.09b
 title: "Wyścig hydratacji po logowaniu/MFA (React #418 na liście akcji profilu dokumentu)"
-status: review
+status: done
 difficulty: L
 model: null
 model_approved: null
@@ -63,3 +63,4 @@ Przed 1b.15 (import na prod, 30.09), od kiedy na prodzie pojawią się pierwsi u
 - 2026-09-22 tj, decyzja 2: odtworzenie zostaje w repo jako skrypt e2e poza CI.
 - 2026-09-22 tj, decyzja: `e2e:revision` — opcja B, fixtura nie jest poprawiana w tym PR (skrypt pada w setupie na main od 1b.11 PR 1; `docs/deferred-tasks.md` ggg). New Revision not proven on 16.2.12 by e2e (script broken on main, see deferred); checked manually by tj on Preview.
 - 2026-09-22 tj, decyzja: czerwonego dowodu nie powtarzamy. Logi czerwonego dowodu (main 16.1.1: 30/30 z #418; 16.2.12: 0/30) i serii 1 `e2e:profile` (10/10) przepadły przy restarcie sesji; liczby są cytowane z wyjścia przechwyconego przed restartem, a skrypt `e2e:hydration-replay` jest w repo, żeby je powtórzyć.
+- 2026-09-22: odbiór — PR #88. Mechanizm: błąd replay przy hydratacji w React z next@16.1.1 (react#35494), udowodniony odtworzeniem (30/30 na 16.1.1, 0/30 na 16.2.12, e2e:hydration-replay w repo). Poprawka: next 16.2.12 tylko w apps/dcs; Timesheet zostaje na 16.1.1 (lockfile bez zmian wersji, build zielony). e2e:profile 2×10 zielone. New Revision na 16.2.12 sprawdzone ręcznie przez tj na Preview (e2e:revision zepsuty na main, deferred (ggg)). Logi red proof i serii 1 utracone przy restarcie sesji — liczby z wyjścia sprzed restartu.
