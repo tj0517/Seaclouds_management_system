@@ -12,6 +12,7 @@ Format zadania: [README.md](README.md). Zadania zaimportowane z Notion 2026-09-2
 | [1a.20](DCS-1a.20.md) | Potwierdzić backupy Supabase zgodnie z O-04 | todo | S | — | O-04 | 2026-09-09 |
 | [1a.21](DCS-1a.21.md) | Demo / bramka 1a→1b: login 2FA, role w SC2601, nowy projekt w kreatorze, edycja słownika, audit log | todo | S | — | — | 2026-09-09 |
 | [1a.25c](DCS-1a.25c.md) | Timesheet /mfa: test regresji w repo (Playwright, trzy tryby) | in_progress | M | 1a.25b, 1b.07 | — | — |
+| [1a.27](DCS-1a.27.md) | Skan sekretów w CI (gitleaks) | todo | S | — | — | — |
 | [1b.08b](DCS-1b.08b.md) | Stan „w toku" w oknie New Revision (przycisk zapisu bez informacji zwrotnej) | todo | S | — | — | 2026-09-29 |
 | [1b.09b](DCS-1b.09b.md) | Wyścig hydratacji po logowaniu/MFA (React #418 na liście akcji profilu dokumentu) | todo | L | — | — | 2026-09-29 |
 | [1b.11](DCS-1b.11.md) | Ręczna zmiana statusu dokumentu przez DC + Void dokumentu (Faza 1: bez silnika obiegu) | todo | S | 1b.10, 1b.02 | — | 2026-09-23 |
