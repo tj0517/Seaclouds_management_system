@@ -497,6 +497,7 @@ export async function getDocument(supabase: DbClient, documentId: string) {
     .select(
       `id, project_id, scl_doc_number, cpy_doc_number, title, budget_hours,
        originator_id, checker_id, approver_id, ctr_code, current_revision_id, created_at, updated_at,
+       workflow_status_id, void_reason, void_at,
        doc_type:dictionaries!documents_doc_type_id_fkey(code, label),
        discipline:dictionaries!documents_discipline_id_fkey(code, label),
        area:dictionaries!documents_area_id_fkey(code, label),
@@ -556,7 +557,7 @@ export async function getRevisionWithFiles(supabase: DbClient, revisionId: strin
       .schema('dcs')
       .from('revisions')
       .select(
-        `id, document_id, scl_revision, cpy_revision, reason_for_issue, revision_date, created_at,
+        `id, document_id, scl_revision, cpy_revision, reason_for_issue, revision_date, created_at, locked_at,
          step:dictionaries!revisions_step_id_fkey(code, label),
          status:dictionaries!revisions_status_id_fkey(code, label)`,
       )
@@ -825,4 +826,268 @@ export async function setCpyNumber(
     )
   }
   return { ok: true, data: { documentId: data.id, cpyNumber: data.cpy_doc_number } }
+}
+
+// ---------------------------------------------------------------------------
+// Manual status change and Void (DCS 1b.11)
+//
+// Phase 1 has no workflow engine: the DC drives a document through the same
+// statuses the Excel MDR used to track by hand. Migration 20260922074250 is
+// the enforcement (trigger documents_workflow_status_dc_only, DC-only at
+// aal2, with an admin: escape scoped to workflow_status_id alone for leaving
+// Void — decision 4) — this file is only the message and the one thing the
+// database will not do for a bad caller: refuse cleanly instead of a bare
+// 42501/23514/23001.
+//
+// VOID is deliberately NOT one of the plain status options: the task asks for
+// it as "osobna akcja z potwierdzeniem i obowiązkowym powodem" (Void
+// dokumentu), and the database backs that up — entering VOID needs
+// void_reason, which only the DC may write (no admin: prefix on that column),
+// so an admin's plain status write could never satisfy it anyway. SUPERSEDED
+// is also excluded: it is a revision-only status the database assigns itself
+// (docs/02-data-model.md) and no UI here ever offers it, on a document or a
+// revision.
+// ---------------------------------------------------------------------------
+
+/**
+ * The document statuses the plain status control offers, in the lifecycle
+ * order the brief and docs/02-data-model.md give them. VOID and SUPERSEDED
+ * are excluded — see the section comment above.
+ */
+export const DOCUMENT_STATUS_CODES = ['NOT_STARTED', 'STARTED', 'IDC', 'IFR', 'RETCOM', 'IFC', 'IFI', 'IFB'] as const
+
+export const VOID_STATUS_CODE = 'VOID'
+
+/** The dictionary rows the status control may offer, in the dictionary's own (lifecycle) order — see DOCUMENT_STATUS_CODES. */
+export function documentStatusOptions<T extends { code: string }>(statuses: readonly T[]): T[] {
+  return statuses.filter((status) => (DOCUMENT_STATUS_CODES as readonly string[]).includes(status.code))
+}
+
+export type DocumentStatusAccess =
+  | { mode: 'enabled' }
+  | { mode: 'disabled'; reason: 'void_admin_only' | 'needs_second_factor' | 'not_allowed'; hint: string }
+
+/**
+ * Whether the plain status control is live for this reader. MIRRORS, does not
+ * enforce — the real guard is documents_workflow_status_dc_only.
+ *
+ * While the document is VOID, ONLY an admin at aal2 may move it off VOID
+ * (enforce_document_void, decision 4 — a DC who is not admin is refused with
+ * 23001, proven in supabase/tests/dc_manual_status_and_void.test.sql section
+ * 6). Checked first, like newRevisionAccess checks Void first: whatever the
+ * reader's role, "only an admin can reverse Void" is the true reason.
+ */
+export function documentStatusAccess(input: {
+  isAdmin: boolean
+  isDc: boolean
+  aal2: boolean
+  isVoid: boolean
+}): DocumentStatusAccess {
+  if (input.isVoid) {
+    if (input.isAdmin && input.aal2) return { mode: 'enabled' }
+    return {
+      mode: 'disabled',
+      reason: 'void_admin_only',
+      hint: 'This document is Void. Void is irreversible in ordinary use — only an admin can move it off Void.',
+    }
+  }
+  if ((input.isDc || input.isAdmin) && input.aal2) return { mode: 'enabled' }
+  if (input.isDc || input.isAdmin) {
+    return {
+      mode: 'disabled',
+      reason: 'needs_second_factor',
+      hint: 'Changing the status needs a session with a verified second factor.',
+    }
+  }
+  return {
+    mode: 'disabled',
+    reason: 'not_allowed',
+    hint: 'Only the Document Controller of this project can change the status.',
+  }
+}
+
+export type VoidDocumentAccess =
+  | { mode: 'enabled' }
+  | { mode: 'disabled'; reason: 'already_void' | 'needs_second_factor' | 'not_allowed'; hint: string }
+
+/**
+ * Whether the Void action is live for this reader. MIRRORS, does not enforce.
+ *
+ * Admin is deliberately NOT offered this action, even at aal2: void_reason is
+ * guarded by documents_workflow_status_dc_only with no admin: prefix (only
+ * workflow_status_id carries one), so an admin's attempt to enter Void with a
+ * reason would be refused on that column alone. Void is entered only by the
+ * project's DC; leaving it is the admin's narrow exception, offered instead
+ * through documentStatusAccess above.
+ */
+export function voidDocumentAccess(input: { isDc: boolean; aal2: boolean; isVoid: boolean }): VoidDocumentAccess {
+  if (input.isVoid) {
+    return { mode: 'disabled', reason: 'already_void', hint: 'This document is already Void.' }
+  }
+  if (input.isDc && input.aal2) return { mode: 'enabled' }
+  if (input.isDc) {
+    return {
+      mode: 'disabled',
+      reason: 'needs_second_factor',
+      hint: 'Voiding a document needs a session with a verified second factor.',
+    }
+  }
+  return {
+    mode: 'disabled',
+    reason: 'not_allowed',
+    hint: 'Only the Document Controller of this project can Void a document.',
+  }
+}
+
+export type SetDocumentStatusInput = { documentId: string; statusCode: (typeof DOCUMENT_STATUS_CODES)[number] }
+
+export function parseSetDocumentStatusInput(raw: unknown): ActionResult<SetDocumentStatusInput> {
+  if (typeof raw !== 'object' || raw === null) return fail('invalid_input', 'payload is not an object')
+  const r = raw as Record<string, unknown>
+  if (typeof r.documentId !== 'string' || !UUID_RE.test(r.documentId)) {
+    return fail('invalid_input', 'documentId is required and must be a uuid')
+  }
+  if (typeof r.statusCode !== 'string' || !(DOCUMENT_STATUS_CODES as readonly string[]).includes(r.statusCode)) {
+    return fail('invalid_input', `statusCode must be one of ${DOCUMENT_STATUS_CODES.join(', ')}`)
+  }
+  return { ok: true, data: { documentId: r.documentId, statusCode: r.statusCode as (typeof DOCUMENT_STATUS_CODES)[number] } }
+}
+
+export type VoidDocumentInput = { documentId: string; reason: string }
+
+export function parseVoidDocumentInput(raw: unknown): ActionResult<VoidDocumentInput> {
+  if (typeof raw !== 'object' || raw === null) return fail('invalid_input', 'payload is not an object')
+  const r = raw as Record<string, unknown>
+  if (typeof r.documentId !== 'string' || !UUID_RE.test(r.documentId)) {
+    return fail('invalid_input', 'documentId is required and must be a uuid')
+  }
+  if (typeof r.reason !== 'string' || r.reason.trim() === '') {
+    return fail('invalid_input', 'A reason is required to Void a document.')
+  }
+  return { ok: true, data: { documentId: r.documentId, reason: r.reason.trim() } }
+}
+
+/**
+ * The status-change-specific translation of a PostgREST error. Not
+ * mapDbError: that one words 42501 as "you cannot CREATE a document", the
+ * wrong sentence at this control.
+ */
+export function mapDocumentStatusDbError(code: string | undefined, message: string): { ok: false; error: DocumentError; message?: string } {
+  switch (code) {
+    case '42501':
+      if (message.includes('verified second factor')) {
+        return fail(
+          'forbidden',
+          'Changing the status needs a session with a verified second factor. Sign in again and complete the second-factor challenge.',
+        )
+      }
+      return fail('forbidden', 'Only the Document Controller of this project (or, to leave Void, an admin) can change the status.')
+    case '23001':
+      return fail(
+        'forbidden',
+        'This document is Void. Void is irreversible in ordinary use — only an admin can move it off Void. To continue the work, create a new document.',
+      )
+    default:
+      return fail('db_error', message)
+  }
+}
+
+/**
+ * Sets a document's status to one of DOCUMENT_STATUS_CODES (never VOID — see
+ * voidDocument below) and returns what was stored.
+ *
+ * Resolved from the CODE at write time, not cached: dictionary uuids differ
+ * per environment, same reason createDocument resolves NOT_STARTED on every
+ * call. An UPDATE that RLS/the trigger's WHEN filters away is zero rows in
+ * PostgREST, not an error — reported as 'forbidden', the same rule
+ * setCpyNumber follows.
+ */
+export async function setDocumentStatus(
+  supabase: DbClient,
+  rawInput: unknown,
+): Promise<ActionResult<{ documentId: string; statusCode: string }>> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return fail('unauthenticated')
+
+  const parsed = parseSetDocumentStatusInput(rawInput)
+  if (!parsed.ok) return parsed
+  const input = parsed.data
+
+  const { data: status, error: statusError } = await supabase
+    .schema('dcs')
+    .from('dictionaries')
+    .select('id')
+    .eq('dict_type', 'workflow_status')
+    .eq('code', input.statusCode)
+    .maybeSingle()
+  if (statusError) return mapDocumentStatusDbError(statusError.code, statusError.message)
+  if (!status) return fail('db_error', `no workflow_status dictionary row with code ${input.statusCode}`)
+
+  const { data, error } = await supabase
+    .schema('dcs')
+    .from('documents')
+    .update({ workflow_status_id: status.id })
+    .eq('id', input.documentId)
+    .select('id, workflow_status:dictionaries!documents_workflow_status_id_fkey(code)')
+    .maybeSingle()
+
+  if (error) return mapDocumentStatusDbError(error.code, error.message)
+  if (!data) {
+    return fail(
+      'forbidden',
+      'The status was not changed: this document is not visible to you, or your session may not change it. Only the Document Controller of the project can, with a verified second factor.',
+    )
+  }
+  return { ok: true, data: { documentId: data.id, statusCode: data.workflow_status?.code ?? input.statusCode } }
+}
+
+/**
+ * Voids a document: mandatory reason, void_at is stamped by the trigger, not
+ * sent here. Both columns are written in the SAME update as
+ * workflow_status_id — enforce_document_void requires the reason to already
+ * be present on the row it is judging, and a two-step "set VOID, then set the
+ * reason" would be refused on its second step (void_reason cannot be set once
+ * the document already reads VOID from the first).
+ */
+export async function voidDocument(
+  supabase: DbClient,
+  rawInput: unknown,
+): Promise<ActionResult<{ documentId: string; voidReason: string }>> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return fail('unauthenticated')
+
+  const parsed = parseVoidDocumentInput(rawInput)
+  if (!parsed.ok) return parsed
+  const input = parsed.data
+
+  const { data: status, error: statusError } = await supabase
+    .schema('dcs')
+    .from('dictionaries')
+    .select('id')
+    .eq('dict_type', 'workflow_status')
+    .eq('code', VOID_STATUS_CODE)
+    .maybeSingle()
+  if (statusError) return mapDocumentStatusDbError(statusError.code, statusError.message)
+  if (!status) return fail('db_error', `no workflow_status dictionary row with code ${VOID_STATUS_CODE}`)
+
+  const { data, error } = await supabase
+    .schema('dcs')
+    .from('documents')
+    .update({ workflow_status_id: status.id, void_reason: input.reason })
+    .eq('id', input.documentId)
+    .select('id, void_reason')
+    .maybeSingle()
+
+  if (error) return mapDocumentStatusDbError(error.code, error.message)
+  if (!data) {
+    return fail(
+      'forbidden',
+      'The document was not Voided: it is not visible to you, or your session may not change it. Only the Document Controller of the project can, with a verified second factor.',
+    )
+  }
+  return { ok: true, data: { documentId: data.id, voidReason: data.void_reason ?? input.reason } }
 }

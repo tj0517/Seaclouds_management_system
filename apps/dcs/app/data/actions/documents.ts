@@ -6,7 +6,13 @@
 // Same split as app/data/actions/project-mdr.ts.
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@scl/db/server'
-import { createDocument as createWith, setCpyNumber as setCpyNumberWith, type ActionResult } from '@/lib/documents'
+import {
+  createDocument as createWith,
+  setCpyNumber as setCpyNumberWith,
+  setDocumentStatus as setDocumentStatusWith,
+  voidDocument as voidDocumentWith,
+  type ActionResult,
+} from '@/lib/documents'
 
 export async function createDocument(input: unknown): Promise<ActionResult<string>> {
   const supabase = await createClient()
@@ -38,6 +44,41 @@ export async function setCpyNumber(
 ): Promise<ActionResult<{ documentId: string; cpyNumber: string | null }>> {
   const supabase = await createClient()
   const result = await setCpyNumberWith(supabase, input)
+  if (result.ok) {
+    revalidatePath(`/documents/${result.data.documentId}`)
+    revalidatePath('/mdr')
+  }
+  return result
+}
+
+/**
+ * DCS 1b.11: manual status change from the profile. Authorization is the
+ * database's (trigger documents_workflow_status_dc_only); see
+ * setDocumentStatus in lib/documents.ts. /mdr shows the status too
+ * (dcs.v_mdr), so it revalidates alongside the profile.
+ */
+export async function setDocumentStatus(
+  input: unknown,
+): Promise<ActionResult<{ documentId: string; statusCode: string }>> {
+  const supabase = await createClient()
+  const result = await setDocumentStatusWith(supabase, input)
+  if (result.ok) {
+    revalidatePath(`/documents/${result.data.documentId}`)
+    revalidatePath('/mdr')
+  }
+  return result
+}
+
+/**
+ * DCS 1b.11: Void a document, with its mandatory reason. Authorization is the
+ * database's (enforce_document_void, and documents_workflow_status_dc_only
+ * for workflow_status_id itself); see voidDocument in lib/documents.ts.
+ */
+export async function voidDocument(
+  input: unknown,
+): Promise<ActionResult<{ documentId: string; voidReason: string }>> {
+  const supabase = await createClient()
+  const result = await voidDocumentWith(supabase, input)
   if (result.ok) {
     revalidatePath(`/documents/${result.data.documentId}`)
     revalidatePath('/mdr')
