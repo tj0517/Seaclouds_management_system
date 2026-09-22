@@ -1,8 +1,41 @@
 {
   "mcpServers": {
-    "supabase": {
+    "supabase-dev": {
       "type": "http",
-      "url": "https://mcp.supabase.com/mcp?project_ref=mzotiurydmhibqhxxzoh&read_only=true"
+      "url": "https://mcp.supabase.com/mcp?project_ref=mzotiurydmhibqhxxzoh&read_only=true&features=database,debugging,docs"
+    },
+    "supabase-prod": {
+      "type": "http",
+      "url": "https://mcp.supabase.com/mcp?project_ref=tfbzivfsqsgebegcvfah&read_only=true&features=database,debugging,docs"
+    },
+    "playwright": {
+      "command": "npx",
+      "args": [
+        "@playwright/mcp@latest",
+        "--headless",
+        "--isolated",
+        "--viewport-size",
+        "1440x900",
+        "--output-dir",
+        ".playwright-mcp"
+      ]
+    },
+    "github": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-github"
+      ],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"
+      }
+    },
+    "context7": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@upstash/context7-mcp@latest"
+      ]
     }
   }
 }
