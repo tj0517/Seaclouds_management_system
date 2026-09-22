@@ -13,10 +13,10 @@ Format zadania: [README.md](README.md). Zadania zaimportowane z Notion 2026-09-2
 | [1a.21](DCS-1a.21.md) | Demo / bramka 1a→1b: login 2FA, role w SC2601, nowy projekt w kreatorze, edycja słownika, audit log | todo | S | — | — | 2026-09-09 |
 | [1a.25c](DCS-1a.25c.md) | Timesheet /mfa: test regresji w repo (Playwright, trzy tryby) | done | M | 1a.25b, 1b.07 | — | — |
 | [1a.27](DCS-1a.27.md) | Skan sekretów w CI (gitleaks) | todo | S | — | — | — |
-| [1b.04b](DCS-1b.04b.md) | New Document: stan „w toku”, projekt z kontekstu, informacja o nawigacji w toku | todo | S | — | — | 2026-09-29 |
+| [1b.04b](DCS-1b.04b.md) | New Document: stan „w toku”, projekt z kontekstu, informacja o nawigacji w toku | done | S | — | — | 2026-09-29 |
 | [1b.08b](DCS-1b.08b.md) | Stan „w toku" w oknie New Revision (przycisk zapisu bez informacji zwrotnej) | todo | S | — | — | 2026-09-29 |
-| [1b.09b](DCS-1b.09b.md) | Wyścig hydratacji po logowaniu/MFA (React #418 na liście akcji profilu dokumentu) | todo | L | — | — | 2026-09-29 |
-| [1b.11](DCS-1b.11.md) | Ręczna zmiana statusu dokumentu przez DC + Void dokumentu (Faza 1: bez silnika obiegu) | todo | S | 1b.10, 1b.02 | — | 2026-09-23 |
+| [1b.09b](DCS-1b.09b.md) | Wyścig hydratacji po logowaniu/MFA (React #418 na liście akcji profilu dokumentu) | done | L | — | — | 2026-09-29 |
+| [1b.11](DCS-1b.11.md) | Ręczna zmiana statusu dokumentu przez DC + Void dokumentu (Faza 1: bez silnika obiegu) | in_progress | S | 1b.10, 1b.02 | — | 2026-09-23 |
 | [1b.12](DCS-1b.12.md) | Analiza pliku SCL_SMDR_v4.xlsx: rozbieżności, puste daty, numery spoza formatu, mapowanie kolorów | todo | M | — | — | 2026-09-10 |
 | [1b.13](DCS-1b.13.md) | Skrypt importu SMDR → documents/revisions (146 dok.), generator ustawiony na kolejny wolny numer, raport rozbieżności | todo | L | 1a.18, 1a.19, 1b.02, 1b.04 | O-05 | 2026-09-23 |
 | [1b.14](DCS-1b.14.md) | Przejście raportu rozbieżności z DC pozycja po pozycji + poprawki importu | todo | M | 0.1 | — | 2026-09-28 |

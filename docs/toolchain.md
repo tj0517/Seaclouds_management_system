@@ -11,6 +11,22 @@ version: a newer CLI in CI than locally turns CI red with no schema change.
 | Postgres image (local/shadow DB) | **`public.ecr.aws/supabase/postgres:17.6.1.166`** | Indirectly: selected deterministically by the CLI version above. CLI 2.75.0 does not support a `[db] image` key in `config.toml` (verified — parse error), so `config.toml` pins only `major_version = 17`. |
 | Node | 20.20.0 | `.nvmrc` (CI reads it via `node-version-file`) |
 | pnpm | 10.30.3 | `packageManager` in root `package.json` (CI reads it via `pnpm/action-setup`) |
+| Next.js — DCS | **16.2.12** (+ `eslint-config-next` 16.2.12) | exact pins in `apps/dcs/package.json` (DCS 1b.09b: 16.2.0+ carries react/react#35494, the hydration-replay fix — `docs/deferred-tasks.md` ccc) |
+| Next.js — Timesheet | **16.1.1** (+ `eslint-config-next` 16.1.1) | exact pins in `apps/timesheet/package.json`; still carries the hydration-replay bug — upgrade is its own task (`docs/deferred-tasks.md` fff) |
+| React / React DOM | 19.2.3 | both apps' `package.json`. The App Router renders with the React canary **vendored inside Next** (`next/dist/compiled/react-dom`) — 16.2.12: `19.3.0-canary-3f0b9e61-20260317`, 16.1.1: `19.3.0-canary-f93b9fd4-20251217` |
+
+The two apps pin Next separately on purpose: `@scl/db` declares `next` only as a peer and
+DCS compiles it from source (`transpilePackages`), so its `next/*` imports resolve to the
+app's own Next (checked in 1b.09b: no 16.1.1 module in the DCS build).
+
+## Upgrading Next.js in DCS
+
+1. Bump `next` and `eslint-config-next` together in `apps/dcs/package.json`; confirm in
+   `pnpm-lock.yaml` that `apps/timesheet` still resolves its own version.
+2. On a local production build (`docs/03-conventions.md`, "Testy przeglądarkowe"):
+   `e2e:hydration-replay` (the guard for this upgrade path), `e2e:profile`, `e2e:pending`,
+   `e2e:revision`, `e2e:files`.
+3. Update this table and any comment that names the version as current.
 
 ## Upgrading the Supabase CLI
 

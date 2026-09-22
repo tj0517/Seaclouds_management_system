@@ -34,9 +34,12 @@ function proxy(pathname: string, session: { isAdminOrDc: boolean; aal: Aal }): s
   return pathname
 }
 
-// --- the client side: the Next.js 16.1.1 route cache, narrowed --------------
+// --- the client side: the Next.js route cache, narrowed ---------------------
 //
-// Three rules, each read out of the installed next@16.1.1:
+// Three rules, read out of next@16.1.1 (DCS 1a.25) and re-read in next@16.2.12
+// (DCS 1b.09b): (1) and (2) unchanged; (3) changed — refresh-reducer.js now
+// "invalidate[s] the segment cache but not the route cache". The model below
+// uses only (1) and (2).
 //
 //  (1) segment-cache/navigation.js, navigate(): looks the requested href up in
 //      the route cache and, on a Fulfilled entry, navigates to that entry's

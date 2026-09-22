@@ -1,18 +1,18 @@
 ---
 id: DCS-1b.09b
 title: "Wyścig hydratacji po logowaniu/MFA (React #418 na liście akcji profilu dokumentu)"
-status: todo
+status: done
 difficulty: L
 model: null
 model_approved: null
 effort: null
-branch: null
+branch: fix/dcs-1b09b-hydration-race
 due: 2026-09-29
 depends_on: []
 blocked_by_questions: []
 touches_db: false
 touches_prod: false
-pr: null
+pr: 88
 notion: https://app.notion.com/p/3e2c2fbc0595814d85ede41c9ea9109e
 ---
 
@@ -28,11 +28,11 @@ Nazwać mechanizmem i naprawić u źródła losowy błąd hydratacji React #418 
 - [ ] Poprawka u źródła (jeśli hipoteza się potwierdzi)
 
 ## Gotowe, gdy
-Na buildzie produkcyjnym:
-- przyczyna nazwana mechanizmem — **jak sprawdzić**: TODO
-- poprawka u źródła — **jak sprawdzić**: TODO
-- `e2e:profile` ≥ 10 zielonych z rzędu na dwóch seriach — **jak sprawdzić**: przebiegi `e2e:profile`
-- czerwony dowód — **jak sprawdzić**: cofnięta poprawka → #418 wraca na N ≥ 30 ładowań po logowaniu/MFA
+Wszystko na lokalnym buildzie produkcyjnym (`next build` + `next start`):
+- **Mechanizm nazwany** — **jak sprawdzić**: łańcuch przyczynowy w raporcie rundy 1, poparty deterministycznym odtworzeniem (≥ 9/10 ładowań z ustawieniem) i logami zdarzeń ze znacznikami czasu dla ładowań błędnych i poprawnych. *(Zmienione z „TODO”: pierwotnej hipotezy nie ma w kodzie, więc sprawdzianem jest odtworzenie, nie hipoteza.)*
+- **Poprawka u źródła** — **jak sprawdzić**: diff usuwa przyczynę nazwaną w kryterium 1; nie wycisza błędu (bez `suppressHydrationWarning`, bez filtrowania recoverable errors ani konsoli), nie przebudowuje panelu, a tj zaakceptował mechanizm przed poprawką. *(Zmienione z „TODO”.)*
+- **`e2e:profile` ≥ 10 zielonych z rzędu, w dwóch osobnych seriach** — **jak sprawdzić**: logi obu serii (komenda + linie podsumowania) w raporcie.
+- **Czerwony dowód** — **jak sprawdzić**: z ustawieniem odtworzenia z kryterium 1, poprawka cofnięta: #418 na ≥ 27 z 30 ładowań po logowaniu/MFA; poprawka założona: 0 z 30. *(Zmienione z „cofnięta poprawka → #418 na N ≥ 30 ładowań”: przy ~1/80 na main 30 zwykłych ładowań może nie dać żadnego błędu nawet bez poprawki, co niczego nie dowodzi.)*
 
 ## Poza zakresem
 Przebudowa panelu „na ślepo” (patrz Bramki STOP).
@@ -57,3 +57,10 @@ Przed 1b.15 (import na prod, 30.09), od kiedy na prodzie pojawią się pierwsi u
 
 ## Notatki z realizacji
 - 2026-09-22: zaimportowane z Notion (https://app.notion.com/p/3e2c2fbc0595814d85ede41c9ea9109e).
+- 2026-09-22 tj: hipoteza z nasłuchem auth nieaktualna — na main brak onAuthStateChange w apps/ i packages/ (odczyt). Zadanie w dwóch rundach na jednej gałęzi: runda 1 diagnoza + deterministyczne odtworzenie, STOP; runda 2 poprawka po akceptacji tj. Czerwony dowód: deterministyczne odtworzenie zamiast liczby ładowań (przy ~1/80 na main N=30 bez poprawki może dać 0).
+- 2026-09-22 tj: runda 1 przyjęta — mechanizm (błąd replay hydratacji w React, naprawiony upstream w react#35494) udowodniony odtworzeniem: czysty build 20/20 błędnych, z poprawką upstream 0/20.
+- 2026-09-22 tj, decyzja 1: poprawka = opcja A — Next w `apps/dcs` podbity do 16.2.12 (razem z `eslint-config-next`); Timesheet zostaje na 16.1.1.
+- 2026-09-22 tj, decyzja 2: odtworzenie zostaje w repo jako skrypt e2e poza CI.
+- 2026-09-22 tj, decyzja: `e2e:revision` — opcja B, fixtura nie jest poprawiana w tym PR (skrypt pada w setupie na main od 1b.11 PR 1; `docs/deferred-tasks.md` ggg). New Revision not proven on 16.2.12 by e2e (script broken on main, see deferred); checked manually by tj on Preview.
+- 2026-09-22 tj, decyzja: czerwonego dowodu nie powtarzamy. Logi czerwonego dowodu (main 16.1.1: 30/30 z #418; 16.2.12: 0/30) i serii 1 `e2e:profile` (10/10) przepadły przy restarcie sesji; liczby są cytowane z wyjścia przechwyconego przed restartem, a skrypt `e2e:hydration-replay` jest w repo, żeby je powtórzyć.
+- 2026-09-22: odbiór — PR #88. Mechanizm: błąd replay przy hydratacji w React z next@16.1.1 (react#35494), udowodniony odtworzeniem (30/30 na 16.1.1, 0/30 na 16.2.12, e2e:hydration-replay w repo). Poprawka: next 16.2.12 tylko w apps/dcs; Timesheet zostaje na 16.1.1 (lockfile bez zmian wersji, build zielony). e2e:profile 2×10 zielone. New Revision na 16.2.12 sprawdzone ręcznie przez tj na Preview (e2e:revision zepsuty na main, deferred (ggg)). Logi red proof i serii 1 utracone przy restarcie sesji — liczby z wyjścia sprzed restartu.

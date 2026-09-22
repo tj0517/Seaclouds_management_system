@@ -1,18 +1,18 @@
 ---
 id: DCS-1b.04b
 title: "New Document: stan „w toku”, projekt z kontekstu, informacja o nawigacji w toku"
-status: todo
+status: done
 difficulty: S
 model: null
 model_approved: null
 effort: null
-branch: null
+branch: feat/dcs-1b04b-pending-navigation
 due: 2026-09-29
 depends_on: []
 blocked_by_questions: []
 touches_db: false
 touches_prod: false
-pr: null
+pr: 85
 ---
 
 # DCS-1b.04b — New Document: stan „w toku”, projekt z kontekstu, informacja o nawigacji w toku
@@ -52,3 +52,4 @@ Formularz New Document i nawigacja w aplikacji DCS nie dają dziś informacji zw
 - 2026-09-22 tj: zgłoszone przy teście Preview po migracji 1b.11 (PR #84) — trzy punkty: brak stanu ładowania w New Document, New Document z projektu X nie ustawia projektu, brak informacji zwrotnej przy klikaniu w trakcie ładowania.
 - 2026-09-22 tj: trzy punkty w jednym zadaniu (nie rozbijać).
 - 2026-09-22 tj: klikanie w trakcie ładowania zostaje dozwolone; pokazać ładowanie zamiast blokować.
+- 2026-09-22: odbiór — PR #85 zmergowany 22.09 (20c6799); kod i testy (resolveProjectFromParam 5 przypadków, e2e docform: podwójny klik = 1 dokument, przerwanie nawigacji 5×) w repo; tj sprawdził na Preview (scl-dev, konto DC): projekt z kontekstu, podwójny klik → jeden dokument, ładowanie przy klikniętym wierszu. Zmiana: New Document z widoku globalnego startuje z pustym projektem (wcześniej projects[0]) — decyzja tj 22.09. Status done.

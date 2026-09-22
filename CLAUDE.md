@@ -97,7 +97,7 @@ Supabase, prod ref `tfbzivfsqsgebegcvfah`.
   Kronika obserwacji (PR #58–#79) mieszka w `docs/deferred-tasks.md` (aaa), dopóki
   pytanie jest otwarte; nie kasować jej bez zgody.
 
-  **Ostatni odczyt (jedna linia, nadpisywana):** PR #79 (DCS 1b.07b) — opisuje `7c40388`, ostatni commit ruszający `apps/`/`packages/`; drzewo `apps/` + `packages/` w HEAD jest z nim identyczne (`git diff --stat 7c40388 HEAD -- apps packages` puste), późniejsze commity ruszają tylko `docs/` i `CLAUDE.md`: `dcs` i `seaclouds-management-system` zbudowane (`Deployment has completed`), `ci` success (`gh api .../commits/7c40388/status`, 2026-09-21).
+  **Ostatni odczyt (jedna linia, nadpisywana):** PR #88 (DCS 1b.09b) — opisuje `0f3b555`, wypchnięty HEAD zawierający `5277326` (ostatni commit ruszający `apps/`/`packages/`, nigdy nie był HEAD-em wypchnięcia, więc nie ma własnych statusów); drzewo `apps/` + `packages/` w HEAD jest z `0f3b555` identyczne (`git diff --stat 0f3b555 HEAD -- apps packages` puste), późniejsze commity ruszają tylko `docs/` i `CLAUDE.md`: `dcs` i `seaclouds-management-system` zbudowane na `0f3b555` (`Deployment has completed`), na `a29d9f4` (tylko `docs/`) `Skipped - Not affected`; `ci` na `0f3b555` `cancelled` (zastąpiony kolejnym pushem), na `a29d9f4` `success` (`gh pr checks 88`, `gh api .../commits/<sha>/status` i `/check-runs`, 2026-09-22).
 - Różnica w ochronie, istotna przy podawaniu URL-i: `dcs` ma
   `ssoProtection = all_except_custom_domains`, więc Preview **i** produkcyjny
   `*.vercel.app` stoją za logowaniem Vercela, a publiczny jest wyłącznie

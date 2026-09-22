@@ -2477,6 +2477,9 @@ upstream defect described in [vercel/next.js#98303](https://github.com/vercel/ne
 [#86055](https://github.com/vercel/next.js/issues/86055) (16.0.1, workaround "remove
 `loading.tsx`"). We are on **Next 16.1.1**, React 19.2.3. No version bump was made or
 tried: that is its own decision, and #98303 says even 16.3.4 still reproduces it (about 1%).
+*Update 2026-09-22 (DCS 1b.09b):* DCS moved to Next 16.2.12 for an unrelated React fix
+(ccc); #98303 is reported on 16.2.6 as well, and the hang was not re-measured here with a
+`loading.tsx` restored — the removals and the re-measure rule stand.
 
 **The fix: two skeletons removed, no replacement.** `hooks/use-pending-action.ts` is
 unchanged. The skeleton comes back when upstream fixes this — and before it does, re-measure
@@ -2880,6 +2883,19 @@ and never loads `supabase/fixtures/` (that is by design, `03-conventions.md`, "F
 A fixture can therefore stop loading without any check noticing; the next person to run a browser
 script finds out. Recorded here; the fixture is fixed in PR 2.
 
+**Resolved in DCS 1b.09b (2026-09-22) — a React bug, fixed by moving DCS to Next 16.2.12.**
+The mechanism, proven by a deterministic reproduction: the actions `<li>`s are outlined
+into separate RSC rows (lazy `$L…` children of the `<ul>`); when hydration reaches the
+`<ul>` before such a row is fulfilled, React suspends there, and if the row is fulfilled in
+the short window while React is parked on that fiber, `replaySuspendedUnitOfWork` re-runs the
+`<ul>`'s `beginWork` without rewinding the hydration cursor — the `<ul>` is claimed against
+its own first `<li>` (exactly the dev diff above) → #418 → the root is client-rendered. The
+bug was in the React canary vendored by next@16.1.1 (`19.3.0-canary-f93b9fd4-20251217`);
+upstream fix react/react#35494 (merged 2026-01-13), present from next@16.2.0. Not an auth
+race: no auth listener exists, the login `push`+`refresh` and cookie refresh were ruled out
+with logs (task file). The guard is `e2e:hydration-replay` (`docs/03-conventions.md`).
+Timesheet still runs 16.1.1 — (fff).
+
 ## ddd) Follow-ups noted during DCS 1b.10 (lock on final revisions)
 
 Recorded 2026-09-21. The lock itself is done and proved
@@ -2955,3 +2971,38 @@ Nothing here decides:
 Until that decision is made, a document an admin has taken off VOID reads, in
 the database, as an ordinary document that happens to carry two populated
 columns nothing in the schema explains without also reading `public.audit_log`.
+
+## fff) Timesheet after DCS 1b.09b — the same React hydration bug is latent, and its login double-navigates (2026-09-22)
+
+Noticed in DCS 1b.09b, not fixed there (Timesheet was out of scope; tj's decision: Next
+bumped in `apps/dcs` only).
+
+- **(a) Timesheet runs `next@16.1.1`**, whose vendored React
+  (`19.3.0-canary-f93b9fd4-20251217`) carries the hydration-replay bug fixed upstream in
+  react/react#35494 (mechanism: (ccc), "Resolved in DCS 1b.09b"). Any Timesheet page whose
+  RSC payload outlines rows as lazy children of a host element can hit #418 the same way;
+  no Timesheet occurrence has been observed or measured. **Follow-up:** upgrade Timesheet's
+  Next as its own task, verified with `e2e:mfa` and `apps/dcs/e2e/hydration-replay.mjs`
+  adapted to a Timesheet page. Until then the repo holds two Next versions (DCS 16.2.12,
+  Timesheet 16.1.1; `docs/toolchain.md`).
+- **(b) Timesheet's login still does `router.push('/')` immediately followed by
+  `router.refresh()`** (`apps/timesheet/app/login/page.tsx:36-37`; DCS's
+  `app/login/page.tsx:30-31` does the same). Ruled out in 1b.09b as this bug's cause (the
+  profile load is a full document load; the post-`/mfa` load has no push/refresh and failed
+  identically in the reproduction), but it is the same two-concurrent-navigations pattern
+  that hung `/mfa` twice (1a.25, 1a.25b) — recorded as a pattern worth removing.
+
+## ggg) DCS 1b.11 — `e2e:revision` fails in setup on `main` since 1b.11 PR 1 (found in DCS 1b.09b, 2026-09-22)
+
+`apps/dcs/e2e/new-revision.mjs:171` inserts its fixture document `f5000000-0000-4000-8000-000000000003`
+with workflow status `VOID` and no `void_reason`. Since migration `20260922074250_dc_manual_status_and_void`
+(1b.11 PR 1, `7a5050c`) the database refuses that row, so the script fails before any page loads:
+
+```
+ERROR:  dcs.documents.void_reason is required and must not be blank whenever workflow status is VOID (document f5000000-0000-4000-8000-000000000003).
+CONTEXT:  PL/pgSQL function public.enforce_document_void() line 52 at RAISE
+```
+
+Unrelated to the Next.js version (setup SQL, rejected by the trigger). tj's decision in 1b.09b: not fixed
+there; the fix belongs to the 1b.11 UI PR (`feat/manual-status-void-ui`). Consequence: New Revision was not
+proven by e2e on Next 16.2.12 in 1b.09b — checked manually by tj on Preview.
