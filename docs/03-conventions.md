@@ -453,6 +453,19 @@ Zapisane przy DCS 1b.07 (2026-09-20).
   włączyło** (wiersze niewstrzymane albo puszczone dopiero przez zapas 3 s) — zielony przebieg
   bez włączonego ustawienia niczego nie dowodzi; jeśli nowy Next inaczej dzieli ładunek RSC,
   skrypt trzeba poprawić, a nie uznać za zdany.
+- **Szósty skrypt, `e2e:status` (DCS 1b.11 PR 2):** `apps/dcs/e2e/manual-status.mjs`, te same
+  wymagania co `e2e:revision`; `pnpm --filter @scl/dcs e2e:status`. Dwa własne dokumenty
+  (`f7000000-…0001` ladder, `f7000000-…0002` RED proofs), poza fixturą. Prowadzi DC przez
+  drabinkę `NOT_STARTED → STARTED → IDC → IFR → RETCOM → IFC` na statusie dokumentu, zmienia
+  status bieżącej rewizji, blokuje rewizję IFC przez Approve i Voiduje dokument z powodem —
+  przy każdym kroku odczyt z bazy (`workflow_status_id`, `revisions.status_id`, `locked_at`,
+  `public.audit_log`), nie tylko UI. Sprawdza, że czytelnik nie-DC nie widzi w ogóle kontrolki
+  statusu/Void/Approve (nie tylko wyłączonej — pusty DOM), nawet gdy stan pozwoliłby na akcję
+  DC-owi. Na dokumencie Void żaden czytelnik, także admin, nie widzi kontrolki statusu (decyzja
+  tj z 2026-09-22, patrz `docs/tasks/DCS-1b.11.md`). Dwa dowody RED przez PostgREST wprost
+  (z ominięciem dialogu i aplikacji): Void z pustym powodem jako DC na aal2 (23514) i zmiana
+  statusu jako nie-DC (42501) — `aal2AccessToken()` przechodzi realne REST-owe
+  `/auth/v1/factors/{id}/challenge` + `/verify`, bez przeglądarki.
 - **`e2e:profile` bywało czerwone na ostatniej asercji („no console or hydration errors") przez
   React #418 na liście akcji panelu (ok. 1 na 80 ładowań na next@16.1.1).** Przyczyna i poprawka:
   `docs/deferred-tasks.md` (ccc), DCS 1b.09b — błąd React naprawiony przejściem DCS na Next

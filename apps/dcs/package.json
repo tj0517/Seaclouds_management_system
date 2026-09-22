@@ -11,6 +11,7 @@
     "test:unit": "vitest run",
     "e2e:profile": "node e2e/document-profile.mjs",
     "e2e:revision": "node e2e/new-revision.mjs",
+    "e2e:status": "node e2e/manual-status.mjs",
     "e2e:pending": "node e2e/pending-action.mjs",
     "e2e:files": "node e2e/revision-files.mjs",
     "e2e:hydration-replay": "node e2e/hydration-replay.mjs"
