@@ -524,14 +524,25 @@ if (want('docform')) {
   // /documents/new with a usable form, not hang and not error. Next's router
   // runs "last navigation wins" for this pair of <Link>s natively — nothing in
   // this app arbitrates it — so the proof is that the interruption is actually
-  // exercised (both clicks fired while the first navigation was still settling)
-  // and that it resolves cleanly, repeated so a fast one-off isn't the only try.
+  // exercised (logged per iteration: whether the second click fired while
+  // location.pathname was still the documents list, i.e. the row's own
+  // navigation had not yet landed) and that it resolves cleanly, repeated so
+  // a fast one-off isn't the only try.
   {
     const errorsBefore = errors.length
     for (let i = 1; i <= 5; i++) {
       await go(page, `${BASE}/projects/${IDS.PEJ}/documents`)
       const rowHref = await page.locator('table a[href^="/documents/"]').first().getAttribute('href')
+      const documentsListPath = await page.evaluate(() => location.pathname)
       await page.locator('table a[href^="/documents/"]').first().click()
+      // Whether the row's own navigation had already left the list page by
+      // the time the second click fires — the interruption this case exists
+      // to prove only happened if this is still the list path. If it is not
+      // (the row nav had already landed on the profile), the second click is
+      // just an ordinary click from there, and reachedNewDoc/titleUsable below
+      // prove nothing about interrupting an in-flight navigation.
+      const pathnameBeforeSecondClick = await page.evaluate(() => location.pathname)
+      const interruptionExercised = pathnameBeforeSecondClick === documentsListPath
       await page.getByRole('link', { name: 'New document' }).click({ force: true, timeout: 2000 }).catch((e) => {
         site.details.push(`interruption ${i}: second click did not land — ${e.message.split('\n')[0].slice(0, 120)}`)
       })
@@ -551,7 +562,9 @@ if (want('docform')) {
           .then(async () => (await page.locator('#title').inputValue()) === `probe ${i}`)
           .catch(() => false)
       }
-      site.details.push(`interruption ${i}: row was ${rowHref}, landed on ${landed}, form usable=${titleUsable}`)
+      site.details.push(
+        `interruption ${i}: row was ${rowHref}, second click fired while still on the documents list=${interruptionExercised}, landed on ${landed}, form usable=${titleUsable}`,
+      )
       if (!reachedNewDoc || !titleUsable) {
         site.errors.push(`interruption ${i}: expected /documents/new with a usable form, got ${landed} (usable=${titleUsable})`)
       }
