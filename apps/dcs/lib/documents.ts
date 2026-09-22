@@ -212,6 +212,25 @@ export function creatableProjects<T extends { id: string }>(
 }
 
 /**
+ * DCS 1b.04b: which project (if any) New Document preselects from a
+ * `?project=` link.
+ *
+ * `param` is untrusted input — it comes straight off the URL, not from a
+ * server read. It is only ever used if it names a project already in
+ * `projects`, the server-computed creatable list (creatableProjects above);
+ * anything else — missing, malformed, or a real project id the caller may
+ * not create documents in — resolves to '', same as no context at all. The
+ * form then starts with an empty Project field and the user chooses.
+ */
+export function resolveProjectFromParam<T extends { id: string }>(
+  param: string | undefined,
+  projects: readonly T[],
+): string {
+  if (!param) return ''
+  return projects.some((project) => project.id === param) ? param : ''
+}
+
+/**
  * Validates whatever an untrusted caller sends the create server action.
  *
  * Returns a typed error rather than a bare 'invalid_input' for the two rules

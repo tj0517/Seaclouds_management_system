@@ -20,7 +20,6 @@
 // refused outright. There is nothing here for a user to fill in or for a
 // devtools edit to smuggle through.
 import { useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -44,6 +43,7 @@ type ProjectOption = { id: string; name: string; project_code: string | null; ha
 export default function DocumentCreateForm({
   currentUserId,
   projects,
+  initialProjectId,
   docTypes,
   disciplines,
   areas,
@@ -54,6 +54,14 @@ export default function DocumentCreateForm({
 }: {
   currentUserId: string
   projects: ProjectOption[]
+  /**
+   * Already validated server-side (lib/documents.ts, resolveProjectFromParam)
+   * against the creatable list — '' when there was no `?project=` context, or
+   * it named something not in `projects`. Never preselects projects[0]: with
+   * no valid context the field starts empty and the user chooses (tj,
+   * 2026-09-22).
+   */
+  initialProjectId: string
   docTypes: DictionaryRow[]
   disciplines: DictionaryRow[]
   areas: DictionaryRow[]
@@ -62,10 +70,9 @@ export default function DocumentCreateForm({
   teamsByProject: Record<string, TeamMember[]>
   directory: DirectoryEntry[]
 }) {
-  const router = useRouter()
-  const { run, pending } = usePendingAction()
+  const { run, navigate, pending } = usePendingAction()
 
-  const [projectId, setProjectId] = useState(projects[0]?.id ?? '')
+  const [projectId, setProjectId] = useState(initialProjectId)
   const [title, setTitle] = useState('')
   const [docTypeId, setDocTypeId] = useState('')
   const [disciplineId, setDisciplineId] = useState('')
@@ -143,7 +150,11 @@ export default function DocumentCreateForm({
       setError(result.message ?? result.error)
       return
     }
-    router.push(`/documents/${result.data}`)
+    // Stays pending (button disabled, spinner, "Creating…") until the new
+    // document's profile has rendered — navigate() holds it the same way
+    // AddFileDialog's refresh() does, so a second click in this window is
+    // still refused by run()'s latch and, visually, by `disabled`.
+    navigate(`/documents/${result.data}`)
   }
 
   return (
@@ -176,6 +187,7 @@ export default function DocumentCreateForm({
               setApproverId('')
             }}
           >
+            <option value="">Choose a project…</option>
             {projects.map((option) => (
               <option key={option.id} value={option.id}>
                 {option.project_code ?? option.name} — {option.name}

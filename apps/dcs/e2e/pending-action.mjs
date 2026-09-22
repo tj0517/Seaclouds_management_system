@@ -424,21 +424,29 @@ if (want('wizard')) {
 }
 
 // ---------------------------------------------------------------------------
-// 11. /documents/new — DocumentCreateForm (run, then router.push)
+// 11. /documents/new — DocumentCreateForm (run, then navigate — DCS 1b.04b)
 // ---------------------------------------------------------------------------
 if (want('docform')) {
   const { page } = orig
   row('docform', 'DocumentCreateForm')
+  const site = tally.get('docform')
   const drop = () => psql(`delete from dcs.documents where title like 'E2E doc %'`)
-  for (let i = 1; i <= REPEAT; i++) {
-    drop()
-    const title = `E2E doc ${pad(i)}`
-    await go(page, `${BASE}/documents/new`)
+  const fillRequired = async (title) => {
+    // DCS 1b.04b: the Project field starts empty with no `?project=` context
+    // (below proves that separately) — pick the first real option here so
+    // the rest of this loop still measures create + navigate, not staffing.
+    await page.locator('#project').selectOption({ index: 1 })
     await page.locator('#title').fill(title)
     for (const id of ['docType', 'discipline', 'area']) {
       const value = await page.locator(`#${id} option:not([value=""])`).first().getAttribute('value')
       await page.locator(`#${id}`).selectOption(value)
     }
+  }
+  for (let i = 1; i <= REPEAT; i++) {
+    drop()
+    const title = `E2E doc ${pad(i)}`
+    await go(page, `${BASE}/documents/new`)
+    await fillRequired(title)
     await attempt(
       'docform',
       page,
@@ -448,6 +456,123 @@ if (want('docform')) {
     )
   }
   drop()
+
+  // DCS 1b.04b — a double click, the second one landing during the
+  // navigation to the new profile, creates exactly one document. Polls for
+  // the button to become clickable again WHILE still on /documents/new,
+  // rather than guessing a delay: that window is exactly the defect (pending
+  // — and the single-flight latch it gates — used to clear before the push
+  // landed). On the fix the window never reopens before the URL changes, so
+  // the poll only ever sees one click land.
+  {
+    drop()
+    const title = 'E2E doc dbl-click'
+    await go(page, `${BASE}/documents/new`)
+    await fillRequired(title)
+    const clickCreate = () =>
+      page.evaluate(() => {
+        const btn = [...document.querySelectorAll('button')].find((b) => /Create document|Creating/.test(b.textContent ?? ''))
+        btn?.click()
+      })
+    await clickCreate()
+    const deadline = Date.now() + 3000
+    let secondClickFired = false
+    while (Date.now() < deadline) {
+      const state = await page.evaluate(() => {
+        const btn = [...document.querySelectorAll('button')].find((b) => /Create document|Creating/.test(b.textContent ?? ''))
+        return { onNewPage: location.pathname === '/documents/new', enabled: !!btn && !btn.disabled }
+      })
+      if (!state.onNewPage) break // navigation already landed; the window (if any) is closed
+      if (state.enabled) {
+        await clickCreate()
+        secondClickFired = true
+        break
+      }
+    }
+    await holds(page, (t) => /^\/documents\/[0-9a-f-]{36}$/.test(location.pathname) && document.body.innerText.includes(t), title, 6000)
+    const count = Number(psql(`select count(*) from dcs.documents where title = '${title}'`))
+    site.details.push(`double-click: second click ${secondClickFired ? 'fired' : 'never got a clickable button'} while on /documents/new, ${count} document(s) stored`)
+    if (count !== 1) site.errors.push(`double click created ${count} documents, expected 1`)
+  }
+  drop()
+
+  // DCS 1b.04b — project preselected from ?project=, and only when it is one
+  // of the caller's own creatable projects (resolveProjectFromParam server-side).
+  {
+    const validProjectId = IDS.PEJ
+    const foreignProjectId = '00000000-0000-4000-8000-000000000000' // not in orig's creatable list
+
+    await go(page, `${BASE}/documents/new?project=${validProjectId}`)
+    const preselected = await page.locator('#project').inputValue()
+    if (preselected !== validProjectId) site.errors.push(`valid ?project= not preselected: got "${preselected}"`)
+    await shot(page, 'docform-project-from-context')
+
+    await go(page, `${BASE}/documents/new`)
+    const noContext = await page.locator('#project').inputValue()
+    const submitDisabledNoContext = await page.getByRole('button', { name: 'Create document' }).isDisabled()
+    if (noContext !== '') site.errors.push(`no ?project= but preselected "${noContext}"`)
+    if (!submitDisabledNoContext) site.errors.push('no ?project=: submit not disabled with no project chosen')
+    await shot(page, 'docform-project-no-context')
+
+    await go(page, `${BASE}/documents/new?project=${foreignProjectId}`)
+    const invalidContext = await page.locator('#project').inputValue()
+    if (invalidContext !== '') site.errors.push(`?project= naming a project not in the creatable list was preselected: "${invalidContext}"`)
+  }
+
+  // DCS 1b.04b — interruption: clicking a document row starts a navigation to
+  // the profile; clicking "New document" before that lands must still land on
+  // /documents/new with a usable form, not hang and not error. Next's router
+  // runs "last navigation wins" for this pair of <Link>s natively — nothing in
+  // this app arbitrates it — so the proof is that the interruption is actually
+  // exercised (logged per iteration: whether the second click fired while
+  // location.pathname was still the documents list, i.e. the row's own
+  // navigation had not yet landed) and that it resolves cleanly, repeated so
+  // a fast one-off isn't the only try.
+  {
+    const errorsBefore = errors.length
+    for (let i = 1; i <= 5; i++) {
+      await go(page, `${BASE}/projects/${IDS.PEJ}/documents`)
+      const rowHref = await page.locator('table a[href^="/documents/"]').first().getAttribute('href')
+      const documentsListPath = await page.evaluate(() => location.pathname)
+      await page.locator('table a[href^="/documents/"]').first().click()
+      // Whether the row's own navigation had already left the list page by
+      // the time the second click fires — the interruption this case exists
+      // to prove only happened if this is still the list path. If it is not
+      // (the row nav had already landed on the profile), the second click is
+      // just an ordinary click from there, and reachedNewDoc/titleUsable below
+      // prove nothing about interrupting an in-flight navigation.
+      const pathnameBeforeSecondClick = await page.evaluate(() => location.pathname)
+      const interruptionExercised = pathnameBeforeSecondClick === documentsListPath
+      await page.getByRole('link', { name: 'New document' }).click({ force: true, timeout: 2000 }).catch((e) => {
+        site.details.push(`interruption ${i}: second click did not land — ${e.message.split('\n')[0].slice(0, 120)}`)
+      })
+      // Wait for the URL itself to settle on /documents/new, rather than a
+      // single point-in-time read after networkidle — networkidle can go
+      // quiet between the two navigations' own network activity and be read
+      // mid-transition, on the FIRST (stale) URL, before the second one lands.
+      const reachedNewDoc = await page
+        .waitForURL((u) => u.pathname === '/documents/new', { timeout: 5000 })
+        .then(() => true, () => false)
+      const landed = await page.evaluate(() => location.pathname)
+      let titleUsable = false
+      if (reachedNewDoc) {
+        titleUsable = await page
+          .locator('#title')
+          .fill(`probe ${i}`)
+          .then(async () => (await page.locator('#title').inputValue()) === `probe ${i}`)
+          .catch(() => false)
+      }
+      site.details.push(
+        `interruption ${i}: row was ${rowHref}, second click fired while still on the documents list=${interruptionExercised}, landed on ${landed}, form usable=${titleUsable}`,
+      )
+      if (!reachedNewDoc || !titleUsable) {
+        site.errors.push(`interruption ${i}: expected /documents/new with a usable form, got ${landed} (usable=${titleUsable})`)
+      }
+    }
+    const newErrors = errors.slice(errorsBefore)
+    if (newErrors.length) site.errors.push(`interruption: console/page errors during the sequence: ${JSON.stringify(newErrors)}`)
+    site.details.push(`interruption: console/page errors during the whole sequence: ${newErrors.length}`)
+  }
 }
 
 // ---------------------------------------------------------------------------
