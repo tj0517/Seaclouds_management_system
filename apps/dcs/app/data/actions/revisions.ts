@@ -14,7 +14,9 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@scl/db/server'
 import {
   createRevision as createWith,
+  lockRevision as lockWith,
   proposeRevisionCode as proposeWith,
+  setRevisionStatus as setRevisionStatusWith,
   type RevisionResult,
 } from '@/lib/revisions'
 
@@ -47,6 +49,47 @@ export async function createRevision(input: unknown): Promise<RevisionResult<{ i
     if (documentId) revalidatePath(`/documents/${documentId}`)
     revalidatePath('/mdr')
     revalidatePath('/projects/[projectId]/documents', 'page')
+  }
+  return result
+}
+
+/**
+ * DCS 1b.11: approves (locks) a revision. Authorization is the database's
+ * (revisions_locked_at_dc_only, revisions_locked_at_final_step); see
+ * lockRevision in lib/revisions.ts. `documentId` is read only to revalidate
+ * the profile — lockWith never receives it, so it cannot change what gets
+ * written.
+ */
+export async function lockRevision(input: unknown): Promise<RevisionResult<{ id: string; lockedAt: string }>> {
+  const supabase = await createClient()
+  const result = await lockWith(supabase, input)
+  if (result.ok) {
+    const documentId =
+      typeof input === 'object' && input !== null && typeof (input as { documentId?: unknown }).documentId === 'string'
+        ? (input as { documentId: string }).documentId
+        : null
+    if (documentId) revalidatePath(`/documents/${documentId}`)
+    revalidatePath('/mdr')
+  }
+  return result
+}
+
+/**
+ * DCS 1b.11 (Scope item 4): manual status change on the current revision.
+ * Authorization is the database's (revisions_status_dc_only); see
+ * setRevisionStatus in lib/revisions.ts. `documentId` is read only to
+ * revalidate the profile — setRevisionStatusWith never receives it.
+ */
+export async function setRevisionStatus(input: unknown): Promise<RevisionResult<{ revisionId: string; statusCode: string }>> {
+  const supabase = await createClient()
+  const result = await setRevisionStatusWith(supabase, input)
+  if (result.ok) {
+    const documentId =
+      typeof input === 'object' && input !== null && typeof (input as { documentId?: unknown }).documentId === 'string'
+        ? (input as { documentId: string }).documentId
+        : null
+    if (documentId) revalidatePath(`/documents/${documentId}`)
+    revalidatePath('/mdr')
   }
   return result
 }

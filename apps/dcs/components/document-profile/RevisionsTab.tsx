@@ -19,7 +19,7 @@ import { ChevronDown, ChevronRight } from 'lucide-react'
 import { EmptyState } from '@/components/page-chrome'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { mdrStatusColor } from '@/lib/mdr'
-import type { FileUploadAccess } from '@/lib/files'
+import { fileUploadAccess, type FileUploadAccess } from '@/lib/files'
 import type { RevisionRow } from '@/lib/revisions'
 import { cn } from '@/lib/utils'
 import AddFileDialog from './AddFileDialog'
@@ -30,17 +30,24 @@ import RevisionFileList from './RevisionFileList'
 // beside the profile's right-hand panel on a laptop, and the wrapper scrolls sideways for the rest.
 const COLUMNS = ['SCL revision', 'Status', 'Step', 'Date', 'Author', 'Reason for issue', 'CPY revision', 'Acceptance'] as const
 
+/** The reader's role/assurance — the part of fileUploadAccess() that is the SAME for every row. */
+export type UploadRole = { isAdmin: boolean; isOrig: boolean; isDc: boolean; aal2: boolean }
+
 export default function RevisionsTab({
   rows,
   openId,
   documentNumber,
-  upload,
+  uploadRole,
 }: {
   rows: RevisionRow[]
   openId: string | null
   documentNumber: string
-  /** Whether this reader may add files (mirrors the INSERT policies; the same answer for every row). */
-  upload: FileUploadAccess
+  /**
+   * Whether this reader may add files, mirroring the INSERT policies — the role/aal2 part is the
+   * same for every row, but locked_at (DCS 1b.10 Approve) is per revision, so each row computes its
+   * own fileUploadAccess() from this plus row.isLocked, rather than sharing one answer.
+   */
+  uploadRole: UploadRole
 }) {
   const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set(openId && rows.some((row) => row.id === openId) ? [openId] : []))
 
@@ -85,7 +92,7 @@ export default function RevisionsTab({
                 detailsId={detailsId}
                 onToggle={() => toggle(row.id)}
                 documentNumber={documentNumber}
-                upload={upload}
+                upload={fileUploadAccess({ hasRevision: true, isLocked: row.isLocked, ...uploadRole })}
               />
             )
           })}

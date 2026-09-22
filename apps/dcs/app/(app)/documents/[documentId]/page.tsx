@@ -42,12 +42,15 @@ import {
   resolveProfileTab,
 } from '@/lib/document-profile'
 import {
+  documentStatusAccess,
+  documentStatusOptions,
   getDocument,
   getDocumentHistory,
   getProjectCpyNumbering,
   getRevisionWithFiles,
   HISTORY_LIMIT,
   isUuid,
+  voidDocumentAccess,
 } from '@/lib/documents'
 import { mdrStatusColor } from '@/lib/mdr'
 import { getProfileDirectory } from '@/lib/profile-directory'
@@ -55,7 +58,10 @@ import {
   cpyRevisionField,
   defaultRevisionStepId,
   listRevisionsWithFiles,
+  lockRevisionAccess,
   newRevisionAccess,
+  revisionStatusAccess,
+  revisionStatusOptions,
   revisionStepOptions,
   sclCodeField,
   toRevisionRows,
@@ -100,6 +106,7 @@ export default async function DocumentProfilePage({
     current,
     stepDictionary,
     acceptanceCodes,
+    statusDictionary,
     { data: sessionProfile },
   ] = await Promise.all([
     supabase.from('projects').select('name, project_code').eq('id', document.project_id).maybeSingle(),
@@ -114,6 +121,7 @@ export default async function DocumentProfilePage({
     document.current_revision_id ? getRevisionWithFiles(supabase, document.current_revision_id) : Promise.resolve(null),
     getActiveDictionary(supabase, 'workflow_step'),
     getActiveDictionary(supabase, 'acceptance_code'),
+    getActiveDictionary(supabase, 'workflow_status'),
     user ? supabase.from('profiles').select('role').eq('id', user.id).maybeSingle() : Promise.resolve({ data: null }),
   ])
 
@@ -176,13 +184,42 @@ export default async function DocumentProfilePage({
   // tab asks per row, where a revision always exists.
   const isAdmin = sessionProfile?.role === 'admin'
   const isOrig = hasAnyRole(projectRoles, ['orig'])
+  const uploadRole = { isAdmin, isOrig, isDc: isProjectDc, aal2 }
   const addFile = {
-    access: fileUploadAccess({ hasRevision: current !== null, isAdmin, isOrig, isDc: isProjectDc, aal2 }),
+    access: fileUploadAccess({ hasRevision: current !== null, isLocked: current?.revision.locked_at != null, ...uploadRole }),
     config: current
       ? { revisionId: current.revision.id, revisionLabel: current.revision.scl_revision, documentNumber: document.scl_doc_number }
       : null,
   }
-  const rowUpload = fileUploadAccess({ hasRevision: true, isAdmin, isOrig, isDc: isProjectDc, aal2 })
+
+  // Manual status change and Void (DCS 1b.11). MIRRORS the database
+  // (documentStatusAccess / voidDocumentAccess say so): the triggers
+  // documents_workflow_status_dc_only and enforce_document_void decide who
+  // may actually write.
+  const isVoid = document.workflow_status?.code === 'VOID'
+  const documentStatus = {
+    access: documentStatusAccess({ isAdmin, isDc: isProjectDc, aal2, isVoid }),
+    currentStatusId: document.workflow_status_id,
+    currentStatusLabel: dictionaryLabel(document.workflow_status),
+    options: documentStatusOptions(statusDictionary),
+  }
+  const voidAccess = voidDocumentAccess({ isDc: isProjectDc, aal2, isVoid })
+
+  // Approve (locked_at, DCS 1b.11 / 1b.10). MIRRORS revisions_locked_at_dc_only
+  // and revisions_locked_at_final_step — no admin escape on this column.
+  const approve = {
+    access: lockRevisionAccess({ isDc: isProjectDc, aal2, stepCode: current?.revision.step?.code, isLocked: current?.revision.locked_at != null }),
+    eligible: isProjectDc,
+    config: current ? { documentId: document.id, revisionId: current.revision.id, revisionLabel: current.revision.scl_revision } : null,
+  }
+
+  // Revision status (DCS 1b.11, Scope item 4). MIRRORS revisions_status_dc_only
+  // and forbid_change_of_locked_revision — DC only, no admin escape, frozen
+  // once the revision is Approved.
+  const revisionStatus = {
+    access: revisionStatusAccess({ isDc: isProjectDc, aal2, isLocked: current?.revision.locked_at != null }),
+    options: revisionStatusOptions(statusDictionary),
+  }
 
   const projectLabel = project ? `${project.project_code} — ${project.name}` : 'Project'
 
@@ -239,10 +276,12 @@ export default async function DocumentProfilePage({
                 nameById={nameById}
                 cpyField={cpyField}
                 currentRevisionLabel={current ? current.revision.scl_revision : null}
+                documentStatus={documentStatus}
+                voidAccess={voidAccess}
               />
             </TabsContent>
             <TabsContent value="revisions">
-              <RevisionsTab rows={revisionRows} openId={openRevisionId} documentNumber={document.scl_doc_number} upload={rowUpload} />
+              <RevisionsTab rows={revisionRows} openId={openRevisionId} documentNumber={document.scl_doc_number} uploadRole={uploadRole} />
             </TabsContent>
             <TabsContent value="plan">
               <PlanTab />
@@ -262,7 +301,14 @@ export default async function DocumentProfilePage({
           </Tabs>
 
           <div className="min-w-0">
-            <CurrentRevisionPanel current={current} newRevision={newRevision} addFile={addFile} />
+            <CurrentRevisionPanel
+              current={current}
+              newRevision={newRevision}
+              addFile={addFile}
+              approve={approve}
+              revisionStatus={revisionStatus}
+              documentId={document.id}
+            />
           </div>
         </div>
       </PageBody>

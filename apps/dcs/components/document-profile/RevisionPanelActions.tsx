@@ -15,8 +15,9 @@
 import { Button } from '@/components/ui/button'
 import { PANEL_ACTIONS } from '@/lib/document-profile'
 import type { FileUploadAccess } from '@/lib/files'
-import type { NewRevisionAccess } from '@/lib/revisions'
+import type { LockRevisionAccess, NewRevisionAccess } from '@/lib/revisions'
 import AddFileDialog from './AddFileDialog'
+import ApproveRevisionButton from './ApproveRevisionButton'
 import NewRevisionDialog, { type NewRevisionFormConfig } from './NewRevisionDialog'
 
 export type NewRevisionControl = { access: NewRevisionAccess; config: NewRevisionFormConfig }
@@ -25,8 +26,29 @@ export type AddFileControl = {
   access: FileUploadAccess
   config: { revisionId: string; revisionLabel: string; documentNumber: string } | null
 }
+/**
+ * config is null when the document has no current revision (access is then
+ * 'not_final_step'). `eligible` (= isDc) is carried separately from `access`
+ * because lockRevisionAccess checks isLocked and the final-step rule BEFORE
+ * role — a non-DC reader on a non-final revision sees 'not_final_step', not
+ * 'not_allowed', so the disabled reason alone cannot tell who could never
+ * approve at all from who merely can't right now.
+ */
+export type ApproveControl = {
+  access: LockRevisionAccess
+  eligible: boolean
+  config: { documentId: string; revisionId: string; revisionLabel: string } | null
+}
 
-export default function RevisionPanelActions({ newRevision, addFile }: { newRevision: NewRevisionControl; addFile: AddFileControl }) {
+export default function RevisionPanelActions({
+  newRevision,
+  addFile,
+  approve,
+}: {
+  newRevision: NewRevisionControl
+  addFile: AddFileControl
+  approve: ApproveControl
+}) {
   const { access, config } = newRevision
   return (
     <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
@@ -62,6 +84,22 @@ export default function RevisionPanelActions({ newRevision, addFile }: { newRevi
           </>
         )}
       </li>
+      {approve.access.mode === 'enabled' && approve.config ? (
+        <li className="space-y-1">
+          <ApproveRevisionButton documentId={approve.config.documentId} revisionId={approve.config.revisionId} revisionLabel={approve.config.revisionLabel} />
+        </li>
+      ) : approve.eligible ? (
+        <li className="space-y-1">
+          <span title={approve.access.mode === 'disabled' ? approve.access.hint : undefined} className="block">
+            <Button type="button" disabled variant="outline" className="w-full" aria-describedby="panel-action-approve-hint">
+              Approve
+            </Button>
+          </span>
+          <p id="panel-action-approve-hint" className="text-xs text-muted-foreground">
+            {approve.access.mode === 'disabled' ? approve.access.hint : ''}
+          </p>
+        </li>
+      ) : null}
       {PANEL_ACTIONS.map((action) => {
         const captionId = `panel-action-${action.key}-hint`
         return (

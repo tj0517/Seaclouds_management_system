@@ -472,7 +472,7 @@ async function readRevisions(supabase: DbClient, documentId: string) {
     // public.profiles (cross-schema, not embeddable) and goes through the
     // profile directory, as every other person on these screens does.
     .select(
-      `id, document_id, scl_revision, cpy_revision, reason_for_issue, revision_date, created_at, created_by,
+      `id, document_id, scl_revision, cpy_revision, reason_for_issue, revision_date, created_at, created_by, locked_at,
        step:dictionaries!revisions_step_id_fkey(code, label),
        status:dictionaries!revisions_status_id_fkey(code, label),
        acceptance:dictionaries!revisions_acceptance_code_id_fkey(code, label)`,
@@ -531,6 +531,8 @@ export type RevisionRow = {
   /** "SUPERSEDED — Superseded": the tooltip; the badge shows the code. */
   statusLabel: string
   isCurrent: boolean
+  /** locked_at != null (DCS 1b.10/1b.11 Approve) — files_assert_revision_not_locked refuses every write, for any caller. */
+  isLocked: boolean
   files: FileRowView[]
 }
 
@@ -563,6 +565,7 @@ export function toRevisionRows(
     statusCode: revision.status?.code ?? null,
     statusLabel: dictionaryLabel(revision.status),
     isCurrent: revision.id === currentRevisionId,
+    isLocked: revision.locked_at != null,
     files: toFileRows(revision.files),
   }))
 }
@@ -575,4 +578,254 @@ type RevisionFile = {
   storage_path: string | null
   size_bytes: number | null
   uploaded_at: string | null
+}
+
+// ---------------------------------------------------------------------------
+// Approve (DCS 1b.11 / 1b.10): locked_at, on a final revision, DC only.
+//
+// "Approved" is not a status value — 1b.10's own note says so — it is this
+// column. The enforcement is migration 20260921150000: revisions_locked_at_dc_only
+// (DC at aal2, NO admin: escape — unlike workflow_status_id, nobody but the
+// project's DC may set this) and revisions_locked_at_final_step (23514 unless
+// the revision's step is IFC/IFI/IFB). Never cleared, by anyone, for any
+// reason — there is no unlockRevision function, on purpose.
+// ---------------------------------------------------------------------------
+
+const LOCKABLE_STEP_CODES = ['IFC', 'IFI', 'IFB'] as const
+
+export type LockRevisionAccess =
+  | { mode: 'enabled' }
+  | { mode: 'disabled'; reason: 'already_locked' | 'not_final_step' | 'needs_second_factor' | 'not_allowed'; hint: string }
+
+/**
+ * Whether the Approve action is live for this reader. MIRRORS, does not
+ * enforce — the real guards are revisions_locked_at_dc_only and
+ * revisions_locked_at_final_step.
+ */
+export function lockRevisionAccess(input: { isDc: boolean; aal2: boolean; stepCode: string | null | undefined; isLocked: boolean }): LockRevisionAccess {
+  if (input.isLocked) {
+    return { mode: 'disabled', reason: 'already_locked', hint: 'This revision is already approved. Approval cannot be undone; to correct it, add a new revision.' }
+  }
+  if (!input.stepCode || !(LOCKABLE_STEP_CODES as readonly string[]).includes(input.stepCode)) {
+    return {
+      mode: 'disabled',
+      reason: 'not_final_step',
+      hint: 'Only a final revision (step IFC, IFI or IFB) can be approved.',
+    }
+  }
+  if (input.isDc && input.aal2) return { mode: 'enabled' }
+  if (input.isDc) {
+    return {
+      mode: 'disabled',
+      reason: 'needs_second_factor',
+      hint: 'Approving a revision needs a session with a verified second factor.',
+    }
+  }
+  return {
+    mode: 'disabled',
+    reason: 'not_allowed',
+    hint: 'Only the Document Controller of this project can approve a revision.',
+  }
+}
+
+export type LockRevisionInput = { revisionId: string }
+
+export function parseLockRevisionInput(raw: unknown): RevisionResult<LockRevisionInput> {
+  if (typeof raw !== 'object' || raw === null) return fail('invalid_input', 'payload is not an object')
+  const r = raw as Record<string, unknown>
+  if (typeof r.revisionId !== 'string' || !UUID_RE.test(r.revisionId)) {
+    return fail('invalid_input', 'revisionId is required and must be a uuid')
+  }
+  return { ok: true, data: { revisionId: r.revisionId } }
+}
+
+/**
+ * The approve-specific translation of a PostgREST error. Not mapRevisionDbError:
+ * that one is worded for the New Revision dialog's fields, not this action.
+ */
+export function mapLockDbError(code: string | undefined, message: string): { ok: false; error: RevisionError; message?: string } {
+  switch (code) {
+    case '42501':
+      if (message.includes('verified second factor')) {
+        return fail(
+          'forbidden',
+          'Approving a revision needs a session with a verified second factor. Sign in again and complete the second-factor challenge.',
+        )
+      }
+      return fail('forbidden', 'Only the Document Controller of this project can approve a revision.')
+    case '23514':
+      return fail('invalid_input', 'Only a final revision (step IFC, IFI or IFB) can be approved.')
+    default:
+      return fail('db_error', message)
+  }
+}
+
+/**
+ * Approves (locks) a revision. The timestamp is computed here, on the server,
+ * not read from the client's clock — the database has no DEFAULT for this
+ * column (unlike void_at, which the trigger stamps itself), so the caller
+ * must supply one.
+ */
+export async function lockRevision(supabase: DbClient, rawInput: unknown): Promise<RevisionResult<{ id: string; lockedAt: string }>> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return fail('unauthenticated')
+
+  const parsed = parseLockRevisionInput(rawInput)
+  if (!parsed.ok) return parsed
+  const input = parsed.data
+
+  const { data, error } = await supabase
+    .schema('dcs')
+    .from('revisions')
+    .update({ locked_at: new Date().toISOString() })
+    .eq('id', input.revisionId)
+    .select('id, locked_at')
+    .maybeSingle()
+
+  if (error) return mapLockDbError(error.code, error.message)
+  if (!data || !data.locked_at) {
+    return fail(
+      'forbidden',
+      'This revision was not approved: it is not visible to you, or your session may not change it. Only the Document Controller of the project can, with a verified second factor.',
+    )
+  }
+  return { ok: true, data: { id: data.id, lockedAt: data.locked_at } }
+}
+
+// ---------------------------------------------------------------------------
+// DCS 1b.11 (Scope item 4): manual status change on the CURRENT revision,
+// analogous to documentStatusAccess/setDocumentStatus in lib/documents.ts —
+// same workflow_status dictionary, DC-only. Enforcement is
+// revisions_status_dc_only (migration 20260922074250): DC at aal2, WHEN
+// pg_trigger_depth() = 0, NO admin: escape on this trigger call at all (unlike
+// documents.workflow_status_id, which carries one for leaving Void — a
+// revision has no Void concept of its own).
+//
+// REVISION_STATUS_CODES is six codes, not eight: NOT_STARTED and STARTED
+// describe the DOCUMENT before its first revision exists (DOCUMENT_STATUS_CODES,
+// lib/documents.ts) and are not offered here — a revision is always on one of
+// the six steps that have an SCL series or RETCOM. VOID and SUPERSEDED are
+// excluded for the same reasons as the document control: VOID is a document
+// action with its own dedicated dialog, and SUPERSEDED is system-assigned
+// only (docs/02-data-model.md).
+// ---------------------------------------------------------------------------
+
+export const REVISION_STATUS_CODES = ['IDC', 'IFR', 'RETCOM', 'IFC', 'IFI', 'IFB'] as const
+
+/** The dictionary rows the revision status control may offer, in the dictionary's own order. */
+export function revisionStatusOptions<T extends { code: string }>(statuses: readonly T[]): T[] {
+  return statuses.filter((status) => (REVISION_STATUS_CODES as readonly string[]).includes(status.code))
+}
+
+export type RevisionStatusAccess =
+  | { mode: 'enabled' }
+  | { mode: 'disabled'; reason: 'locked' | 'needs_second_factor' | 'not_allowed'; hint: string }
+
+/**
+ * Whether the revision status control is live for this reader. MIRRORS, does
+ * not enforce — the real guards are revisions_status_dc_only and, once the
+ * revision is Approved, forbid_change_of_locked_revision (1b.10): a locked
+ * row accepts no UPDATE other than the system's own SUPERSEDED promotion, for
+ * any caller — checked first, the same order lockRevisionAccess and
+ * fileUploadAccess already use for "this state overrides every role". DC
+ * only otherwise: no admin escape exists on this column (contrast
+ * documentStatusAccess, which has one for leaving Void).
+ */
+export function revisionStatusAccess(input: { isDc: boolean; aal2: boolean; isLocked: boolean }): RevisionStatusAccess {
+  if (input.isLocked) {
+    return { mode: 'disabled', reason: 'locked', hint: 'This revision is approved and its status is frozen. To correct it, add a new revision.' }
+  }
+  if (input.isDc && input.aal2) return { mode: 'enabled' }
+  if (input.isDc) {
+    return {
+      mode: 'disabled',
+      reason: 'needs_second_factor',
+      hint: 'Changing the revision status needs a session with a verified second factor.',
+    }
+  }
+  return {
+    mode: 'disabled',
+    reason: 'not_allowed',
+    hint: 'Only the Document Controller of this project can change the revision status.',
+  }
+}
+
+export type SetRevisionStatusInput = { revisionId: string; statusCode: (typeof REVISION_STATUS_CODES)[number] }
+
+export function parseSetRevisionStatusInput(raw: unknown): RevisionResult<SetRevisionStatusInput> {
+  if (typeof raw !== 'object' || raw === null) return fail('invalid_input', 'payload is not an object')
+  const r = raw as Record<string, unknown>
+  if (typeof r.revisionId !== 'string' || !UUID_RE.test(r.revisionId)) {
+    return fail('invalid_input', 'revisionId is required and must be a uuid')
+  }
+  if (typeof r.statusCode !== 'string' || !(REVISION_STATUS_CODES as readonly string[]).includes(r.statusCode)) {
+    return fail('invalid_input', `statusCode must be one of ${REVISION_STATUS_CODES.join(', ')}`)
+  }
+  return { ok: true, data: { revisionId: r.revisionId, statusCode: r.statusCode as (typeof REVISION_STATUS_CODES)[number] } }
+}
+
+/** The revision-status-specific translation of a PostgREST error. */
+export function mapRevisionStatusDbError(code: string | undefined, message: string): { ok: false; error: RevisionError; message?: string } {
+  switch (code) {
+    case '42501':
+      if (message.includes('verified second factor')) {
+        return fail(
+          'forbidden',
+          'Changing the revision status needs a session with a verified second factor. Sign in again and complete the second-factor challenge.',
+        )
+      }
+      return fail('forbidden', 'Only the Document Controller of this project can change the revision status.')
+    default:
+      return fail('db_error', message)
+  }
+}
+
+/**
+ * Sets a revision's status to one of REVISION_STATUS_CODES and returns what
+ * was stored. Resolved from the CODE at write time — dictionary uuids differ
+ * per environment, same reason every other write in this file does it. An
+ * UPDATE the trigger's WHEN/aal2 check refuses is zero rows in PostgREST, not
+ * an error — reported as 'forbidden', the same rule setDocumentStatus follows.
+ */
+export async function setRevisionStatus(
+  supabase: DbClient,
+  rawInput: unknown,
+): Promise<RevisionResult<{ revisionId: string; statusCode: string }>> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return fail('unauthenticated')
+
+  const parsed = parseSetRevisionStatusInput(rawInput)
+  if (!parsed.ok) return parsed
+  const input = parsed.data
+
+  const { data: status, error: statusError } = await supabase
+    .schema('dcs')
+    .from('dictionaries')
+    .select('id')
+    .eq('dict_type', 'workflow_status')
+    .eq('code', input.statusCode)
+    .maybeSingle()
+  if (statusError) return mapRevisionStatusDbError(statusError.code, statusError.message)
+  if (!status) return fail('db_error', `no workflow_status dictionary row with code ${input.statusCode}`)
+
+  const { data, error } = await supabase
+    .schema('dcs')
+    .from('revisions')
+    .update({ status_id: status.id })
+    .eq('id', input.revisionId)
+    .select('id, status:dictionaries!revisions_status_id_fkey(code)')
+    .maybeSingle()
+
+  if (error) return mapRevisionStatusDbError(error.code, error.message)
+  if (!data) {
+    return fail(
+      'forbidden',
+      'The revision status was not changed: it is not visible to you, or your session may not change it. Only the Document Controller of the project can, with a verified second factor.',
+    )
+  }
+  return { ok: true, data: { revisionId: data.id, statusCode: data.status?.code ?? input.statusCode } }
 }

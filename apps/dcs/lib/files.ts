@@ -315,18 +315,34 @@ export function mapFileDbError(code: string | undefined, message: string): { ok:
 
 export type FileUploadAccess =
   | { mode: 'enabled' }
-  | { mode: 'disabled'; reason: 'no_revision' | 'needs_second_factor' | 'not_allowed'; hint: string }
+  | { mode: 'disabled'; reason: 'no_revision' | 'revision_locked' | 'needs_second_factor' | 'not_allowed'; hint: string }
 
 /**
  * Whether Add File is live for this reader. MIRRORS the three INSERT policies on
- * storage.objects and dcs.files (orig at any aal; dc at aal2; admin) — a wrong
- * answer here can only offer a control the database then refuses, or withhold
- * one it would have allowed. Checked first: a document with no revision has
- * nothing to attach a file to.
+ * storage.objects and dcs.files (orig at any aal; dc at aal2; admin) AND, since
+ * DCS 1b.11 makes Approve reachable from the UI, the files_assert_revision_not_locked
+ * trigger (1b.10) — a locked revision refuses every caller, admin included, so
+ * `isLocked` is checked right after `hasRevision`, before any role is considered.
+ * A wrong answer here can only offer a control the database then refuses, or
+ * withhold one it would have allowed.
  */
-export function fileUploadAccess(input: { hasRevision: boolean; isAdmin: boolean; isOrig: boolean; isDc: boolean; aal2: boolean }): FileUploadAccess {
+export function fileUploadAccess(input: {
+  hasRevision: boolean
+  isLocked: boolean
+  isAdmin: boolean
+  isOrig: boolean
+  isDc: boolean
+  aal2: boolean
+}): FileUploadAccess {
   if (!input.hasRevision) {
     return { mode: 'disabled', reason: 'no_revision', hint: 'Files are added to a revision. Issue the first revision with New Revision.' }
+  }
+  if (input.isLocked) {
+    return {
+      mode: 'disabled',
+      reason: 'revision_locked',
+      hint: 'This revision is approved and its files are immutable. To add a file, issue a new revision.',
+    }
   }
   if (input.isAdmin || input.isOrig || (input.isDc && input.aal2)) return { mode: 'enabled' }
   if (input.isDc) {

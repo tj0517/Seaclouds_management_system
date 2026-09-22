@@ -8,17 +8,26 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@scl/db'
 import {
   DEFAULT_LANGUAGE_CODE,
+  DOCUMENT_STATUS_CODES,
   budgetHoursFromMeta,
   creatableProjects,
   defaultLanguageId,
+  documentStatusAccess,
+  documentStatusOptions,
   isUuid,
   mapCpyDbError,
   mapDbError,
+  mapDocumentStatusDbError,
   originatorIsChecker,
   parseCreateDocumentInput,
   parseSetCpyNumberInput,
+  parseSetDocumentStatusInput,
+  parseVoidDocumentInput,
   resolveProjectFromParam,
   setCpyNumber,
+  setDocumentStatus,
+  voidDocument,
+  voidDocumentAccess,
 } from './documents'
 import type { ProjectRole } from './auth-helpers'
 
@@ -475,6 +484,231 @@ describe('setCpyNumber', () => {
   it('refuses a malformed payload before any write', async () => {
     const { client, update } = cpyClient({ data: null, error: null })
     expect(await setCpyNumber(client, { documentId: 'nope' })).toMatchObject({ ok: false, error: 'invalid_input' })
+    expect(update).not.toHaveBeenCalled()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// DCS 1b.11: manual status change and Void
+// ---------------------------------------------------------------------------
+
+describe('DOCUMENT_STATUS_CODES', () => {
+  it('excludes VOID (a separate action) and SUPERSEDED (revision-only)', () => {
+    expect(DOCUMENT_STATUS_CODES).not.toContain('VOID')
+    expect(DOCUMENT_STATUS_CODES).not.toContain('SUPERSEDED')
+    expect(DOCUMENT_STATUS_CODES).toEqual(['NOT_STARTED', 'STARTED', 'IDC', 'IFR', 'RETCOM', 'IFC', 'IFI', 'IFB'])
+  })
+})
+
+describe('documentStatusOptions', () => {
+  it('keeps only the eight plain statuses, in dictionary order', () => {
+    const all = [
+      { code: 'NOT_STARTED' },
+      { code: 'STARTED' },
+      { code: 'IDC' },
+      { code: 'IFR' },
+      { code: 'RETCOM' },
+      { code: 'IFC' },
+      { code: 'IFI' },
+      { code: 'IFB' },
+      { code: 'VOID' },
+      { code: 'SUPERSEDED' },
+    ]
+    expect(documentStatusOptions(all).map((s) => s.code)).toEqual(['NOT_STARTED', 'STARTED', 'IDC', 'IFR', 'RETCOM', 'IFC', 'IFI', 'IFB'])
+  })
+})
+
+describe('documentStatusAccess', () => {
+  it('is enabled for a DC at aal2', () => {
+    expect(documentStatusAccess({ isAdmin: false, isDc: true, aal2: true, isVoid: false })).toEqual({ mode: 'enabled' })
+  })
+  it('is enabled for an admin at aal2', () => {
+    expect(documentStatusAccess({ isAdmin: true, isDc: false, aal2: true, isVoid: false })).toEqual({ mode: 'enabled' })
+  })
+  it('asks a DC without aal2 to verify a second factor', () => {
+    expect(documentStatusAccess({ isAdmin: false, isDc: true, aal2: false, isVoid: false })).toMatchObject({
+      mode: 'disabled',
+      reason: 'needs_second_factor',
+    })
+  })
+  it('refuses a plain member outright', () => {
+    expect(documentStatusAccess({ isAdmin: false, isDc: false, aal2: true, isVoid: false })).toMatchObject({
+      mode: 'disabled',
+      reason: 'not_allowed',
+    })
+  })
+  it('while Void: a DC at aal2 is STILL refused — only an admin may leave Void', () => {
+    expect(documentStatusAccess({ isAdmin: false, isDc: true, aal2: true, isVoid: true })).toMatchObject({
+      mode: 'disabled',
+      reason: 'void_admin_only',
+    })
+  })
+  it('while Void: an admin at aal2 is enabled', () => {
+    expect(documentStatusAccess({ isAdmin: true, isDc: false, aal2: true, isVoid: true })).toEqual({ mode: 'enabled' })
+  })
+  it('while Void: an admin without aal2 is still refused', () => {
+    expect(documentStatusAccess({ isAdmin: true, isDc: false, aal2: false, isVoid: true })).toMatchObject({
+      mode: 'disabled',
+      reason: 'void_admin_only',
+    })
+  })
+})
+
+describe('voidDocumentAccess', () => {
+  it('is enabled for a DC at aal2, not-yet-Void', () => {
+    expect(voidDocumentAccess({ isDc: true, aal2: true, isVoid: false })).toEqual({ mode: 'enabled' })
+  })
+  it('asks a DC without aal2 to verify a second factor', () => {
+    expect(voidDocumentAccess({ isDc: true, aal2: false, isVoid: false })).toMatchObject({ mode: 'disabled', reason: 'needs_second_factor' })
+  })
+  it('refuses a non-DC outright — admin included, since admin cannot write void_reason', () => {
+    expect(voidDocumentAccess({ isDc: false, aal2: true, isVoid: false })).toMatchObject({ mode: 'disabled', reason: 'not_allowed' })
+  })
+  it('is disabled once already Void, even for the DC who voided it', () => {
+    expect(voidDocumentAccess({ isDc: true, aal2: true, isVoid: true })).toMatchObject({ mode: 'disabled', reason: 'already_void' })
+  })
+})
+
+describe('parseSetDocumentStatusInput', () => {
+  it('accepts a valid pair', () => {
+    expect(parseSetDocumentStatusInput({ documentId: A, statusCode: 'IFR' })).toEqual({
+      ok: true,
+      data: { documentId: A, statusCode: 'IFR' },
+    })
+  })
+  it('rejects VOID — it is not one of the plain statuses', () => {
+    expect(parseSetDocumentStatusInput({ documentId: A, statusCode: 'VOID' })).toMatchObject({ ok: false, error: 'invalid_input' })
+  })
+  it('rejects SUPERSEDED', () => {
+    expect(parseSetDocumentStatusInput({ documentId: A, statusCode: 'SUPERSEDED' })).toMatchObject({ ok: false, error: 'invalid_input' })
+  })
+  it('rejects a made-up code', () => {
+    expect(parseSetDocumentStatusInput({ documentId: A, statusCode: 'NOPE' })).toMatchObject({ ok: false, error: 'invalid_input' })
+  })
+  it('rejects a non-uuid documentId', () => {
+    expect(parseSetDocumentStatusInput({ documentId: 'nope', statusCode: 'IFR' })).toMatchObject({ ok: false, error: 'invalid_input' })
+  })
+})
+
+describe('parseVoidDocumentInput', () => {
+  it('accepts and trims a real reason', () => {
+    expect(parseVoidDocumentInput({ documentId: A, reason: '  Client cancelled the scope  ' })).toEqual({
+      ok: true,
+      data: { documentId: A, reason: 'Client cancelled the scope' },
+    })
+  })
+  it('rejects a missing reason', () => {
+    expect(parseVoidDocumentInput({ documentId: A })).toMatchObject({ ok: false, error: 'invalid_input' })
+  })
+  it('rejects a blank (whitespace-only) reason', () => {
+    expect(parseVoidDocumentInput({ documentId: A, reason: '   ' })).toMatchObject({ ok: false, error: 'invalid_input' })
+  })
+})
+
+describe('mapDocumentStatusDbError', () => {
+  it('42501 with "verified second factor" asks for aal2', () => {
+    expect(mapDocumentStatusDbError('42501', 'needs a verified second factor')).toMatchObject({ error: 'forbidden' })
+  })
+  it('other 42501 names who may act', () => {
+    expect(mapDocumentStatusDbError('42501', 'wrong caller')).toMatchObject({ error: 'forbidden' })
+  })
+  it('23001 (leaving Void refused) is worded as forbidden, admin-only', () => {
+    expect(mapDocumentStatusDbError('23001', 'is Void')).toMatchObject({ error: 'forbidden' })
+  })
+  it('falls through to db_error with the raw message', () => {
+    expect(mapDocumentStatusDbError('XX000', 'boom')).toEqual({ ok: false, error: 'db_error', message: 'boom' })
+  })
+})
+
+// A stand-in for the typed client: dictionary lookup by code, then update.
+function statusClient(opts: {
+  user?: { id: string } | null
+  status?: { id: string } | null
+  update?: { data: unknown; error: { code?: string; message: string } | null }
+}) {
+  const update = vi.fn()
+  const chain = {
+    select: () => chain,
+    eq: () => chain,
+    maybeSingle: async () => ({ data: opts.status === undefined ? { id: 'status-id' } : opts.status, error: null }),
+    update: (payload: unknown) => {
+      update(payload)
+      return chain
+    },
+  }
+  const updateChain = {
+    select: () => updateChain,
+    eq: () => updateChain,
+    maybeSingle: async () => opts.update ?? { data: { id: 'doc-1', workflow_status: { code: 'IFR' }, void_reason: 'reason' }, error: null },
+    update: (payload: unknown) => {
+      update(payload)
+      return updateChain
+    },
+  }
+  let calls = 0
+  const from = () => {
+    calls += 1
+    // First call: the dictionary lookup. Second: the document update.
+    return calls === 1 ? chain : updateChain
+  }
+  const client = {
+    auth: { getUser: async () => ({ data: { user: opts.user === undefined ? { id: 'u1' } : opts.user } }) },
+    schema: () => ({ from }),
+  } as unknown as SupabaseClient<Database>
+  return { client, update }
+}
+
+describe('setDocumentStatus', () => {
+  it('writes ONE column, workflow_status_id, resolved from the code', async () => {
+    const { client, update } = statusClient({ status: { id: 'status-IFR' } })
+    const result = await setDocumentStatus(client, { documentId: A, statusCode: 'IFR' })
+    expect(update).toHaveBeenCalledWith({ workflow_status_id: 'status-IFR' })
+    expect(result.ok).toBe(true)
+  })
+
+  it('reports a filtered-away update (zero rows) as forbidden, not as success', async () => {
+    const { client } = statusClient({ update: { data: null, error: null } })
+    expect(await setDocumentStatus(client, { documentId: A, statusCode: 'IFR' })).toMatchObject({ ok: false, error: 'forbidden' })
+  })
+
+  it('refuses without a session and without touching the table', async () => {
+    const { client, update } = statusClient({ user: null })
+    expect(await setDocumentStatus(client, { documentId: A, statusCode: 'IFR' })).toMatchObject({ ok: false, error: 'unauthenticated' })
+    expect(update).not.toHaveBeenCalled()
+  })
+
+  it('refuses a malformed payload before any write', async () => {
+    const { client, update } = statusClient({})
+    expect(await setDocumentStatus(client, { documentId: A, statusCode: 'VOID' })).toMatchObject({ ok: false, error: 'invalid_input' })
+    expect(update).not.toHaveBeenCalled()
+  })
+})
+
+describe('voidDocument', () => {
+  it('writes BOTH workflow_status_id and void_reason in the same update', async () => {
+    const { client, update } = statusClient({ status: { id: 'status-VOID' } })
+    const result = await voidDocument(client, { documentId: A, reason: '  Client cancelled the scope  ' })
+    expect(update).toHaveBeenCalledWith({ workflow_status_id: 'status-VOID', void_reason: 'Client cancelled the scope' })
+    expect(result.ok).toBe(true)
+  })
+
+  it('refuses a blank reason before any write', async () => {
+    const { client, update } = statusClient({})
+    expect(await voidDocument(client, { documentId: A, reason: '   ' })).toMatchObject({ ok: false, error: 'invalid_input' })
+    expect(update).not.toHaveBeenCalled()
+  })
+
+  it('reports a filtered-away update as forbidden', async () => {
+    const { client } = statusClient({ update: { data: null, error: null } })
+    expect(await voidDocument(client, { documentId: A, reason: 'Client cancelled the scope' })).toMatchObject({ ok: false, error: 'forbidden' })
+  })
+
+  it('refuses without a session and without touching the table', async () => {
+    const { client, update } = statusClient({ user: null })
+    expect(await voidDocument(client, { documentId: A, reason: 'Client cancelled the scope' })).toMatchObject({
+      ok: false,
+      error: 'unauthenticated',
+    })
     expect(update).not.toHaveBeenCalled()
   })
 })
