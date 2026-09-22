@@ -68,10 +68,10 @@ select columns_are('dcs', 'documents',
   array['id', 'project_id', 'scl_doc_number', 'cpy_doc_number', 'title',
         'doc_type_id', 'discipline_id', 'area_id', 'language_id', 'workflow_status_id',
         'originator_id', 'checker_id', 'approver_id', 'ctr_code', 'budget_hours',
-        'current_revision_id', 'created_at', 'updated_at',
+        'current_revision_id', 'created_at', 'updated_at', 'void_reason', 'void_at',
         'doc_type_dict_type', 'discipline_dict_type', 'area_dict_type',
         'language_dict_type', 'workflow_status_dict_type'],
-  'documents: the 1b.01 columns, including the five generated dict_type discriminators');
+  'documents: the 1b.01 columns, including the five generated dict_type discriminators, and void_reason / void_at added by DCS 1b.11');
 select columns_are('dcs', 'revisions',
   array['id', 'document_id', 'project_id', 'scl_revision', 'cpy_revision',
         'step_id', 'reason_for_issue', 'revision_date', 'acceptance_code_id',

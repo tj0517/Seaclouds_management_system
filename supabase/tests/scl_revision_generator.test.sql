@@ -178,11 +178,14 @@ select pej_id, both_id, 'dc'::dcs.project_role from t;
 -- document for isolation and for step-versus-value, d3 leniency, d4 the
 -- ceilings, d5 the exceptions, dv a Void document. The document number comes
 -- from the 1b.02 generator (this runs with no session).
+-- void_reason is DCS 1b.11: mandatory whenever workflow_status is VOID, so a
+-- fixture that creates a document already Void (dv, below) must supply one.
 create function pg_temp.add_doc(p_title text, p_status text default 'NOT_STARTED') returns uuid
   language sql as $$
-  insert into dcs.documents (project_id, title, doc_type_id, discipline_id, area_id, language_id, workflow_status_id)
+  insert into dcs.documents (project_id, title, doc_type_id, discipline_id, area_id, language_id, workflow_status_id, void_reason)
   select pej_id, p_title, ra_id, disc_id, area_id, en_id,
-         (select id from dcs.dictionaries where dict_type = 'workflow_status' and code = p_status)
+         (select id from dcs.dictionaries where dict_type = 'workflow_status' and code = p_status),
+         case when p_status = 'VOID' then 'Test fixture: created already Void' else null end
     from t
   returning id;
 $$;

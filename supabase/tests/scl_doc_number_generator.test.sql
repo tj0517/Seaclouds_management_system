@@ -217,7 +217,8 @@ select is(
 -- 4. Void: the freed number never comes back
 -- ============================================================
 update dcs.documents
-   set workflow_status_id = (select void_id from t_num)
+   set workflow_status_id = (select void_id from t_num),
+       void_reason = 'Test fixture: voided to prove the freed number never returns (DCS 1b.11 requires a reason)'
  where scl_doc_number = 'SC2602-SCL-RA-0003-PL';
 select is(
   (select code from dcs.dictionaries d

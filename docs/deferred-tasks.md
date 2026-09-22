@@ -2928,3 +2928,30 @@ were found while building it and deliberately left alone. None is started.
   its BEFORE INSERT trigger list (`dc_only_numbering_on_insert.test.sql`, the two
   new `locked_at` triggers). Expected for any schema change there; noted so the
   diff is not a surprise.
+
+## eee) `void_reason` / `void_at` are not cleared when an admin leaves VOID (DCS 1b.11)
+
+Recorded 2026-09-22, owner's explicit instruction while approving the 1b.11
+migration (`20260922074250_dc_manual_status_and_void`): decide nothing here
+about un-Void, and write down that nothing was decided.
+
+`enforce_document_void()` lets an admin (`public.is_admin()`, not any DC — the
+one narrow, owner-authorized exception to "don't touch
+`enforce_dc_only_numbering()`'s body") move a document's `workflow_status_id`
+away from VOID. When it does, `void_reason` and `void_at` are left exactly as
+they were — stale, still naming why and when the document was Voided, even
+though the document is no longer VOID. This is deliberate for 1b.11 (Phase 1
+has no Un-Void *action*, only the admin's bare ability to change the status
+column) and untested beyond "the values do not change" — `dc_manual_status_and_void.test.sql`
+asserts the carry-over, not what a future Un-Void flow should show a reader.
+
+Nothing here decides:
+- whether a real Un-Void action (Phase 2 or later) should clear both columns,
+  clear neither, or add a third column recording who reversed it and why;
+- whether a stale `void_reason`/`void_at` on a non-VOID document should be
+  hidden in the UI, shown with a "previously Void" label, or left exactly as
+  the two raw columns read.
+
+Until that decision is made, a document an admin has taken off VOID reads, in
+the database, as an ordinary document that happens to carry two populated
+columns nothing in the schema explains without also reading `public.audit_log`.
