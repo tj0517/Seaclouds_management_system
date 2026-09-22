@@ -1,12 +1,12 @@
 ---
 id: DCS-1b.09b
 title: "Wyścig hydratacji po logowaniu/MFA (React #418 na liście akcji profilu dokumentu)"
-status: todo
+status: in_progress
 difficulty: L
 model: null
 model_approved: null
 effort: null
-branch: null
+branch: fix/dcs-1b09b-hydration-race
 due: 2026-09-29
 depends_on: []
 blocked_by_questions: []
@@ -28,11 +28,11 @@ Nazwać mechanizmem i naprawić u źródła losowy błąd hydratacji React #418 
 - [ ] Poprawka u źródła (jeśli hipoteza się potwierdzi)
 
 ## Gotowe, gdy
-Na buildzie produkcyjnym:
-- przyczyna nazwana mechanizmem — **jak sprawdzić**: TODO
-- poprawka u źródła — **jak sprawdzić**: TODO
-- `e2e:profile` ≥ 10 zielonych z rzędu na dwóch seriach — **jak sprawdzić**: przebiegi `e2e:profile`
-- czerwony dowód — **jak sprawdzić**: cofnięta poprawka → #418 wraca na N ≥ 30 ładowań po logowaniu/MFA
+Wszystko na lokalnym buildzie produkcyjnym (`next build` + `next start`):
+- **Mechanizm nazwany** — **jak sprawdzić**: łańcuch przyczynowy w raporcie rundy 1, poparty deterministycznym odtworzeniem (≥ 9/10 ładowań z ustawieniem) i logami zdarzeń ze znacznikami czasu dla ładowań błędnych i poprawnych. *(Zmienione z „TODO”: pierwotnej hipotezy nie ma w kodzie, więc sprawdzianem jest odtworzenie, nie hipoteza.)*
+- **Poprawka u źródła** — **jak sprawdzić**: diff usuwa przyczynę nazwaną w kryterium 1; nie wycisza błędu (bez `suppressHydrationWarning`, bez filtrowania recoverable errors ani konsoli), nie przebudowuje panelu, a tj zaakceptował mechanizm przed poprawką. *(Zmienione z „TODO”.)*
+- **`e2e:profile` ≥ 10 zielonych z rzędu, w dwóch osobnych seriach** — **jak sprawdzić**: logi obu serii (komenda + linie podsumowania) w raporcie.
+- **Czerwony dowód** — **jak sprawdzić**: z ustawieniem odtworzenia z kryterium 1, poprawka cofnięta: #418 na ≥ 27 z 30 ładowań po logowaniu/MFA; poprawka założona: 0 z 30. *(Zmienione z „cofnięta poprawka → #418 na N ≥ 30 ładowań”: przy ~1/80 na main 30 zwykłych ładowań może nie dać żadnego błędu nawet bez poprawki, co niczego nie dowodzi.)*
 
 ## Poza zakresem
 Przebudowa panelu „na ślepo” (patrz Bramki STOP).
@@ -57,3 +57,4 @@ Przed 1b.15 (import na prod, 30.09), od kiedy na prodzie pojawią się pierwsi u
 
 ## Notatki z realizacji
 - 2026-09-22: zaimportowane z Notion (https://app.notion.com/p/3e2c2fbc0595814d85ede41c9ea9109e).
+- 2026-09-22 tj: hipoteza z nasłuchem auth nieaktualna — na main brak onAuthStateChange w apps/ i packages/ (odczyt). Zadanie w dwóch rundach na jednej gałęzi: runda 1 diagnoza + deterministyczne odtworzenie, STOP; runda 2 poprawka po akceptacji tj. Czerwony dowód: deterministyczne odtworzenie zamiast liczby ładowań (przy ~1/80 na main N=30 bez poprawki może dać 0).
