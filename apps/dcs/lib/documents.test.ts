@@ -17,6 +17,7 @@ import {
   originatorIsChecker,
   parseCreateDocumentInput,
   parseSetCpyNumberInput,
+  resolveProjectFromParam,
   setCpyNumber,
 } from './documents'
 import type { ProjectRole } from './auth-helpers'
@@ -194,6 +195,39 @@ describe('creatableProjects', () => {
 
   it('offers nothing to someone with no qualifying role anywhere', () => {
     expect(creatableProjects(projects, new Map([[C, ['view']]]), withMdr, false)).toEqual([])
+  })
+})
+
+// DCS 1b.04b: `?project=` on the New Document link is untrusted input — it
+// comes off the URL, not a server read. The security requirement is that it
+// is used ONLY when it names a project in the server-computed creatable list
+// (creatableProjects' output), never to widen what the form offers.
+describe('resolveProjectFromParam', () => {
+  const projects = [{ id: A }, { id: B }]
+
+  it('preselects the project when the param names one the caller may create in', () => {
+    expect(resolveProjectFromParam(A, projects)).toBe(A)
+  })
+
+  it('starts empty when there is no param at all', () => {
+    expect(resolveProjectFromParam(undefined, projects)).toBe('')
+  })
+
+  it('starts empty for an empty string', () => {
+    expect(resolveProjectFromParam('', projects)).toBe('')
+  })
+
+  // RED PROOF: this is the case a variant that trusts the parameter as-is
+  // (`return param ?? ''`) gets wrong — a real, well-formed project id, just
+  // not one in the caller's creatable list (C, unlike A/B above, is not in
+  // `projects`). Preselecting it would offer a project the form's own list
+  // never included, ahead of the RLS check createDocument still makes.
+  it('starts empty for a real project id that is not in the creatable list', () => {
+    expect(resolveProjectFromParam(C, projects)).toBe('')
+  })
+
+  it('starts empty for a malformed value', () => {
+    expect(resolveProjectFromParam('; drop table dcs.documents;', projects)).toBe('')
   })
 })
 

@@ -29,6 +29,7 @@ import { createClient } from '@scl/db/server'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { EmptyState, PageBody, PageHeader, RegisterScroll } from '@/components/page-chrome'
+import NavLinkStatus from '@/components/NavLinkStatus'
 // Deliberately NOT the `Table` primitive: it wraps its <table> in a second
 // overflow container, and the frozen band needs exactly one scroller to pin
 // against. See RegisterScroll's comment. The rest are plain thead/tr/th/td.
@@ -227,9 +228,10 @@ export default async function MdrPage({
       return (
         <Link
           href={`/documents/${row.document_id}`}
-          className="font-mono text-xs underline underline-offset-4"
+          className="inline-flex items-center gap-1.5 font-mono text-xs underline underline-offset-4"
         >
           {row.scl_doc_number}
+          <NavLinkStatus />
         </Link>
       )
     }
