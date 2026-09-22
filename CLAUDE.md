@@ -12,7 +12,7 @@ Supabase, prod ref `tfbzivfsqsgebegcvfah`.
 | `apps/dcs/` | planowana aplikacja DCS |
 | `packages/db/` | `@scl/db` — typy bazy (`src/database.ts`, generowany — nie edytować) + fabryki klientów |
 | `supabase/` | JEDYNY katalog projektu Supabase: `config.toml`, `migrations/`, `seed.sql`, `tests/` (pgTAP) |
-| `docs/` | dokumentacja kontekstowa — patrz niżej |
+| `docs/` | dokumentacja kontekstowa — patrz niżej; `docs/tasks/` — backlog zadań DCS |
 | `.github/workflows/` | `ci.yml` (PR), `deploy-db.yml` (migracje → scl-dev auto, prod ręcznie) |
 
 ## Przed taskiem DCS przeczytaj
@@ -24,6 +24,9 @@ Supabase, prod ref `tfbzivfsqsgebegcvfah`.
 5. `docs/04-open-questions.md` — punkty otwarte; nie zgaduj rozstrzygnięć
 6. `docs/adr/` — podjęte decyzje; `docs/toolchain.md` — przypięte wersje;
    `docs/deferred-tasks.md` — prace odłożone (nie zaczynaj bez zgody)
+7. `docs/tasks/DCS-<id>.md` — plik Twojego zadania (źródło prawdy o zakresie,
+   kryteriach i decyzjach); tablica: `docs/tasks/INDEX.md`, format: `docs/tasks/README.md`.
+   Zadania żyją w repo od 2026-09-22 (wcześniej Notion).
 
 ## Komendy
 
