@@ -66,16 +66,17 @@ select is(
     where tgrelid = 'dcs.revisions'::regclass and not tgisinternal
       and (tgtype & 2) = 2 and (tgtype & 4) = 4),   -- BEFORE, INSERT
   array['revisions_assign_scl_revision', 'revisions_cpy_numbering',
+        'revisions_insert_status_dc_only',
         'revisions_locked_at_dc_only_insert', 'revisions_locked_at_final_step',
         'revisions_numbering_dc_only_insert', 'revisions_refuse_void_document'],
-  'revisions_cpy_numbering still sorts before revisions_numbering_dc_only_insert — and DCS 1b.08''s two BEFORE INSERT triggers sit around them, the generator first and the Void guard last; DCS 1b.10''s two locked_at triggers sit between the CPY check and the numbering one');
+  'revisions_cpy_numbering still sorts before revisions_numbering_dc_only_insert — and DCS 1b.08''s two BEFORE INSERT triggers sit around them, the generator first and the Void guard last; DCS 1b.10''s two locked_at triggers and DCS 1b.11''s revisions_insert_status_dc_only sit between the CPY check and the numbering one');
 select is(
   (select tgname::text from pg_trigger
     where tgrelid = 'dcs.documents'::regclass and not tgisinternal
       and (tgtype & 2) = 2 and (tgtype & 4) = 4
     order by tgname desc limit 1),
-  'documents_numbering_dc_only',
-  'and on dcs.documents it sorts LAST among the BEFORE INSERT triggers — after the number is assigned and after the CPY track is checked');
+  'documents_workflow_status_void_reason',
+  'and on dcs.documents it is documents_workflow_status_void_reason (DCS 1b.11) that now sorts LAST among the BEFORE INSERT triggers — documents_numbering_dc_only, this task''s own subject, sorts right before it');
 
 -- The function itself: replaced, not re-created, so nothing about its exposure
 -- may have moved.
@@ -168,10 +169,16 @@ create function pg_temp.add_doc(p_cpy text, p_title text) returns text
   select pej_id, p_cpy, p_title, ra_id, disc_id, area_id, en_id, st_id from t
   returning scl_doc_number;
 $$;
+-- status_id matches step_id's code (IDC), not st_id (NOT_STARTED, a
+-- document-only status): DCS 1b.11's revisions_insert_status_dc_only now
+-- enforces that invariant for a non-DC caller, exactly as the New Revision
+-- dialog already followed it (lib/revisions.ts).
 create function pg_temp.add_rev(p_cpy text) returns text
   language sql as $$
   insert into dcs.revisions (document_id, project_id, cpy_revision, step_id, status_id)
-  select host_doc_id, pej_id, p_cpy, step_id, st_id from t
+  select host_doc_id, pej_id, p_cpy, step_id,
+         (select id from dcs.dictionaries where dict_type = 'workflow_status' and code = 'IDC')
+    from t
   returning scl_revision;
 $$;
 

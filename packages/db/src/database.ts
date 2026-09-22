@@ -71,6 +71,8 @@ export type Database = {
           scl_doc_number: string
           title: string
           updated_at: string
+          void_at: string | null
+          void_reason: string | null
           workflow_status_dict_type: string | null
           workflow_status_id: string
         }
@@ -96,6 +98,8 @@ export type Database = {
           scl_doc_number: string
           title: string
           updated_at?: string
+          void_at?: string | null
+          void_reason?: string | null
           workflow_status_dict_type?: string | null
           workflow_status_id: string
         }
@@ -121,6 +125,8 @@ export type Database = {
           scl_doc_number?: string
           title?: string
           updated_at?: string
+          void_at?: string | null
+          void_reason?: string | null
           workflow_status_dict_type?: string | null
           workflow_status_id?: string
         }
