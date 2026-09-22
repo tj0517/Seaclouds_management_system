@@ -11,7 +11,9 @@
 // proxy.ts's aal2 gate, to /mfa?next=… — and that is the canonicalUrl cached
 // under the TARGET href. Pushing to the target therefore resolves straight
 // back to /mfa, the screen never moves, and the button sits on "Verifying…"
-// for ever. Three facts, each read out of the installed next@16.1.1:
+// for ever. Three facts, read out of next@16.1.1 (1a.25); re-read in
+// next@16.2.12 (1b.09b), where the first two still hold and the third changed
+// (see its note):
 //
 //   - client/components/segment-cache/navigation.js — navigate() reads the
 //     requested href from the route cache and, on a fulfilled entry, uses
@@ -23,7 +25,10 @@
 //   - client/components/router-reducer/reducers/refresh-reducer.js —
 //     refresh() calls revalidateEntireCache(): "all refreshes purge the
 //     prefetch cache". The original code called it AFTER push(), so it
-//     cleared the entry a fraction too late to matter.
+//     cleared the entry a fraction too late to matter. In next@16.2.12
+//     refresh() no longer touches the route cache at all ("we invalidate the
+//     segment cache but not the route cache"), so reordering would not help
+//     there either; the full load below does not depend on it.
 //
 // Reordering those two calls was the other candidate and was rejected
 // (owner's decision, 2026-09-17): refresh() also starts its own re-fetch of

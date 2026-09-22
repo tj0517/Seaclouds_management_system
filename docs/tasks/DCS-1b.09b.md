@@ -58,3 +58,6 @@ Przed 1b.15 (import na prod, 30.09), od kiedy na prodzie pojawią się pierwsi u
 ## Notatki z realizacji
 - 2026-09-22: zaimportowane z Notion (https://app.notion.com/p/3e2c2fbc0595814d85ede41c9ea9109e).
 - 2026-09-22 tj: hipoteza z nasłuchem auth nieaktualna — na main brak onAuthStateChange w apps/ i packages/ (odczyt). Zadanie w dwóch rundach na jednej gałęzi: runda 1 diagnoza + deterministyczne odtworzenie, STOP; runda 2 poprawka po akceptacji tj. Czerwony dowód: deterministyczne odtworzenie zamiast liczby ładowań (przy ~1/80 na main N=30 bez poprawki może dać 0).
+- 2026-09-22 tj: runda 1 przyjęta — mechanizm (błąd replay hydratacji w React, naprawiony upstream w react#35494) udowodniony odtworzeniem: czysty build 20/20 błędnych, z poprawką upstream 0/20.
+- 2026-09-22 tj, decyzja 1: poprawka = opcja A — Next w `apps/dcs` podbity do 16.2.12 (razem z `eslint-config-next`); Timesheet zostaje na 16.1.1.
+- 2026-09-22 tj, decyzja 2: odtworzenie zostaje w repo jako skrypt e2e poza CI.

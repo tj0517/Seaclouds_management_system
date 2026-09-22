@@ -438,11 +438,26 @@ Zapisane przy DCS 1b.07 (2026-09-20).
   generowaną, `original_name`, rozmiarem, `image/jpeg`/`image/png` i obiektem. Przypadek
   `DownloadFileButton` nie używa hooka (`useTransition`), więc nie ma go w tabeli wyżej; jego dowód
   to `e2e:files`.
-- **`e2e:profile` bywa czerwone na ostatniej asercji („no console or hydration errors") z powodu
-  niezależnego od zmiany pod testem: przerywanego hydrowania panelu (React #418), zmierzonego i
-  nierozstrzygniętego w `docs/deferred-tasks.md` (ccc) — ok. 3 na 100 ładowań w sekwencji RED 3,
-  ok. 1 na 80 na `origin/main`. Skrypt drukuje przy błędzie URL i ostatnią zaliczoną asercję;
-  podawaj surowe liczby serii, nie „flaky".
+- **Piąty skrypt, `e2e:hydration-replay` (DCS 1b.09b): straż błędu replay hydratacji w React —
+  uruchamiać przy każdej zmianie wersji Next.js (`docs/toolchain.md`, „Upgrading Next.js in
+  DCS").** `apps/dcs/e2e/hydration-replay.mjs`, te same wymagania co `e2e:profile` (stos,
+  fixtura, build produkcyjny na :3001, Chromium); `pnpm --filter @scl/dcs e2e:hydration-replay`,
+  `E2E_ITERATIONS` (domyślnie 15; każda iteracja to dwa ładowania profilu DC: na aal1 tuż po
+  logowaniu i na aal2 tuż po `/mfa`, więc domyślnie 30). Skrypt nie dotyka kodu aplikacji ani
+  `node_modules`: skrypt inicjalizujący w przeglądarce (tylko `/documents/*`) wstrzymuje fragmenty
+  RSC z leniwymi wierszami listy akcji i puszcza je przy drugim odczycie `firstChild` tej `<ul>`
+  przez React, a do tego czasu odracza listener `DOMContentLoaded` Nexta (który zamyka strumień
+  RSC). To zwęża naturalny wyścig (ok. 1 na 80 ładowań) do zera — mechanizm: `docs/deferred-tasks.md`
+  ccc. Zmierzone w 1b.09b: next@16.1.1 30/30 ładowań z #418, next@16.2.12 0/30. **Exit 1** przy
+  każdym #418, każdym innym błędzie strony **i przy każdym ładowaniu, w którym ustawienie się nie
+  włączyło** (wiersze niewstrzymane albo puszczone dopiero przez zapas 3 s) — zielony przebieg
+  bez włączonego ustawienia niczego nie dowodzi; jeśli nowy Next inaczej dzieli ładunek RSC,
+  skrypt trzeba poprawić, a nie uznać za zdany.
+- **`e2e:profile` bywało czerwone na ostatniej asercji („no console or hydration errors") przez
+  React #418 na liście akcji panelu (ok. 1 na 80 ładowań na next@16.1.1).** Przyczyna i poprawka:
+  `docs/deferred-tasks.md` (ccc), DCS 1b.09b — błąd React naprawiony przejściem DCS na Next
+  16.2.12. Jeśli ta asercja wróci, zacznij od `e2e:hydration-replay`. Skrypt drukuje przy błędzie
+  URL i ostatnią zaliczoną asercję; podawaj surowe liczby serii, nie „flaky".
 - **Pobranie: server action zwraca podpisany URL jako dane, a przycisk kieruje przeglądarkę
   przez `window.location.assign`; nigdy `redirect()` z server action na URL zewnętrzny.**
   Do rundy 5 przeglądu PR #81 pobranie było `redirect()`-em i strona „zostawała żywa"
@@ -471,7 +486,8 @@ Zapisane przy DCS 1b.07 (2026-09-20).
   do DOM, a nie tylko że zniknął spinner.
 - **`loading.tsx` nad stroną, której akcje serwerowe wołają `revalidatePath`,
   wymaga pomiaru zawieszeń na buildzie produkcyjnym (N ≥ 30) przed merge'em.**
-  Next 16.1.1 potrafi wtedy nigdy nie zatwierdzić odświeżonego drzewa
+  Next 16.1.1 (zmierzone w 1b.07b; DCS od 1b.09b stoi na 16.2.12, tej reguły tam
+  ponownie nie mierzono, więc obowiązuje dalej) potrafi wtedy nigdy nie zatwierdzić odświeżonego drzewa
   (transition lane zawieszony i nie „pingnięty”, mimo kompletnej odpowiedzi):
   [vercel/next.js#98303](https://github.com/vercel/next.js/issues/98303), także
   [#86055](https://github.com/vercel/next.js/issues/86055). Zmierzone

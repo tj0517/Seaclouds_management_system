@@ -7,7 +7,8 @@
 // hung on "Saving…" on a production build (DCS 1b.07 → 1b.07b), and 1a.25b → 1a.25c
 // was the same story on Timesheet. The cause turned out to be a lost transition
 // ping in Next 16.1.1 / React when a Server Action revalidates under a segment
-// `loading.tsx` (docs/deferred-tasks.md, "1b.07b"). It hangs only SOMETIMES — about
+// `loading.tsx` (docs/deferred-tasks.md, "1b.07b"; DCS is on 16.2.12 since 1b.09b, the
+// hang was not re-measured with a `loading.tsx` there). It hangs only SOMETIMES — about
 // 40% of saves on the profile page — so:
 //   * one green run proves nothing. Every screen below is exercised REPEATEDLY and
 //     the script prints raw counts, never a ratio;
