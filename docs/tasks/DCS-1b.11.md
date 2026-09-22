@@ -1,18 +1,18 @@
 ---
 id: DCS-1b.11
 title: "Ręczna zmiana statusu dokumentu przez DC + Void dokumentu (Faza 1: bez silnika obiegu)"
-status: todo
+status: in_progress
 difficulty: S
 model: null
 model_approved: null
 effort: null
-branch: null
+branch: feat/manual-status-void
 due: 2026-09-23
 depends_on: [DCS-1b.10, DCS-1b.02]
 blocked_by_questions: []
 touches_db: true
 touches_prod: false
-pr: null
+pr: 84
 notion: https://app.notion.com/p/3c7c2fbc059581a5ac06e0c412ac0592
 ---
 
@@ -51,3 +51,4 @@ Silnik obiegu (approval_tasks, IDC/IFR) to Faza 2. Żeby system był używalny p
 - 2026-09-21 (z DCS-1b.10): import omija blokadę przez `dcs.import_mode`; test współbieżności odłożony (deferred (ddd)).
 - przed 2026-09-22 (z DCS-1b.02): luki nie są uzupełniane — numer Void nigdy nie wraca; SEQ = max łącznie z Void, +1; numer niezmienny (trigger BEFORE UPDATE odrzuca zmianę `scl_doc_number`); błędny dokument → Void + nowy numer.
 - 2026-09-22: zaimportowane z Notion (https://app.notion.com/p/3c7c2fbc059581a5ac06e0c412ac0592).
+- 2026-09-22: PR #84 (migracja + testy, część 1 z 2) zmergowany; migracja 20260922074250 na scl-dev; na prod wdraża tj ręcznie; część 2 (UI) — gałąź feat/manual-status-void-ui.
