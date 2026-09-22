@@ -1,0 +1,9 @@
+{
+  "enabledMcpjsonServers": [
+    "supabase-dev",
+    "supabase-prod",
+    "playwright",
+    "github",
+    "context7"
+  ]
+}
