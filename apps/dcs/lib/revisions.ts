@@ -472,7 +472,7 @@ async function readRevisions(supabase: DbClient, documentId: string) {
     // public.profiles (cross-schema, not embeddable) and goes through the
     // profile directory, as every other person on these screens does.
     .select(
-      `id, document_id, scl_revision, cpy_revision, reason_for_issue, revision_date, created_at, created_by,
+      `id, document_id, scl_revision, cpy_revision, reason_for_issue, revision_date, created_at, created_by, locked_at,
        step:dictionaries!revisions_step_id_fkey(code, label),
        status:dictionaries!revisions_status_id_fkey(code, label),
        acceptance:dictionaries!revisions_acceptance_code_id_fkey(code, label)`,
@@ -531,6 +531,8 @@ export type RevisionRow = {
   /** "SUPERSEDED — Superseded": the tooltip; the badge shows the code. */
   statusLabel: string
   isCurrent: boolean
+  /** locked_at != null (DCS 1b.10/1b.11 Approve) — files_assert_revision_not_locked refuses every write, for any caller. */
+  isLocked: boolean
   files: FileRowView[]
 }
 
@@ -563,6 +565,7 @@ export function toRevisionRows(
     statusCode: revision.status?.code ?? null,
     statusLabel: dictionaryLabel(revision.status),
     isCurrent: revision.id === currentRevisionId,
+    isLocked: revision.locked_at != null,
     files: toFileRows(revision.files),
   }))
 }
@@ -575,4 +578,118 @@ type RevisionFile = {
   storage_path: string | null
   size_bytes: number | null
   uploaded_at: string | null
+}
+
+// ---------------------------------------------------------------------------
+// Approve (DCS 1b.11 / 1b.10): locked_at, on a final revision, DC only.
+//
+// "Approved" is not a status value — 1b.10's own note says so — it is this
+// column. The enforcement is migration 20260921150000: revisions_locked_at_dc_only
+// (DC at aal2, NO admin: escape — unlike workflow_status_id, nobody but the
+// project's DC may set this) and revisions_locked_at_final_step (23514 unless
+// the revision's step is IFC/IFI/IFB). Never cleared, by anyone, for any
+// reason — there is no unlockRevision function, on purpose.
+// ---------------------------------------------------------------------------
+
+const LOCKABLE_STEP_CODES = ['IFC', 'IFI', 'IFB'] as const
+
+export type LockRevisionAccess =
+  | { mode: 'enabled' }
+  | { mode: 'disabled'; reason: 'already_locked' | 'not_final_step' | 'needs_second_factor' | 'not_allowed'; hint: string }
+
+/**
+ * Whether the Approve action is live for this reader. MIRRORS, does not
+ * enforce — the real guards are revisions_locked_at_dc_only and
+ * revisions_locked_at_final_step.
+ */
+export function lockRevisionAccess(input: { isDc: boolean; aal2: boolean; stepCode: string | null | undefined; isLocked: boolean }): LockRevisionAccess {
+  if (input.isLocked) {
+    return { mode: 'disabled', reason: 'already_locked', hint: 'This revision is already approved. Approval cannot be undone; to correct it, add a new revision.' }
+  }
+  if (!input.stepCode || !(LOCKABLE_STEP_CODES as readonly string[]).includes(input.stepCode)) {
+    return {
+      mode: 'disabled',
+      reason: 'not_final_step',
+      hint: 'Only a final revision (step IFC, IFI or IFB) can be approved.',
+    }
+  }
+  if (input.isDc && input.aal2) return { mode: 'enabled' }
+  if (input.isDc) {
+    return {
+      mode: 'disabled',
+      reason: 'needs_second_factor',
+      hint: 'Approving a revision needs a session with a verified second factor.',
+    }
+  }
+  return {
+    mode: 'disabled',
+    reason: 'not_allowed',
+    hint: 'Only the Document Controller of this project can approve a revision.',
+  }
+}
+
+export type LockRevisionInput = { revisionId: string }
+
+export function parseLockRevisionInput(raw: unknown): RevisionResult<LockRevisionInput> {
+  if (typeof raw !== 'object' || raw === null) return fail('invalid_input', 'payload is not an object')
+  const r = raw as Record<string, unknown>
+  if (typeof r.revisionId !== 'string' || !UUID_RE.test(r.revisionId)) {
+    return fail('invalid_input', 'revisionId is required and must be a uuid')
+  }
+  return { ok: true, data: { revisionId: r.revisionId } }
+}
+
+/**
+ * The approve-specific translation of a PostgREST error. Not mapRevisionDbError:
+ * that one is worded for the New Revision dialog's fields, not this action.
+ */
+export function mapLockDbError(code: string | undefined, message: string): { ok: false; error: RevisionError; message?: string } {
+  switch (code) {
+    case '42501':
+      if (message.includes('verified second factor')) {
+        return fail(
+          'forbidden',
+          'Approving a revision needs a session with a verified second factor. Sign in again and complete the second-factor challenge.',
+        )
+      }
+      return fail('forbidden', 'Only the Document Controller of this project can approve a revision.')
+    case '23514':
+      return fail('invalid_input', 'Only a final revision (step IFC, IFI or IFB) can be approved.')
+    default:
+      return fail('db_error', message)
+  }
+}
+
+/**
+ * Approves (locks) a revision. The timestamp is computed here, on the server,
+ * not read from the client's clock — the database has no DEFAULT for this
+ * column (unlike void_at, which the trigger stamps itself), so the caller
+ * must supply one.
+ */
+export async function lockRevision(supabase: DbClient, rawInput: unknown): Promise<RevisionResult<{ id: string; lockedAt: string }>> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return fail('unauthenticated')
+
+  const parsed = parseLockRevisionInput(rawInput)
+  if (!parsed.ok) return parsed
+  const input = parsed.data
+
+  const { data, error } = await supabase
+    .schema('dcs')
+    .from('revisions')
+    .update({ locked_at: new Date().toISOString() })
+    .eq('id', input.revisionId)
+    .select('id, locked_at')
+    .maybeSingle()
+
+  if (error) return mapLockDbError(error.code, error.message)
+  if (!data || !data.locked_at) {
+    return fail(
+      'forbidden',
+      'This revision was not approved: it is not visible to you, or your session may not change it. Only the Document Controller of the project can, with a verified second factor.',
+    )
+  }
+  return { ok: true, data: { id: data.id, lockedAt: data.locked_at } }
 }

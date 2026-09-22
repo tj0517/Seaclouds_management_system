@@ -9,7 +9,7 @@
 // No signed URL anywhere in here: the file rows are metadata, and the URL is
 // minted on click by the downloadFile action (DownloadFileButton, 1b.09).
 import { EmptyState } from '@/components/page-chrome'
-import RevisionPanelActions, { type AddFileControl, type NewRevisionControl } from './RevisionPanelActions'
+import RevisionPanelActions, { type AddFileControl, type ApproveControl, type NewRevisionControl } from './RevisionPanelActions'
 import { mdrStatusColor } from '@/lib/mdr'
 import RevisionFileList from './RevisionFileList'
 import { dictionaryLabel, toFileRows } from '@/lib/document-profile'
@@ -31,10 +31,12 @@ export default function CurrentRevisionPanel({
   current,
   newRevision,
   addFile,
+  approve,
 }: {
   current: RevisionWithFiles | null
   newRevision: NewRevisionControl
   addFile: AddFileControl
+  approve: ApproveControl
 }) {
   return (
     <aside aria-label="Current revision" className="space-y-5 rounded-lg border bg-card p-4">
@@ -45,7 +47,7 @@ export default function CurrentRevisionPanel({
 
       <section className="space-y-2 border-t pt-4">
         <h2 className="text-sm font-semibold">Actions</h2>
-        <RevisionPanelActions newRevision={newRevision} addFile={addFile} />
+        <RevisionPanelActions newRevision={newRevision} addFile={addFile} approve={approve} />
       </section>
     </aside>
   )
@@ -80,6 +82,15 @@ function RevisionDetails({ current }: { current: RevisionWithFiles }) {
         </Row>
         <Row label="Revision date">{revision.revision_date ?? '—'}</Row>
         <Row label="Reason for issue">{revision.reason_for_issue ?? '—'}</Row>
+        <Row label="Approval">
+          {revision.locked_at ? (
+            <span className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-800">
+              Approved
+            </span>
+          ) : (
+            '—'
+          )}
+        </Row>
       </dl>
 
       <div className="space-y-2">

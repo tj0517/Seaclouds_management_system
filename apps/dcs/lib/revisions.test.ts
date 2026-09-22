@@ -12,9 +12,13 @@ import {
   createRevision,
   defaultRevisionStepId,
   isValidDateString,
+  lockRevision,
+  lockRevisionAccess,
+  mapLockDbError,
   mapRevisionDbError,
   newRevisionAccess,
   parseCreateRevisionInput,
+  parseLockRevisionInput,
   proposeRevisionCode,
   revisionStepOptions,
   sclCodeField,
@@ -453,6 +457,7 @@ describe('toRevisionRows', () => {
     revision_date: '2026-09-20',
     created_at: '2026-09-20T10:00:00Z',
     created_by: USER,
+    locked_at: null as string | null,
     step: { code: 'IFR', label: 'Issued for Review' },
     status: { code: 'IFR', label: 'IFR' },
     acceptance: null,
@@ -484,6 +489,11 @@ describe('toRevisionRows', () => {
       acceptanceCodeShort: '—',
       statusCode: 'IFR',
     })
+  })
+
+  it('carries isLocked from locked_at (DCS 1b.10/1b.11 Approve)', () => {
+    expect(toRevisionRows([revision], 'r2', new Map())[0].isLocked).toBe(false)
+    expect(toRevisionRows([{ ...revision, locked_at: '2026-09-22T00:00:00Z' }], 'r2', new Map())[0].isLocked).toBe(true)
   })
 
   it('marks the document’s current revision and only that one', () => {
@@ -526,5 +536,122 @@ describe('toRevisionRows', () => {
     )
     expect(row.files).toEqual([{ id: 'f1', name: 'report.pdf', originalName: '', kind: 'original', size: '1.5 KB', uploaded: '—' }])
     expect(toRevisionRows([revision], null, new Map())[0].files).toEqual([])
+  })
+})
+
+// ---------------------------------------------------------------------------
+// DCS 1b.11 / 1b.10: Approve (locked_at)
+// ---------------------------------------------------------------------------
+
+describe('lockRevisionAccess', () => {
+  it('is enabled for the DC at aal2 on a final step, not yet locked', () => {
+    expect(lockRevisionAccess({ isDc: true, aal2: true, stepCode: 'IFC', isLocked: false })).toEqual({ mode: 'enabled' })
+  })
+  it('checks "already locked" first, even for the DC at aal2', () => {
+    expect(lockRevisionAccess({ isDc: true, aal2: true, stepCode: 'IFC', isLocked: true })).toMatchObject({
+      mode: 'disabled',
+      reason: 'already_locked',
+    })
+  })
+  it('refuses a non-final step (IDC) even for the DC at aal2', () => {
+    expect(lockRevisionAccess({ isDc: true, aal2: true, stepCode: 'IDC', isLocked: false })).toMatchObject({
+      mode: 'disabled',
+      reason: 'not_final_step',
+    })
+  })
+  it('refuses when there is no current revision at all (stepCode null)', () => {
+    expect(lockRevisionAccess({ isDc: true, aal2: true, stepCode: null, isLocked: false })).toMatchObject({
+      mode: 'disabled',
+      reason: 'not_final_step',
+    })
+  })
+  it('asks a DC without aal2 to verify a second factor', () => {
+    expect(lockRevisionAccess({ isDc: true, aal2: false, stepCode: 'IFI', isLocked: false })).toMatchObject({
+      mode: 'disabled',
+      reason: 'needs_second_factor',
+    })
+  })
+  it('refuses a non-DC outright — no admin escape on this column', () => {
+    expect(lockRevisionAccess({ isDc: false, aal2: true, stepCode: 'IFB', isLocked: false })).toMatchObject({
+      mode: 'disabled',
+      reason: 'not_allowed',
+    })
+  })
+})
+
+describe('parseLockRevisionInput', () => {
+  it('accepts a valid revisionId', () => {
+    expect(parseLockRevisionInput({ revisionId: DOC })).toEqual({ ok: true, data: { revisionId: DOC } })
+  })
+  it('rejects a non-uuid revisionId', () => {
+    expect(parseLockRevisionInput({ revisionId: 'nope' })).toMatchObject({ ok: false, error: 'invalid_input' })
+  })
+  it('rejects a missing payload', () => {
+    expect(parseLockRevisionInput(null)).toMatchObject({ ok: false, error: 'invalid_input' })
+  })
+})
+
+describe('mapLockDbError', () => {
+  it('42501 with "verified second factor" asks for aal2', () => {
+    expect(mapLockDbError('42501', 'needs a verified second factor')).toMatchObject({ error: 'forbidden' })
+  })
+  it('other 42501 names the DC', () => {
+    expect(mapLockDbError('42501', 'wrong caller')).toMatchObject({ error: 'forbidden' })
+  })
+  it('23514 (not a final step) is worded for the field', () => {
+    expect(mapLockDbError('23514', 'can be set only on a final revision')).toMatchObject({ error: 'invalid_input' })
+  })
+  it('falls through to db_error with the raw message', () => {
+    expect(mapLockDbError('XX000', 'boom')).toEqual({ ok: false, error: 'db_error', message: 'boom' })
+  })
+})
+
+function lockClient(opts: {
+  user?: { id: string } | null
+  update?: { data: { id: string; locked_at: string | null } | null; error: { code?: string; message: string } | null }
+}) {
+  const update = vi.fn()
+  const chain = {
+    update: (payload: unknown) => {
+      update(payload)
+      return chain
+    },
+    eq: () => chain,
+    select: () => chain,
+    maybeSingle: async () => opts.update ?? { data: { id: 'rev-1', locked_at: '2026-09-22T00:00:00.000Z' }, error: null },
+  }
+  const client = {
+    auth: { getUser: async () => ({ data: { user: opts.user === undefined ? { id: USER } : opts.user } }) },
+    schema: () => ({ from: () => chain }),
+  } as unknown as SupabaseClient<Database>
+  return { client, update }
+}
+
+describe('lockRevision', () => {
+  it('writes ONE column, locked_at, computed server-side', async () => {
+    const { client, update } = lockClient({})
+    const before = Date.now()
+    const result = await lockRevision(client, { revisionId: DOC })
+    expect(result.ok).toBe(true)
+    const call = update.mock.calls[0][0] as { locked_at: string }
+    expect(Object.keys(call)).toEqual(['locked_at'])
+    expect(new Date(call.locked_at).getTime()).toBeGreaterThanOrEqual(before)
+  })
+
+  it('reports a filtered-away update (zero rows) as forbidden, not as success', async () => {
+    const { client } = lockClient({ update: { data: null, error: null } })
+    expect(await lockRevision(client, { revisionId: DOC })).toMatchObject({ ok: false, error: 'forbidden' })
+  })
+
+  it('refuses without a session and without touching the table', async () => {
+    const { client, update } = lockClient({ user: null })
+    expect(await lockRevision(client, { revisionId: DOC })).toMatchObject({ ok: false, error: 'unauthenticated' })
+    expect(update).not.toHaveBeenCalled()
+  })
+
+  it('refuses a malformed payload before any write', async () => {
+    const { client, update } = lockClient({})
+    expect(await lockRevision(client, { revisionId: 'nope' })).toMatchObject({ ok: false, error: 'invalid_input' })
+    expect(update).not.toHaveBeenCalled()
   })
 })

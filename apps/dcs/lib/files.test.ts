@@ -270,7 +270,7 @@ describe('mapFileDbError', () => {
 })
 
 describe('fileUploadAccess — mirrors the three INSERT policies', () => {
-  const on = { hasRevision: true, isAdmin: false, isOrig: false, isDc: false, aal2: false }
+  const on = { hasRevision: true, isLocked: false, isAdmin: false, isOrig: false, isDc: false, aal2: false }
 
   it('is enabled for an Originator at any aal, a DC at aal2, and an admin', () => {
     expect(fileUploadAccess({ ...on, isOrig: true })).toEqual({ mode: 'enabled' })
@@ -290,5 +290,13 @@ describe('fileUploadAccess — mirrors the three INSERT policies', () => {
 
   it('says "no revision" first, whoever is asking', () => {
     expect(fileUploadAccess({ ...on, hasRevision: false, isAdmin: true })).toMatchObject({ mode: 'disabled', reason: 'no_revision' })
+  })
+
+  // DCS 1b.10/1b.11: files_assert_revision_not_locked refuses every caller, admin included,
+  // once locked_at is set — checked right after hasRevision, before any role.
+  it('refuses everyone, admin included, once the revision is locked (Approved)', () => {
+    expect(fileUploadAccess({ ...on, isLocked: true, isAdmin: true })).toMatchObject({ mode: 'disabled', reason: 'revision_locked' })
+    expect(fileUploadAccess({ ...on, isLocked: true, isOrig: true })).toMatchObject({ mode: 'disabled', reason: 'revision_locked' })
+    expect(fileUploadAccess({ ...on, isLocked: true, isDc: true, aal2: true })).toMatchObject({ mode: 'disabled', reason: 'revision_locked' })
   })
 })

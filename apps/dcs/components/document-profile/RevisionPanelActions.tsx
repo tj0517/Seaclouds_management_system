@@ -15,8 +15,9 @@
 import { Button } from '@/components/ui/button'
 import { PANEL_ACTIONS } from '@/lib/document-profile'
 import type { FileUploadAccess } from '@/lib/files'
-import type { NewRevisionAccess } from '@/lib/revisions'
+import type { LockRevisionAccess, NewRevisionAccess } from '@/lib/revisions'
 import AddFileDialog from './AddFileDialog'
+import ApproveRevisionButton from './ApproveRevisionButton'
 import NewRevisionDialog, { type NewRevisionFormConfig } from './NewRevisionDialog'
 
 export type NewRevisionControl = { access: NewRevisionAccess; config: NewRevisionFormConfig }
@@ -25,8 +26,21 @@ export type AddFileControl = {
   access: FileUploadAccess
   config: { revisionId: string; revisionLabel: string; documentNumber: string } | null
 }
+/** config is null when the document has no current revision (access is then 'not_final_step'). */
+export type ApproveControl = {
+  access: LockRevisionAccess
+  config: { documentId: string; revisionId: string; revisionLabel: string } | null
+}
 
-export default function RevisionPanelActions({ newRevision, addFile }: { newRevision: NewRevisionControl; addFile: AddFileControl }) {
+export default function RevisionPanelActions({
+  newRevision,
+  addFile,
+  approve,
+}: {
+  newRevision: NewRevisionControl
+  addFile: AddFileControl
+  approve: ApproveControl
+}) {
   const { access, config } = newRevision
   return (
     <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
@@ -58,6 +72,22 @@ export default function RevisionPanelActions({ newRevision, addFile }: { newRevi
             </span>
             <p id="panel-action-add-file-hint" className="text-xs text-muted-foreground">
               {addFile.access.mode === 'disabled' ? addFile.access.hint : ''}
+            </p>
+          </>
+        )}
+      </li>
+      <li className="space-y-1">
+        {approve.access.mode === 'enabled' && approve.config ? (
+          <ApproveRevisionButton documentId={approve.config.documentId} revisionId={approve.config.revisionId} revisionLabel={approve.config.revisionLabel} />
+        ) : (
+          <>
+            <span title={approve.access.mode === 'disabled' ? approve.access.hint : undefined} className="block">
+              <Button type="button" disabled variant="outline" className="w-full" aria-describedby="panel-action-approve-hint">
+                Approve
+              </Button>
+            </span>
+            <p id="panel-action-approve-hint" className="text-xs text-muted-foreground">
+              {approve.access.mode === 'disabled' ? approve.access.hint : ''}
             </p>
           </>
         )}
