@@ -3013,3 +3013,8 @@ CONTEXT:  PL/pgSQL function public.enforce_document_void() line 52 at RAISE
 Unrelated to the Next.js version (setup SQL, rejected by the trigger). tj's decision in 1b.09b: not fixed
 there; the fix belongs to the 1b.11 UI PR (`feat/manual-status-void-ui`). Consequence: New Revision was not
 proven by e2e on Next 16.2.12 in 1b.09b — checked manually by tj on Preview.
+
+**Resolved in DCS 1b.11 PR 2 (`feat/manual-status-void-ui`, 2026-09-22).** The fixture insert now supplies
+`void_reason` for the `D_VOID` row (a fourth value in the same VALUES list), matching the trigger's rule
+instead of relying on a bypass — `dcs.import_mode` was not used, since this row is meant to already be Void
+when the script starts, the same as a real DC-voided document, not an imported historical one.
