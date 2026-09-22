@@ -1,7 +1,7 @@
 ---
 id: DCS-1b.09b
 title: "Wyścig hydratacji po logowaniu/MFA (React #418 na liście akcji profilu dokumentu)"
-status: in_progress
+status: review
 difficulty: L
 model: null
 model_approved: null
@@ -12,7 +12,7 @@ depends_on: []
 blocked_by_questions: []
 touches_db: false
 touches_prod: false
-pr: null
+pr: 88
 notion: https://app.notion.com/p/3e2c2fbc0595814d85ede41c9ea9109e
 ---
 
