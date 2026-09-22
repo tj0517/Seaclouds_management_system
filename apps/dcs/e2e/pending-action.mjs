@@ -518,6 +518,48 @@ if (want('docform')) {
     const invalidContext = await page.locator('#project').inputValue()
     if (invalidContext !== '') site.errors.push(`?project= naming a project not in the creatable list was preselected: "${invalidContext}"`)
   }
+
+  // DCS 1b.04b — interruption: clicking a document row starts a navigation to
+  // the profile; clicking "New document" before that lands must still land on
+  // /documents/new with a usable form, not hang and not error. Next's router
+  // runs "last navigation wins" for this pair of <Link>s natively — nothing in
+  // this app arbitrates it — so the proof is that the interruption is actually
+  // exercised (both clicks fired while the first navigation was still settling)
+  // and that it resolves cleanly, repeated so a fast one-off isn't the only try.
+  {
+    const errorsBefore = errors.length
+    for (let i = 1; i <= 5; i++) {
+      await go(page, `${BASE}/projects/${IDS.PEJ}/documents`)
+      const rowHref = await page.locator('table a[href^="/documents/"]').first().getAttribute('href')
+      await page.locator('table a[href^="/documents/"]').first().click()
+      await page.getByRole('link', { name: 'New document' }).click({ force: true, timeout: 2000 }).catch((e) => {
+        site.details.push(`interruption ${i}: second click did not land — ${e.message.split('\n')[0].slice(0, 120)}`)
+      })
+      // Wait for the URL itself to settle on /documents/new, rather than a
+      // single point-in-time read after networkidle — networkidle can go
+      // quiet between the two navigations' own network activity and be read
+      // mid-transition, on the FIRST (stale) URL, before the second one lands.
+      const reachedNewDoc = await page
+        .waitForURL((u) => u.pathname === '/documents/new', { timeout: 5000 })
+        .then(() => true, () => false)
+      const landed = await page.evaluate(() => location.pathname)
+      let titleUsable = false
+      if (reachedNewDoc) {
+        titleUsable = await page
+          .locator('#title')
+          .fill(`probe ${i}`)
+          .then(async () => (await page.locator('#title').inputValue()) === `probe ${i}`)
+          .catch(() => false)
+      }
+      site.details.push(`interruption ${i}: row was ${rowHref}, landed on ${landed}, form usable=${titleUsable}`)
+      if (!reachedNewDoc || !titleUsable) {
+        site.errors.push(`interruption ${i}: expected /documents/new with a usable form, got ${landed} (usable=${titleUsable})`)
+      }
+    }
+    const newErrors = errors.slice(errorsBefore)
+    if (newErrors.length) site.errors.push(`interruption: console/page errors during the sequence: ${JSON.stringify(newErrors)}`)
+    site.details.push(`interruption: console/page errors during the whole sequence: ${newErrors.length}`)
+  }
 }
 
 // ---------------------------------------------------------------------------
