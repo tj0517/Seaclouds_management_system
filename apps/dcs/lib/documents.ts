@@ -557,7 +557,7 @@ export async function getRevisionWithFiles(supabase: DbClient, revisionId: strin
       .schema('dcs')
       .from('revisions')
       .select(
-        `id, document_id, scl_revision, cpy_revision, reason_for_issue, revision_date, created_at, locked_at,
+        `id, document_id, scl_revision, cpy_revision, reason_for_issue, revision_date, created_at, locked_at, status_id,
          step:dictionaries!revisions_step_id_fkey(code, label),
          status:dictionaries!revisions_status_id_fkey(code, label)`,
       )

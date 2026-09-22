@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@scl/db'
 import {
+  REVISION_STATUS_CODES,
   REVISION_STEP_CODES,
   cpyRevisionField,
   createRevision,
@@ -16,12 +17,17 @@ import {
   lockRevisionAccess,
   mapLockDbError,
   mapRevisionDbError,
+  mapRevisionStatusDbError,
   newRevisionAccess,
   parseCreateRevisionInput,
   parseLockRevisionInput,
+  parseSetRevisionStatusInput,
   proposeRevisionCode,
+  revisionStatusAccess,
+  revisionStatusOptions,
   revisionStepOptions,
   sclCodeField,
+  setRevisionStatus,
   todayLocalIso,
   toRevisionRows,
 } from './revisions'
@@ -652,6 +658,139 @@ describe('lockRevision', () => {
   it('refuses a malformed payload before any write', async () => {
     const { client, update } = lockClient({})
     expect(await lockRevision(client, { revisionId: 'nope' })).toMatchObject({ ok: false, error: 'invalid_input' })
+    expect(update).not.toHaveBeenCalled()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// DCS 1b.11 (Scope item 4): manual status change on the current revision
+// ---------------------------------------------------------------------------
+
+describe('REVISION_STATUS_CODES', () => {
+  it('is the six step-aligned codes — not NOT_STARTED/STARTED (document-only), not VOID or SUPERSEDED', () => {
+    expect(REVISION_STATUS_CODES).toEqual(['IDC', 'IFR', 'RETCOM', 'IFC', 'IFI', 'IFB'])
+  })
+})
+
+describe('revisionStatusOptions', () => {
+  it('keeps only the six revision-facing codes, in dictionary order', () => {
+    const all = [
+      { code: 'NOT_STARTED' },
+      { code: 'STARTED' },
+      { code: 'IDC' },
+      { code: 'IFR' },
+      { code: 'RETCOM' },
+      { code: 'IFC' },
+      { code: 'IFI' },
+      { code: 'IFB' },
+      { code: 'VOID' },
+      { code: 'SUPERSEDED' },
+    ]
+    expect(revisionStatusOptions(all).map((s) => s.code)).toEqual(['IDC', 'IFR', 'RETCOM', 'IFC', 'IFI', 'IFB'])
+  })
+})
+
+describe('revisionStatusAccess', () => {
+  it('is enabled for a DC at aal2, not locked', () => {
+    expect(revisionStatusAccess({ isDc: true, aal2: true, isLocked: false })).toEqual({ mode: 'enabled' })
+  })
+  it('checks "locked" first, even for the DC at aal2 — no admin escape on this column either', () => {
+    expect(revisionStatusAccess({ isDc: true, aal2: true, isLocked: true })).toMatchObject({ mode: 'disabled', reason: 'locked' })
+  })
+  it('asks a DC without aal2 to verify a second factor', () => {
+    expect(revisionStatusAccess({ isDc: true, aal2: false, isLocked: false })).toMatchObject({ mode: 'disabled', reason: 'needs_second_factor' })
+  })
+  it('refuses a non-DC outright — no admin escape', () => {
+    expect(revisionStatusAccess({ isDc: false, aal2: true, isLocked: false })).toMatchObject({ mode: 'disabled', reason: 'not_allowed' })
+  })
+})
+
+describe('parseSetRevisionStatusInput', () => {
+  it('accepts a valid pair', () => {
+    expect(parseSetRevisionStatusInput({ revisionId: DOC, statusCode: 'IFR' })).toEqual({
+      ok: true,
+      data: { revisionId: DOC, statusCode: 'IFR' },
+    })
+  })
+  it('rejects NOT_STARTED/STARTED — document-only codes', () => {
+    expect(parseSetRevisionStatusInput({ revisionId: DOC, statusCode: 'NOT_STARTED' })).toMatchObject({ ok: false, error: 'invalid_input' })
+    expect(parseSetRevisionStatusInput({ revisionId: DOC, statusCode: 'STARTED' })).toMatchObject({ ok: false, error: 'invalid_input' })
+  })
+  it('rejects VOID and SUPERSEDED', () => {
+    expect(parseSetRevisionStatusInput({ revisionId: DOC, statusCode: 'VOID' })).toMatchObject({ ok: false, error: 'invalid_input' })
+    expect(parseSetRevisionStatusInput({ revisionId: DOC, statusCode: 'SUPERSEDED' })).toMatchObject({ ok: false, error: 'invalid_input' })
+  })
+  it('rejects a non-uuid revisionId', () => {
+    expect(parseSetRevisionStatusInput({ revisionId: 'nope', statusCode: 'IFR' })).toMatchObject({ ok: false, error: 'invalid_input' })
+  })
+})
+
+describe('mapRevisionStatusDbError', () => {
+  it('42501 with "verified second factor" asks for aal2', () => {
+    expect(mapRevisionStatusDbError('42501', 'needs a verified second factor')).toMatchObject({ error: 'forbidden' })
+  })
+  it('other 42501 names the DC', () => {
+    expect(mapRevisionStatusDbError('42501', 'wrong caller')).toMatchObject({ error: 'forbidden' })
+  })
+  it('falls through to db_error with the raw message', () => {
+    expect(mapRevisionStatusDbError('XX000', 'boom')).toEqual({ ok: false, error: 'db_error', message: 'boom' })
+  })
+})
+
+function revisionStatusClient(opts: {
+  user?: { id: string } | null
+  status?: { id: string } | null
+  update?: { data: { id: string; status: { code: string } | null } | null; error: { code?: string; message: string } | null }
+}) {
+  const update = vi.fn()
+  const lookupChain = {
+    select: () => lookupChain,
+    eq: () => lookupChain,
+    maybeSingle: async () => ({ data: opts.status === undefined ? { id: 'status-id' } : opts.status, error: null }),
+  }
+  const updateChain = {
+    select: () => updateChain,
+    eq: () => updateChain,
+    maybeSingle: async () => opts.update ?? { data: { id: 'rev-1', status: { code: 'IFR' } }, error: null },
+    update: (payload: unknown) => {
+      update(payload)
+      return updateChain
+    },
+  }
+  let calls = 0
+  const from = () => {
+    calls += 1
+    return calls === 1 ? lookupChain : updateChain
+  }
+  const client = {
+    auth: { getUser: async () => ({ data: { user: opts.user === undefined ? { id: USER } : opts.user } }) },
+    schema: () => ({ from }),
+  } as unknown as SupabaseClient<Database>
+  return { client, update }
+}
+
+describe('setRevisionStatus', () => {
+  it('writes ONE column, status_id, resolved from the code', async () => {
+    const { client, update } = revisionStatusClient({ status: { id: 'status-IFR' } })
+    const result = await setRevisionStatus(client, { revisionId: DOC, statusCode: 'IFR' })
+    expect(update).toHaveBeenCalledWith({ status_id: 'status-IFR' })
+    expect(result.ok).toBe(true)
+  })
+
+  it('reports a filtered-away update (zero rows) as forbidden, not as success', async () => {
+    const { client } = revisionStatusClient({ update: { data: null, error: null } })
+    expect(await setRevisionStatus(client, { revisionId: DOC, statusCode: 'IFR' })).toMatchObject({ ok: false, error: 'forbidden' })
+  })
+
+  it('refuses without a session and without touching the table', async () => {
+    const { client, update } = revisionStatusClient({ user: null })
+    expect(await setRevisionStatus(client, { revisionId: DOC, statusCode: 'IFR' })).toMatchObject({ ok: false, error: 'unauthenticated' })
+    expect(update).not.toHaveBeenCalled()
+  })
+
+  it('refuses a malformed payload before any write', async () => {
+    const { client, update } = revisionStatusClient({})
+    expect(await setRevisionStatus(client, { revisionId: DOC, statusCode: 'VOID' })).toMatchObject({ ok: false, error: 'invalid_input' })
     expect(update).not.toHaveBeenCalled()
   })
 })
