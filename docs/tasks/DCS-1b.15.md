@@ -38,7 +38,8 @@ Kamień milowy Fazy 1b (brief §12.1): **„Excel przestaje być źródłem praw
 - Pliki dokumentów: DC / originatorzy dołączają ręcznie do rewizji w kolejnych tygodniach (poza zakresem importu, §13.3) — warto ustalić priorytet: najpierw dokumenty aktywne.
 
 ## Bramki STOP
-—
+- przed jakimkolwiek zapisem na produkcji (`tfbzivfsqsgebegcvfah`) — uruchomieniem importu na prod — pokaż raport z przebiegu na scl-dev, liczbę dokumentów/rewizji do wstawienia i dokładną komendę; czekaj na akceptację tj (dodane przy imporcie z Notion: reguła „zapis na prod za bramką” z CLAUDE.md)
+- `public.audit_log` na produkcji — nigdy nie kasować, także przy wycofaniu nieudanego importu (CLAUDE.md)
 
 ## Kontekst
 Kamień milowy Fazy 1b z briefu (§12.1): **„Excel przestaje być źródłem prawdy”**. Od tego dnia numery nadaje wyłącznie system, a arkusz jest archiwum.
