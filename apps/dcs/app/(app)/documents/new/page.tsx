@@ -24,9 +24,18 @@ import {
   getCtrCodesByProject,
   getProjectIdsWithMdr,
   getTeamsByProject,
+  resolveProjectFromParam,
 } from '@/lib/documents'
 
-export default async function NewDocumentPage() {
+export default async function NewDocumentPage({
+  searchParams,
+}: {
+  // DCS 1b.04b: `?project=` from the project documents page — untrusted,
+  // resolved below against the server-computed creatable list, never used to
+  // widen what the form offers (see resolveProjectFromParam).
+  searchParams: Promise<{ project?: string }>
+}) {
+  const { project: projectParam } = await searchParams
   const supabase = await createClient()
 
   const {
@@ -46,6 +55,7 @@ export default async function NewDocumentPage() {
 
   const projects = creatableProjects(allProjects ?? [], rolesByProject, projectIdsWithMdr, isAdmin)
   const projectIds = projects.map((project) => project.id)
+  const initialProjectId = resolveProjectFromParam(projectParam, projects)
 
   const [docTypes, disciplines, areas, languages, ctrByProject, teamsByProject, directory] = await Promise.all([
     getActiveDictionary(supabase, 'doc_type'),
@@ -70,6 +80,7 @@ export default async function NewDocumentPage() {
           <DocumentCreateForm
             currentUserId={user.id}
             projects={projects}
+            initialProjectId={initialProjectId}
             docTypes={docTypes}
             disciplines={disciplines}
             areas={areas}

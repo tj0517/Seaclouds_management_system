@@ -33,6 +33,8 @@ export type PendingAction = {
   run: <R>(action: Action<R>) => Promise<R | Skipped>
   /** Re-reads the server tree, keeping `pending` true until it lands. */
   refresh: () => void
+  /** Pushes to `href`, keeping `pending` true until the new route has rendered. */
+  navigate: (href: string) => void
   /** True from the click until the refreshed page is rendered. */
   pending: boolean
 }
@@ -65,7 +67,19 @@ export function usePendingAction(): PendingAction {
     startRefresh(() => router.refresh())
   }, [router])
 
-  return { run, refresh, pending: running || refreshing }
+  // Same transition as refresh — Next's router keeps it pending until the
+  // destination route's data has loaded and committed, not just until push()
+  // returns. Reusing `refreshing` (rather than a second flag) is what keeps
+  // this call and the setRunning(false) inside run() batched into the same
+  // commit: no frame in between where the button is briefly re-enabled.
+  const navigate = useCallback(
+    (href: string) => {
+      startRefresh(() => router.push(href))
+    },
+    [router],
+  )
+
+  return { run, refresh, navigate, pending: running || refreshing }
 }
 
 export { SKIPPED }

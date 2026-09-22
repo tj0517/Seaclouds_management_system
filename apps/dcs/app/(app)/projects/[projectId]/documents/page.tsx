@@ -19,6 +19,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Callout, EmptyState, PageBody, PageHeader, ScrollableTable } from '@/components/page-chrome'
+import NavLinkStatus from '@/components/NavLinkStatus'
 import { getProjectIdsWithMdr, listProjectDocuments } from '@/lib/documents'
 
 export default async function ProjectDocumentsPage({
@@ -43,9 +44,13 @@ export default async function ProjectDocumentsPage({
         description={project.name}
         actions={
           <Button asChild>
-            <Link href="/documents/new">
+            {/* DCS 1b.04b: the project this list is for, so New Document
+                preselects it; resolveProjectFromParam re-validates it
+                server-side before the form ever sees it. */}
+            <Link href={`/documents/new?project=${projectId}`}>
               <Plus className="mr-2 h-4 w-4" />
               New document
+              <NavLinkStatus />
             </Link>
           </Button>
         }
@@ -80,8 +85,9 @@ export default async function ProjectDocumentsPage({
                 {documents.map((document) => (
                   <TableRow key={document.id}>
                     <TableCell className="font-mono text-xs">
-                      <Link href={`/documents/${document.id}`} className="underline underline-offset-4">
+                      <Link href={`/documents/${document.id}`} className="inline-flex items-center gap-1.5 underline underline-offset-4">
                         {document.scl_doc_number}
+                        <NavLinkStatus />
                       </Link>
                     </TableCell>
                     <TableCell>{document.title}</TableCell>
