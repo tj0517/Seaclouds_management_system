@@ -2,6 +2,7 @@
 id: DCS-5.01
 title: "Dashboard postępu dokumentacji"
 status: todo
+kind: code             # code | client | ops | milestone
 difficulty: S
 model: null
 model_approved: null

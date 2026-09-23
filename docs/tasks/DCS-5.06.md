@@ -2,6 +2,7 @@
 id: DCS-5.06
 title: "Kopie zapasowe, retencja i TEST ODTWORZENIA"
 status: todo
+kind: ops             # code | client | ops | milestone
 difficulty: L
 model: null
 model_approved: null

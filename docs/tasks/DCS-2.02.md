@@ -2,6 +2,7 @@
 id: DCS-2.02
 title: "Silnik obiegu: tryb równoległy (IDC)"
 status: todo
+kind: code             # code | client | ops | milestone
 difficulty: L
 model: null
 model_approved: null

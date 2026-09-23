@@ -2,6 +2,7 @@
 id: DCS-2.03
 title: "Silnik obiegu: tryb szeregowy (IFR i wyżej)"
 status: todo
+kind: code             # code | client | ops | milestone
 difficulty: L
 model: null
 model_approved: null

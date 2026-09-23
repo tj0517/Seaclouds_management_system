@@ -2,6 +2,7 @@
 id: DCS-2.16
 title: "My Page: sekcja Ready for dispatch dla Document Controllera"
 status: todo
+kind: code             # code | client | ops | milestone
 difficulty: M
 model: null
 model_approved: null

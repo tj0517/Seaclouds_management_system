@@ -2,6 +2,7 @@
 id: DCS-3.03
 title: "Tworzenie transmittalu i paczki do klienta"
 status: todo
+kind: code             # code | client | ops | milestone
 difficulty: M
 model: null
 model_approved: null

@@ -2,6 +2,7 @@
 id: DCS-2.14
 title: "Zmiana terminu etapu — przeniesienie do Forecast"
 status: todo
+kind: code             # code | client | ops | milestone
 difficulty: M
 model: null
 model_approved: null

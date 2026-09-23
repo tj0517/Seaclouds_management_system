@@ -2,6 +2,7 @@
 id: DCS-3.02
 title: "Transmittale: model danych i numeracja"
 status: todo
+kind: code             # code | client | ops | milestone
 difficulty: M
 model: null
 model_approved: null

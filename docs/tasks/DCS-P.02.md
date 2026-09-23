@@ -2,6 +2,7 @@
 id: DCS-P.02
 title: "Wydanie briefu SCMS-SCL-SA-0001-PL rev. B (usunięcie sprzeczności)"
 status: todo
+kind: client             # code | client | ops | milestone
 difficulty: M
 model: null
 model_approved: null

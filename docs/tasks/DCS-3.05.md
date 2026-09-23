@@ -2,6 +2,7 @@
 id: DCS-3.05
 title: "Eksport MDR w formacie klienta (CPY pierwsza kolumna)"
 status: todo
+kind: code             # code | client | ops | milestone
 difficulty: L
 model: null
 model_approved: null

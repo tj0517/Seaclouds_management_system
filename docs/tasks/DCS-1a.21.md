@@ -1,7 +1,8 @@
 ---
 id: DCS-1a.21
 title: "Demo / bramka 1a→1b: login 2FA, role w SC2601, nowy projekt w kreatorze, edycja słownika, audit log"
-status: todo
+status: dropped
+kind: milestone             # code | client | ops | milestone
 difficulty: S
 model: null
 model_approved: null
@@ -54,4 +55,5 @@ Brief (§12.2): demonstracja co dwa tygodnie; Faza 1a przed 1b, bo wszystko w DC
 - Uwaga importu: strona mówi „bez jej zamknięcia nie zaczynamy tabel `dcs.*`”, a tabele `dcs.*` już istnieją (1b.01 i dalsze Done) — bramka została w praktyce ominięta.
 
 ## Notatki z realizacji
+- 2026-09-23 tj: dropped — scalone z odbiorem Fazy 1 (DCS-1b.16): jedno demo 1a+1b wg docs/demo/1a21-demo-script.md przed mailem odbioru; bramka 1a→1b była w praktyce ominięta (Faza 1b zbudowana).
 - 2026-09-22: zaimportowane z Notion (https://app.notion.com/p/3c7c2fbc059581a380cff7ebfb727056).

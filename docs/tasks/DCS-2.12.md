@@ -2,6 +2,7 @@
 id: DCS-2.12
 title: "Daty Planned — wyliczenie jednorazowe przy tworzeniu MDR"
 status: todo
+kind: code             # code | client | ops | milestone
 difficulty: L
 model: null
 model_approved: null

@@ -2,6 +2,7 @@
 id: DCS-3.08
 title: "Eskalacja opóźnień powyżej 14 dni"
 status: todo
+kind: code             # code | client | ops | milestone
 difficulty: S
 model: null
 model_approved: null

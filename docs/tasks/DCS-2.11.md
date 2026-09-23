@@ -2,6 +2,7 @@
 id: DCS-2.11
 title: "Odpowiedzi Originatora na komentarze"
 status: todo
+kind: code             # code | client | ops | milestone
 difficulty: S
 model: null
 model_approved: null

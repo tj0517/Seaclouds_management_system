@@ -2,6 +2,7 @@
 id: DCS-5.11
 title: "Rozstrzygnąć punkt otwarty O-04: retencja audit logu i kopii zapasowych"
 status: todo
+kind: client             # code | client | ops | milestone
 difficulty: M
 model: null
 model_approved: null

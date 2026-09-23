@@ -2,6 +2,7 @@
 id: DCS-1b.09b
 title: "Wyścig hydratacji po logowaniu/MFA (React #418 na liście akcji profilu dokumentu)"
 status: done
+kind: code             # code | client | ops | milestone
 difficulty: L
 model: null
 model_approved: null

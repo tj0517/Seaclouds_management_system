@@ -2,6 +2,7 @@
 id: DCS-2.08
 title: "Blokada rozdziału obowiązków (Originator ≠ Checker, ale = Approver dozwolone)"
 status: todo
+kind: code             # code | client | ops | milestone
 difficulty: M
 model: null
 model_approved: null

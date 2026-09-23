@@ -2,6 +2,7 @@
 id: DCS-5.03
 title: "Raport budżetu godzinowego i eksport CTR do TES"
 status: todo
+kind: code             # code | client | ops | milestone
 difficulty: M
 model: null
 model_approved: null

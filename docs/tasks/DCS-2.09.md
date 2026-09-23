@@ -2,6 +2,7 @@
 id: DCS-2.09
 title: "Komentarze do rewizji i Review ID"
 status: todo
+kind: code             # code | client | ops | milestone
 difficulty: M
 model: null
 model_approved: null

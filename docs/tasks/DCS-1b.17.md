@@ -1,7 +1,8 @@
 ---
 id: DCS-1b.17
 title: "Foldery rewizji w storage (projekt / dokument / rewizja, tworzone automatycznie)"
-status: todo
+status: dropped
+kind: code             # code | client | ops | milestone
 difficulty: L
 model: null
 model_approved: null
@@ -49,6 +50,7 @@ Ref: brief sekcje 2.1, 6.6 · Właściciel wg planu klienta: TJE
 - Uwaga importu: wg decyzji z 1b.09 (niżej) ścieżka obiektu już ma postać projekt / dokument / rewizja, a `original_name` i wiele plików (NN) w rewizji są zrobione — zakres tego zadania może być w dużej części pokryty; do ustalenia odczytem.
 
 ## Notatki z realizacji
+- 2026-09-23 tj: dropped — pokryte przez DCS-1b.09: obiekty w buckecie dcs-documents mają klucz {project_code}/{scl_doc_number}/{scl_revision}/{file_name} (apps/dcs/lib/files.ts, revisionFolder/objectPath), original_name i wiele plików (NN) w rewizji działają; w Supabase Storage folder powstaje z pierwszym plikiem.
 - przed 2026-09-22 (z DCS-1b.09): bucket `dcs-documents` (private), ścieżka `{project_code}/{scl_doc_number}/{revision}/{file_name}`.
 - 2026-09-21 (z DCS-1b.09): PR #80 — bucket `dcs-documents` prywatny, 100 MB, bez białej listy MIME, 5 polityk storage, NOT NULL na `file_name`/`original_name`/`storage_path`, globalny limit Storage 100 MiB; na prod wdrożone ręcznie przez tj (`db push` + `config push`).
 - 2026-09-21 (z DCS-1b.09): PR #81 — nazwa wg §6.6 (`revision_date`, fallback data uploadu UTC; NN kolejne w rewizji; rozszerzenie lowercase); oryginalna nazwa jako `original_name`.

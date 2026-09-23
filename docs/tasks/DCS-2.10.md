@@ -2,6 +2,7 @@
 id: DCS-2.10
 title: "Generowanie Comment Sheet w formacie SCMS-SCL-LA-0001"
 status: todo
+kind: code             # code | client | ops | milestone
 difficulty: M
 model: null
 model_approved: null
