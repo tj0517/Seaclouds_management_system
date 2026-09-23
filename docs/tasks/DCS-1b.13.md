@@ -1,14 +1,15 @@
 ---
 id: DCS-1b.13
 title: "Skrypt importu SMDR → documents/revisions (146 dok.), generator ustawiony na kolejny wolny numer, raport rozbieżności"
-status: todo
+status: blocked
+kind: code             # code | client | ops | milestone
 difficulty: L
 model: null
 model_approved: null
 effort: null
 branch: null
-due: 2026-09-23
-depends_on: [DCS-1a.18, DCS-1a.19, DCS-1b.02, DCS-1b.04]
+due: null
+depends_on: [DCS-1a.18, DCS-1a.19, DCS-1b.02, DCS-1b.04, DCS-1b.12]
 blocked_by_questions: [O-05]
 touches_db: true
 touches_prod: false
@@ -23,6 +24,7 @@ Idempotentny skrypt importu SMDR do `dcs.*` z zachowaniem istniejących numerów
 
 ## Zakres
 - [ ] Odczyt stanu bieżącego (dodane przy imporcie)
+- [ ] Warunki wejścia (przejęte z DCS-0.1): zamrożona wersja `SCL_SMDR_v4.xlsx` od DC (zmiany po dacie zamrożenia logowane) i odpowiedź DC na O-05; wyniki analizy DCS-1b.12
 
 Kolejność (§13.3):
 1. [ ] Słowniki i użytkownicy — wg strony „zrobione w 1a.18 / 1a.19” (patrz Kontekst: 1a.19 ma status To Do)
@@ -62,6 +64,8 @@ Brief (§13.3): migracja jest testem akceptacyjnym Fazy 1b. Import z zachowaniem
 - Uwaga importu: `depends_on` obejmuje 1b.02 i 1b.04, bo strona wprost opiera się na ich mechanizmach (liczenie max z tabeli, trigger `documents_mdr_required`).
 
 ## Notatki z realizacji
+- 2026-09-23 tj: dodana zależność od DCS-1b.12 (import korzysta z jej raportu) i warunki wejścia przejęte z DCS-0.1.
+- 2026-09-23 tj: import SMDR z klientem odłożony — status blocked, termin zdjęty (poprzedni: 2026-09-23); nowy termin przy wznowieniu łańcucha 1a.19 / 1b.12 → 1b.13 → 1b.14 → 1b.15.
 - 2026-09-21 (z DCS-1b.10): blokada rewizji finalnych (`revisions.locked_at`) respektuje furtkę `dcs.import_mode` (poza DELETE) — import historycznych rewizji finalnych idzie przez tę furtkę, nie przez obejście triggera.
 - przed 2026-09-22 (z DCS-1a.18): słowniki startowe pochodzą z briefu (zał. A i B), nie z arkusza Legend — rozszerzona lista z Legend nigdy nie była używana i jest przycięta do 23 kodów `doc_type` z procedury (§13.2, D-03).
 - przed 2026-09-22 (z DCS-1a.18): `workflow_status` w słowniku: Not started, Started, IDC, IFR, RETCOM, IFC/IFI/IFB, Void; `workflow_step`: IDC, IFR, RETCOM, IFC, IFI, IFB.

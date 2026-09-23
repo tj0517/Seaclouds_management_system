@@ -1,28 +1,19 @@
 # DCS — tablica zadań
 
 Widok dla ludzi. **Źródłem prawdy jest plik zadania** (`DCS-<id>.md`); przy rozbieżności rozstrzyga plik, a tablicę się poprawia.
-Format zadania: [README.md](README.md). Zadania zaimportowane z Notion 2026-09-22; od tej daty Notion nie jest źródłem zadań.
+Format zadania: [README.md](README.md) (pole `kind` — rodzaj pracy). Zadania zaimportowane z Notion 2026-09-22; od tej daty Notion nie jest źródłem zadań.
 
-## Otwarte
+## Postęp kodu
+
+**46 / 76 zadań kodowych zamkniętych (61%)** — stan na 2026-09-23.
+Liczone tylko `kind: code`: zamknięte = zamknięte z Notion (42, bez 1a.21a — przygotowanie demo) + `done` w repo (4); otwarte = kodowe `todo`/`in_progress`/`review`/`blocked` (30). Nie wlicza się: prac poza kodem, odłożonych i porzuconych. Przy zmianie statusu zadania kodowego popraw tę linię.
+
+## Kod — otwarte
 
 | id | tytuł | status | trudność | zależności | pytania | due |
 |---|---|---|---|---|---|---|
-| [0.1](DCS-0.1.md) | Zamknąć warunki wejścia Fazy 1 (punkty otwarte O-01/03/04/05/06, słowniki od DC, zamrożony SMDR, dostępy) | todo | S | — | — | 2026-08-30 |
-| [1a.19](DCS-1a.19.md) | Import 9 brakujących projektów z arkusza Projects (klient, cykl, role z Orig/Ch'd/App'd) | todo | M | — | — | 2026-09-09 |
-| [1a.20](DCS-1a.20.md) | Potwierdzić backupy Supabase zgodnie z O-04 | todo | S | — | O-04 | 2026-09-09 |
-| [1a.21](DCS-1a.21.md) | Demo / bramka 1a→1b: login 2FA, role w SC2601, nowy projekt w kreatorze, edycja słownika, audit log | todo | S | — | — | 2026-09-09 |
-| [1a.25c](DCS-1a.25c.md) | Timesheet /mfa: test regresji w repo (Playwright, trzy tryby) | done | M | 1a.25b, 1b.07 | — | — |
-| [1a.27](DCS-1a.27.md) | Skan sekretów w CI (gitleaks) | todo | S | — | — | — |
-| [1b.04b](DCS-1b.04b.md) | New Document: stan „w toku”, projekt z kontekstu, informacja o nawigacji w toku | done | S | — | — | 2026-09-29 |
-| [1b.08b](DCS-1b.08b.md) | Stan „w toku" w oknie New Revision (przycisk zapisu bez informacji zwrotnej) | todo | S | — | — | 2026-09-29 |
-| [1b.09b](DCS-1b.09b.md) | Wyścig hydratacji po logowaniu/MFA (React #418 na liście akcji profilu dokumentu) | done | L | — | — | 2026-09-29 |
-| [1b.11](DCS-1b.11.md) | Ręczna zmiana statusu dokumentu przez DC + Void dokumentu (Faza 1: bez silnika obiegu) | done | S | 1b.10, 1b.02 | — | 2026-09-23 |
-| [1b.12](DCS-1b.12.md) | Analiza pliku SCL_SMDR_v4.xlsx: rozbieżności, puste daty, numery spoza formatu, mapowanie kolorów | todo | M | — | — | 2026-09-10 |
-| [1b.13](DCS-1b.13.md) | Skrypt importu SMDR → documents/revisions (146 dok.), generator ustawiony na kolejny wolny numer, raport rozbieżności | todo | L | 1a.18, 1a.19, 1b.02, 1b.04 | O-05 | 2026-09-23 |
-| [1b.14](DCS-1b.14.md) | Przejście raportu rozbieżności z DC pozycja po pozycji + poprawki importu | todo | M | 0.1 | — | 2026-09-28 |
-| [1b.15](DCS-1b.15.md) | Import na prod + pisemne potwierdzenie DC, że rejestr = plik; Excel do archiwum read-only | todo | M | 1b.14 | — | 2026-09-30 |
-| [1b.16](DCS-1b.16.md) | Odbiór Fazy 1: testy RLS dcs.* w CI, migracje na czystej bazie, backupy, kod w repo Sea Clouds, rev. 2 procedury KQ-0001 po stronie klienta | todo | S | — | O-04 | 2026-09-30 |
-| [1b.17](DCS-1b.17.md) | Foldery rewizji w storage (projekt / dokument / rewizja, tworzone automatycznie) | todo | L | 1b.09 | — | 2026-09-22 |
+| [1a.27](DCS-1a.27.md) | Skan sekretów w CI (gitleaks) — PR z kluczem w kodzie jest zatrzymany | todo | S | — | — | — |
+| [1b.08b](DCS-1b.08b.md) | Stan „w toku\" w oknie New Revision (przycisk zapisu bez informacji zwrotnej) | todo | S | — | — | 2026-09-29 |
 | [2.01](DCS-2.01.md) | Schemat approval_tasks i comments | todo | L | — | — | 2026-10-02 |
 | [2.02](DCS-2.02.md) | Silnik obiegu: tryb równoległy (IDC) | todo | L | — | — | 2026-10-16 |
 | [2.03](DCS-2.03.md) | Silnik obiegu: tryb szeregowy (IFR i wyżej) | todo | L | — | — | 2026-10-23 |
@@ -39,10 +30,6 @@ Format zadania: [README.md](README.md). Zadania zaimportowane z Notion 2026-09-2
 | [2.14](DCS-2.14.md) | Zmiana terminu etapu — przeniesienie do Forecast | todo | M | — | — | 2026-11-06 |
 | [2.15](DCS-2.15.md) | My Page: kolejka zadań użytkownika | todo | L | — | — | 2026-11-06 |
 | [2.16](DCS-2.16.md) | My Page: sekcja Ready for dispatch dla Document Controllera | todo | M | — | — | 2026-11-06 |
-| [2.17](DCS-2.17.md) | Testy obiegu na projekcie SC2602 | todo | L | — | — | 2026-11-06 |
-| [2.18](DCS-2.18.md) | Odbiór Fazy 2 (kamień milowy) | todo | L | 5.06 | — | 2026-11-06 |
-| [2.19](DCS-2.19.md) | Rozstrzygnąć punkt otwarty O-08: zasady zastępstw | todo | M | — | — | 2026-10-30 |
-| [3.01](DCS-3.01.md) | Ustalić format i szablon transmittalu (O-07) | todo | M | — | — | 2026-10-30 |
 | [3.02](DCS-3.02.md) | Transmittale: model danych i numeracja | todo | M | — | — | 2026-11-13 |
 | [3.03](DCS-3.03.md) | Tworzenie transmittalu i paczki do klienta | todo | M | — | — | 2026-11-13 |
 | [3.04](DCS-3.04.md) | Rejestr wysyłek i potwierdzenia | todo | S | — | — | 2026-11-13 |
@@ -50,20 +37,62 @@ Format zadania: [README.md](README.md). Zadania zaimportowane z Notion 2026-09-2
 | [3.06](DCS-3.06.md) | Powiadomienia natychmiastowe | todo | M | — | — | 2026-11-13 |
 | [3.07](DCS-3.07.md) | Podsumowanie tygodniowe (poniedziałek rano) | todo | M | — | — | 2026-11-20 |
 | [3.08](DCS-3.08.md) | Eskalacja opóźnień powyżej 14 dni | todo | S | — | — | 2026-11-20 |
-| [3.09](DCS-3.09.md) | Odbiór Fazy 3 (kamień milowy) | todo | L | — | — | 2026-11-20 |
 | [5.01](DCS-5.01.md) | Dashboard postępu dokumentacji | todo | S | — | — | 2026-11-20 |
 | [5.02](DCS-5.02.md) | Raport opóźnień wg dyscypliny i osoby | todo | S | — | — | 2026-11-27 |
 | [5.03](DCS-5.03.md) | Raport budżetu godzinowego i eksport CTR do TES | todo | M | — | — | 2026-11-20 |
 | [5.04](DCS-5.04.md) | Statystyka kodów akceptacji | todo | S | — | — | 2026-11-27 |
 | [5.05](DCS-5.05.md) | Operacje zbiorcze i zastępstwa | todo | S | — | — | 2026-11-27 |
-| [5.06](DCS-5.06.md) | Kopie zapasowe, retencja i TEST ODTWORZENIA | todo | L | — | — | 2026-11-20 |
-| [5.07](DCS-5.07.md) | Przegląd RODO i minimalizacji danych | todo | M | — | — | 2026-11-27 |
-| [5.08](DCS-5.08.md) | Instrukcja użytkownika DCS | todo | M | — | — | 2026-11-27 |
-| [5.09](DCS-5.09.md) | Szkolenie zespołu | todo | L | — | — | 2026-11-27 |
-| [5.10](DCS-5.10.md) | Odbiór końcowy — 30.11.2026 (kamień milowy końcowy) | todo | L | — | — | 2026-11-30 |
-| [5.11](DCS-5.11.md) | Rozstrzygnąć punkt otwarty O-04: retencja audit logu i kopii zapasowych | todo | M | — | — | 2026-11-13 |
-| [P.01](DCS-P.01.md) | Aktualizacja procedury SCMS-SCL-KQ-0001 do rev. 2 | todo | M | — | — | 2026-11-20 |
-| [P.02](DCS-P.02.md) | Wydanie briefu SCMS-SCL-SA-0001-PL rev. B (usunięcie sprzeczności) | todo | M | — | — | 2026-11-20 |
+
+## Poza kodem — klient, operacje, odbiory
+
+`client` — czeka na decyzję lub materiał od Sea Clouds · `ops` — praca poza repo (backupy, RODO, instrukcje, szkolenia, testy z użytkownikami) · `milestone` — odbiór etapu.
+
+| id | tytuł | rodzaj | status | trudność | zależności | pytania | due |
+|---|---|---|---|---|---|---|---|
+| [1b.16](DCS-1b.16.md) | Odbiór Fazy 1: testy RLS dcs.* w CI, migracje na czystej bazie, backupy, kod w repo Sea Clouds, rev. 2 procedury KQ-0001 po stronie klienta | milestone | todo | S | — | O-04 | 2026-09-30 |
+| [2.17](DCS-2.17.md) | Testy obiegu na projekcie SC2602 | ops | todo | L | — | — | 2026-11-06 |
+| [2.18](DCS-2.18.md) | Odbiór Fazy 2 (kamień milowy) | milestone | todo | L | 5.06 | — | 2026-11-06 |
+| [2.19](DCS-2.19.md) | Rozstrzygnąć punkt otwarty O-08: zasady zastępstw | client | todo | M | — | — | 2026-10-30 |
+| [3.01](DCS-3.01.md) | Ustalić format i szablon transmittalu (O-07) | client | todo | M | — | — | 2026-10-30 |
+| [3.09](DCS-3.09.md) | Odbiór Fazy 3 (kamień milowy) | milestone | todo | L | — | — | 2026-11-20 |
+| [5.06](DCS-5.06.md) | Kopie zapasowe, retencja i TEST ODTWORZENIA | ops | todo | L | — | — | 2026-11-20 |
+| [5.07](DCS-5.07.md) | Przegląd RODO i minimalizacji danych | ops | todo | M | — | — | 2026-11-27 |
+| [5.08](DCS-5.08.md) | Instrukcja użytkownika DCS | ops | todo | M | — | — | 2026-11-27 |
+| [5.09](DCS-5.09.md) | Szkolenie zespołu | ops | todo | L | — | — | 2026-11-27 |
+| [5.10](DCS-5.10.md) | Odbiór końcowy — 30.11.2026 (kamień milowy końcowy) | milestone | todo | L | — | — | 2026-11-30 |
+| [5.11](DCS-5.11.md) | Rozstrzygnąć punkt otwarty O-04: retencja audit logu i kopii zapasowych | client | todo | M | — | — | 2026-11-13 |
+| [P.01](DCS-P.01.md) | Aktualizacja procedury SCMS-SCL-KQ-0001 do rev. 2 | client | todo | M | — | — | 2026-11-20 |
+| [P.02](DCS-P.02.md) | Wydanie briefu SCMS-SCL-SA-0001-PL rev. B (usunięcie sprzeczności) | client | todo | M | — | — | 2026-11-20 |
+
+## Odłożone — import SMDR z klientem
+
+Odłożone przez tj 2026-09-23; terminy zdjęte (poprzednie w notatkach zadań). Nie wliczają się do postępu kodu. Wznowienie: 1a.19 / 1b.12 → 1b.13 → 1b.14 → 1b.15.
+
+| id | tytuł | rodzaj | status | trudność | zależności | pytania | due |
+|---|---|---|---|---|---|---|---|
+| [1a.19](DCS-1a.19.md) | Import 9 brakujących projektów z arkusza Projects (klient, cykl, role z Orig/Ch'd/App'd) | code | blocked | M | — | — | — |
+| [1b.12](DCS-1b.12.md) | Analiza pliku SCL_SMDR_v4.xlsx: rozbieżności, puste daty, numery spoza formatu, mapowanie kolorów | code | blocked | M | — | — | — |
+| [1b.13](DCS-1b.13.md) | Skrypt importu SMDR → documents/revisions (146 dok.), generator ustawiony na kolejny wolny numer, raport rozbieżności | code | blocked | L | 1a.18, 1a.19, 1b.02, 1b.04, 1b.12 | O-05 | — |
+| [1b.14](DCS-1b.14.md) | Przejście raportu rozbieżności z DC pozycja po pozycji + poprawki importu | client | blocked | M | 1b.13 | — | — |
+| [1b.15](DCS-1b.15.md) | Import na prod + pisemne potwierdzenie DC, że rejestr = plik; Excel do archiwum read-only | ops | blocked | M | 1b.14 | — | — |
+
+## Porzucone
+
+| id | tytuł | rodzaj | powód |
+|---|---|---|---|
+| [0.1](DCS-0.1.md) | Zamknąć warunki wejścia Fazy 1 (punkty otwarte O-01/03/04/05/06, słowniki od DC, zamrożony SMDR, dostępy) | client | rozbite: warunki wejścia importu (zamrożony SMDR, odpowiedź na O-05) przeniesione do DCS-1b.13; O-04 → DCS-5.11; O-03 rozstrzygnięte; O-01/O-06 żyją w docs/04-open-questions.md; zależność DCS-1b.14 przepięta na DCS-1b.13. |
+| [1a.20](DCS-1a.20.md) | Potwierdzić backupy Supabase zgodnie z O-04 | ops | duplikat DCS-5.06 (kopie zapasowe, retencja, test odtworzenia) i punktu listy odbioru DCS-1b.16; retencję rozstrzyga DCS-5.11 (O-04). |
+| [1a.21](DCS-1a.21.md) | Demo / bramka 1a→1b: login 2FA, role w SC2601, nowy projekt w kreatorze, edycja słownika, audit log | milestone | scalone z odbiorem Fazy 1 (DCS-1b.16): jedno demo 1a+1b wg docs/demo/1a21-demo-script.md przed mailem odbioru; bramka 1a→1b była w praktyce ominięta (Faza 1b zbudowana). |
+| [1b.17](DCS-1b.17.md) | Foldery rewizji w storage (projekt / dokument / rewizja, tworzone automatycznie) | code | pokryte przez DCS-1b.09: obiekty w buckecie dcs-documents mają klucz {project_code}/{scl_doc_number}/{scl_revision}/{file_name} (apps/dcs/lib/files.ts, revisionFolder/objectPath), original_name i wiele plików (NN) w rewizji działają; w Supabase Storage folder powstaje z pierwszym plikiem. |
+
+## Zamknięte w repo
+
+| id | tytuł | rodzaj | trudność |
+|---|---|---|---|
+| [1a.25c](DCS-1a.25c.md) | Timesheet /mfa: test regresji w repo (Playwright, trzy tryby) | code | M |
+| [1b.04b](DCS-1b.04b.md) | New Document: stan „w toku”, projekt z kontekstu, informacja o nawigacji w toku | code | S |
+| [1b.09b](DCS-1b.09b.md) | Wyścig hydratacji po logowaniu/MFA (React #418 na liście akcji profilu dokumentu) | code | L |
+| [1b.11](DCS-1b.11.md) | Ręczna zmiana statusu dokumentu przez DC + Void dokumentu (Faza 1: bez silnika obiegu) | code | S |
 
 ## Zamknięte (historia w Notion)
 

@@ -2,6 +2,7 @@
 id: DCS-5.08
 title: "Instrukcja użytkownika DCS"
 status: todo
+kind: ops             # code | client | ops | milestone
 difficulty: M
 model: null
 model_approved: null

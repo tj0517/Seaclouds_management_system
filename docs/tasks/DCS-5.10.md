@@ -2,6 +2,7 @@
 id: DCS-5.10
 title: "Odbiór końcowy — 30.11.2026 (kamień milowy końcowy)"
 status: todo
+kind: milestone             # code | client | ops | milestone
 difficulty: L
 model: null
 model_approved: null

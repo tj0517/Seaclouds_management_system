@@ -2,6 +2,7 @@
 id: DCS-1b.11
 title: "Ręczna zmiana statusu dokumentu przez DC + Void dokumentu (Faza 1: bez silnika obiegu)"
 status: done
+kind: code             # code | client | ops | milestone
 difficulty: S
 model: Sonnet
 model_approved: tj

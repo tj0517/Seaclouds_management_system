@@ -1,13 +1,14 @@
 ---
 id: DCS-1b.12
 title: "Analiza pliku SCL_SMDR_v4.xlsx: rozbieżności, puste daty, numery spoza formatu, mapowanie kolorów"
-status: todo
+status: blocked
+kind: code             # code | client | ops | milestone
 difficulty: M
 model: null
 model_approved: null
 effort: null
 branch: null
-due: 2026-09-10
+due: null
 depends_on: []
 blocked_by_questions: []
 touches_db: false
@@ -48,5 +49,6 @@ Brief (§13): źródłem migracji jest `SCL_SMDR_v4.xlsx` — 146 dokumentów w 
 - O-05 (mapowanie kolorów kolumny E na `workflow_status`) otwarte; zadanie ma dostarczyć listę wartości do tej decyzji.
 
 ## Notatki z realizacji
+- 2026-09-23 tj: import SMDR z klientem odłożony — status blocked, termin zdjęty (poprzedni: 2026-09-10); nowy termin przy wznowieniu łańcucha 1a.19 / 1b.12 → 1b.13 → 1b.14 → 1b.15.
 - 2026-09-22 (import): zadanie dostarcza materiał do rozstrzygnięcia O-05 (mapowanie kolorów), więc nie jest nim zablokowane; blokada zdjęta przy imporcie.
 - 2026-09-22: zaimportowane z Notion (https://app.notion.com/p/3c7c2fbc0595814cb418f772869cad16).

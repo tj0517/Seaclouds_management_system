@@ -2,6 +2,7 @@
 id: DCS-2.06
 title: "Obsługa odrzucenia dokumentu"
 status: todo
+kind: code             # code | client | ops | milestone
 difficulty: M
 model: null
 model_approved: null

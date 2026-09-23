@@ -1,7 +1,8 @@
 ---
 id: DCS-0.1
 title: "Zamknąć warunki wejścia Fazy 1 (punkty otwarte O-01/03/04/05/06, słowniki od DC, zamrożony SMDR, dostępy)"
-status: todo
+status: dropped
+kind: client             # code | client | ops | milestone
 difficulty: S
 model: null
 model_approved: null
@@ -48,5 +49,6 @@ Brief (sekcja 16) zostawia 10 punktów otwartych. Część z nich blokuje projek
 - Stan punktów wg `open-questions.txt` przy imporcie: O-01 otwarty (tylko naming portalu); O-04 otwarty; O-05 otwarty (nie blokuje rejestru 1b.05, paleta tymczasowa); O-06 otwarty (schemat w wariancie per projekt).
 
 ## Notatki z realizacji
+- 2026-09-23 tj: dropped — rozbite: warunki wejścia importu (zamrożony SMDR, odpowiedź na O-05) przeniesione do DCS-1b.13; O-04 → DCS-5.11; O-03 rozstrzygnięte; O-01/O-06 żyją w docs/04-open-questions.md; zależność DCS-1b.14 przepięta na DCS-1b.13.
 - 2026-09-22 (import): zadanie służy rozstrzygnięciu O-01, O-04, O-05, O-06, więc nie jest nim zablokowane; blokada zdjęta przy imporcie.
 - 2026-09-22: zaimportowane z Notion (https://app.notion.com/p/3c7c2fbc05958127bc16e39cc288f5cd).

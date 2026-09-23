@@ -2,6 +2,7 @@
 id: DCS-2.19
 title: "Rozstrzygnąć punkt otwarty O-08: zasady zastępstw"
 status: todo
+kind: client             # code | client | ops | milestone
 difficulty: M
 model: null
 model_approved: null

@@ -2,6 +2,7 @@
 id: DCS-5.02
 title: "Raport opóźnień wg dyscypliny i osoby"
 status: todo
+kind: code             # code | client | ops | milestone
 difficulty: S
 model: null
 model_approved: null

@@ -2,6 +2,7 @@
 id: DCS-3.06
 title: "Powiadomienia natychmiastowe"
 status: todo
+kind: code             # code | client | ops | milestone
 difficulty: M
 model: null
 model_approved: null

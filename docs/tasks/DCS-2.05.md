@@ -2,6 +2,7 @@
 id: DCS-2.05
 title: "Kody akceptacji 1–4 i końcowy kod dokumentu"
 status: todo
+kind: code             # code | client | ops | milestone
 difficulty: L
 model: null
 model_approved: null

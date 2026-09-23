@@ -2,6 +2,7 @@
 id: DCS-2.13
 title: "Edycja dat Forecast przez Originatora"
 status: todo
+kind: code             # code | client | ops | milestone
 difficulty: M
 model: null
 model_approved: null

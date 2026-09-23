@@ -2,6 +2,7 @@
 id: DCS-P.01
 title: "Aktualizacja procedury SCMS-SCL-KQ-0001 do rev. 2"
 status: todo
+kind: client             # code | client | ops | milestone
 difficulty: M
 model: null
 model_approved: null

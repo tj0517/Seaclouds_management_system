@@ -2,6 +2,7 @@
 id: DCS-1b.08b
 title: "Stan „w toku\" w oknie New Revision (przycisk zapisu bez informacji zwrotnej)"
 status: todo
+kind: code             # code | client | ops | milestone
 difficulty: S
 model: null
 model_approved: null

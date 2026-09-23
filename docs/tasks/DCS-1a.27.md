@@ -2,6 +2,7 @@
 id: DCS-1a.27
 title: "Skan sekretów w CI (gitleaks) — PR z kluczem w kodzie jest zatrzymany"
 status: todo
+kind: code             # code | client | ops | milestone
 difficulty: S
 model: null
 model_approved: null

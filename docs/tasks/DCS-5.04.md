@@ -2,6 +2,7 @@
 id: DCS-5.04
 title: "Statystyka kodów akceptacji"
 status: todo
+kind: code             # code | client | ops | milestone
 difficulty: S
 model: null
 model_approved: null

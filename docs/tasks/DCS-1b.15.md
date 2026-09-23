@@ -1,13 +1,14 @@
 ---
 id: DCS-1b.15
 title: "Import na prod + pisemne potwierdzenie DC, że rejestr = plik; Excel do archiwum read-only"
-status: todo
+status: blocked
+kind: ops             # code | client | ops | milestone
 difficulty: M
 model: null
 model_approved: null
 effort: null
 branch: null
-due: 2026-09-30
+due: null
 depends_on: [DCS-1b.14]
 blocked_by_questions: []
 touches_db: true
@@ -45,4 +46,5 @@ Kamień milowy Fazy 1b (brief §12.1): **„Excel przestaje być źródłem praw
 Kamień milowy Fazy 1b z briefu (§12.1): **„Excel przestaje być źródłem prawdy”**. Od tego dnia numery nadaje wyłącznie system, a arkusz jest archiwum.
 
 ## Notatki z realizacji
+- 2026-09-23 tj: import SMDR z klientem odłożony — status blocked, termin zdjęty (poprzedni: 2026-09-30); nowy termin przy wznowieniu łańcucha 1a.19 / 1b.12 → 1b.13 → 1b.14 → 1b.15.
 - 2026-09-22: zaimportowane z Notion (https://app.notion.com/p/3c7c2fbc0595815ea469d13bc8a3b449).

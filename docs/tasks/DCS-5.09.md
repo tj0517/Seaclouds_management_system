@@ -2,6 +2,7 @@
 id: DCS-5.09
 title: "Szkolenie zespołu"
 status: todo
+kind: ops             # code | client | ops | milestone
 difficulty: L
 model: null
 model_approved: null

@@ -2,6 +2,7 @@
 id: DCS-2.17
 title: "Testy obiegu na projekcie SC2602"
 status: todo
+kind: ops             # code | client | ops | milestone
 difficulty: L
 model: null
 model_approved: null

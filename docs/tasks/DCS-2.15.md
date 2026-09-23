@@ -2,6 +2,7 @@
 id: DCS-2.15
 title: "My Page: kolejka zadań użytkownika"
 status: todo
+kind: code             # code | client | ops | milestone
 difficulty: L
 model: null
 model_approved: null

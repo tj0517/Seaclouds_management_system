@@ -1,7 +1,8 @@
 ---
 id: DCS-1a.20
 title: "Potwierdzić backupy Supabase zgodnie z O-04"
-status: todo
+status: dropped
+kind: ops             # code | client | ops | milestone
 difficulty: S
 model: null
 model_approved: null
@@ -44,4 +45,5 @@ Brief (§3.5): kopia zapasowa bazy i plików codziennie, retencja minimum 30 dni
 - Strona mówi o projekcie Supabase `timesheet` — w repo projekt produkcyjny to `tfbzivfsqsgebegcvfah`; nazwa do potwierdzenia przy realizacji.
 
 ## Notatki z realizacji
+- 2026-09-23 tj: dropped — duplikat DCS-5.06 (kopie zapasowe, retencja, test odtworzenia) i punktu listy odbioru DCS-1b.16; retencję rozstrzyga DCS-5.11 (O-04).
 - 2026-09-22: zaimportowane z Notion (https://app.notion.com/p/3c7c2fbc0595815aa9c8d9e6cd9893a1).

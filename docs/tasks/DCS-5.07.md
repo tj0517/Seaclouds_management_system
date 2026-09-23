@@ -2,6 +2,7 @@
 id: DCS-5.07
 title: "Przegląd RODO i minimalizacji danych"
 status: todo
+kind: ops             # code | client | ops | milestone
 difficulty: M
 model: null
 model_approved: null

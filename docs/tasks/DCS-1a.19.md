@@ -1,13 +1,14 @@
 ---
 id: DCS-1a.19
 title: "Import 9 brakujących projektów z arkusza Projects (klient, cykl, role z Orig/Ch'd/App'd)"
-status: todo
+status: blocked
+kind: code             # code | client | ops | milestone
 difficulty: M
 model: null
 model_approved: null
 effort: null
 branch: null
-due: 2026-09-09
+due: null
 depends_on: []
 blocked_by_questions: []
 touches_db: true
@@ -44,4 +45,5 @@ Dołożyć do bazy 9 brakujących projektów z arkusza Projects i uzupełnić ws
 Arkusz Projects w `SCL_SMDR_v4.xlsx` ma 14 projektów; w TES jest 5 z nich (SC2505, SC2510, SC2601, SC2602, SC2605). Brakujące 9 trzeba dołożyć, a wszystkie 14 uzupełnić o klienta, cykl i role — to warunek bramki 1a → 1b i podstawa importu dokumentów w 1b.
 
 ## Notatki z realizacji
+- 2026-09-23 tj: import SMDR z klientem odłożony — status blocked, termin zdjęty (poprzedni: 2026-09-09); nowy termin przy wznowieniu łańcucha 1a.19 / 1b.12 → 1b.13 → 1b.14 → 1b.15.
 - 2026-09-22: zaimportowane z Notion (https://app.notion.com/p/3c7c2fbc059581f48704d5e3373c1c1a).

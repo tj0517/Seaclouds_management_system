@@ -7,6 +7,16 @@ jedynym źródłem prawdy o zadaniu. INDEX to tylko widok.
 Rozszerzenie DCS: pole `notion:` — link do strony źródłowej dla zadań zaimportowanych
 z Notion 2026-09-22 (tylko historia; Notion nie jest już źródłem zadań).
 
+Rozszerzenie DCS (2026-09-23): pole `kind:` — rodzaj pracy, zaraz pod `status:`.
+INDEX liczy z niego linię „Postęp kodu” i dzieli tablicę na kod i resztę.
+
+| kind | znaczenie |
+|---|---|
+| `code` | wynikiem jest PR z kodem, migracją, testem albo skryptem |
+| `client` | czeka na decyzję lub materiał od Sea Clouds (punkty otwarte, szablony, procedury) |
+| `ops` | praca poza repo: backupy, RODO, instrukcje, szkolenia, testy z użytkownikami |
+| `milestone` | odbiór etapu (kamień milowy) |
+
 ## Frontmatter
 
 ```yaml
@@ -14,6 +24,7 @@ z Notion 2026-09-22 (tylko historia; Notion nie jest już źródłem zadań).
 id: DCS-1b.10
 title: Blokada rewizji finalnych
 status: todo            # todo | in_progress | review | blocked | done | dropped
+kind: code              # code | client | ops | milestone (rozszerzenie DCS)
 difficulty: M           # S | M | L | XL
 model: null             # model agenta, wypełniany przy składaniu promptu
 model_approved: null    # np. "fable by tj 2026-09-22", tylko gdy polityka wymaga zgody
@@ -67,6 +78,6 @@ pr: null                # numer PR po otwarciu
 
 ## INDEX.md
 
-Tabela: `| id | tytuł | status | trudność | zależności | pytania | due |`. INDEX jest
+Tabele: kod otwarty `| id | tytuł | status | trudność | zależności | pytania | due |`, reszta z kolumną `rodzaj` (kind). Na górze linia „Postęp kodu”. INDEX jest
 widokiem dla ludzi. Przy rozbieżności rozstrzyga plik zadania, a skill proponuje
 poprawkę INDEX.

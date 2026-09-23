@@ -2,6 +2,7 @@
 id: DCS-3.01
 title: "Ustalić format i szablon transmittalu (O-07)"
 status: todo
+kind: client             # code | client | ops | milestone
 difficulty: M
 model: null
 model_approved: null

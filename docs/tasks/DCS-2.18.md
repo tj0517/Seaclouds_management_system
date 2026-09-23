@@ -2,6 +2,7 @@
 id: DCS-2.18
 title: "Odbiór Fazy 2 (kamień milowy)"
 status: todo
+kind: milestone             # code | client | ops | milestone
 difficulty: L
 model: null
 model_approved: null

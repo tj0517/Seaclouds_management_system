@@ -2,6 +2,7 @@
 id: DCS-1b.04b
 title: "New Document: stan „w toku”, projekt z kontekstu, informacja o nawigacji w toku"
 status: done
+kind: code             # code | client | ops | milestone
 difficulty: S
 model: null
 model_approved: null

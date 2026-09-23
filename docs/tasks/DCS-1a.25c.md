@@ -2,6 +2,7 @@
 id: DCS-1a.25c
 title: "Timesheet /mfa: test regresji w repo (Playwright, trzy tryby)"
 status: done
+kind: code             # code | client | ops | milestone
 difficulty: M
 model: null
 model_approved: null

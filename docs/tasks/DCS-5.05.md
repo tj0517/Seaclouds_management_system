@@ -2,6 +2,7 @@
 id: DCS-5.05
 title: "Operacje zbiorcze i zastępstwa"
 status: todo
+kind: code             # code | client | ops | milestone
 difficulty: S
 model: null
 model_approved: null

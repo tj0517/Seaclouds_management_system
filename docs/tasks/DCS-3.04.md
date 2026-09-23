@@ -2,6 +2,7 @@
 id: DCS-3.04
 title: "Rejestr wysyłek i potwierdzenia"
 status: todo
+kind: code             # code | client | ops | milestone
 difficulty: S
 model: null
 model_approved: null

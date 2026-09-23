@@ -2,6 +2,7 @@
 id: DCS-2.04
 title: "Distribute for IDC: wybór i zmiana recenzentów"
 status: todo
+kind: code             # code | client | ops | milestone
 difficulty: L
 model: null
 model_approved: null
