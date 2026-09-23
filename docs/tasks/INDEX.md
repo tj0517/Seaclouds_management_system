@@ -5,8 +5,8 @@ Format zadania: [README.md](README.md) (pole `kind` — rodzaj pracy). Zadania z
 
 ## Postęp kodu
 
-**46 / 76 zadań kodowych zamkniętych (61%)** — stan na 2026-09-23.
-Liczone tylko `kind: code`: zamknięte = zamknięte z Notion (42, bez 1a.21a — przygotowanie demo) + `done` w repo (4); otwarte = kodowe `todo`/`in_progress`/`review`/`blocked` (30). Nie wlicza się: prac poza kodem, odłożonych i porzuconych. Przy zmianie statusu zadania kodowego popraw tę linię.
+**46 / 84 zadań kodowych zamkniętych (55%)** — stan na 2026-09-23.
+Liczone tylko `kind: code`: zamknięte = zamknięte z Notion (42, bez 1a.21a — przygotowanie demo) + `done` w repo (4); otwarte = kodowe `todo`/`in_progress`/`review`/`blocked` (38). Nie wlicza się: prac poza kodem, odłożonych i porzuconych. Przy zmianie statusu zadania kodowego popraw tę linię.
 
 ## Kod — otwarte
 
@@ -14,6 +14,12 @@ Liczone tylko `kind: code`: zamknięte = zamknięte z Notion (42, bez 1a.21a —
 |---|---|---|---|---|---|---|
 | [1a.27](DCS-1a.27.md) | Skan sekretów w CI (gitleaks) — PR z kluczem w kodzie jest zatrzymany | todo | S | — | — | — |
 | [1b.08b](DCS-1b.08b.md) | Stan „w toku\" w oknie New Revision (przycisk zapisu bez informacji zwrotnej) | todo | S | — | — | 2026-09-29 |
+| [1b.18](DCS-1b.18.md) | Macierz osób i ról na stronie projektu (przydzielanie ról jednym kliknięciem) | todo | M | — | — | — |
+| [1b.19](DCS-1b.19.md) | DC edytuje ustawienia DCS projektu (cykle, budżet, numeracja CPY, status MDR) | todo | M | — | — | — |
+| [1b.20](DCS-1b.20.md) | Tabela dokumentów projektu: pełne nazwy typu, dyscypliny i obszaru | todo | S | — | — | — |
+| [1b.21](DCS-1b.21.md) | Słowniki: wyjaśnienie „Sort order” i „Est. budget (h)” w tabeli i formularzu | todo | S | — | — | — |
+| [1b.22](DCS-1b.22.md) | Okno edycji dokumentu dla DC (bez pól tworzących numer SCL) | todo | M | — | — | — |
+| [1b.23](DCS-1b.23.md) | Profil dokumentu: bez technicznego Document ID, pliki w „Current revision” tylko z nazwą | todo | S | — | — | — |
 | [2.01](DCS-2.01.md) | Schemat approval_tasks i comments | todo | L | — | — | 2026-10-02 |
 | [2.02](DCS-2.02.md) | Silnik obiegu: tryb równoległy (IDC) | todo | L | — | — | 2026-10-16 |
 | [2.03](DCS-2.03.md) | Silnik obiegu: tryb szeregowy (IFR i wyżej) | todo | L | — | — | 2026-10-23 |
@@ -22,14 +28,16 @@ Liczone tylko `kind: code`: zamknięte = zamknięte z Notion (42, bez 1a.21a —
 | [2.06](DCS-2.06.md) | Obsługa odrzucenia dokumentu | todo | M | — | — | 2026-10-23 |
 | [2.07](DCS-2.07.md) | Zamknięcie obiegu przez Document Controllera | todo | L | — | — | 2026-10-30 |
 | [2.08](DCS-2.08.md) | Blokada rozdziału obowiązków (Originator ≠ Checker, ale = Approver dozwolone) | todo | M | — | — | 2026-10-30 |
-| [2.09](DCS-2.09.md) | Komentarze do rewizji i Review ID | todo | M | — | — | 2026-10-30 |
-| [2.10](DCS-2.10.md) | Generowanie Comment Sheet w formacie SCMS-SCL-LA-0001 | todo | M | — | — | 2026-11-06 |
-| [2.11](DCS-2.11.md) | Odpowiedzi Originatora na komentarze | todo | S | — | — | 2026-11-06 |
+| [2.09](DCS-2.09.md) | Komentarze do rewizji jako adnotacje na PDF: model danych, Review ID | todo | L | 2.01, 2.20 | — | 2026-10-30 |
+| [2.10](DCS-2.10.md) | Generowanie Comment Sheet w formacie SCMS-SCL-LA-0001 | todo | M | 2.09 | O-17 | 2026-11-06 |
+| [2.11](DCS-2.11.md) | Odpowiedzi Originatora na komentarze | todo | M | 2.09 | — | 2026-11-06 |
 | [2.12](DCS-2.12.md) | Daty Planned — wyliczenie jednorazowe przy tworzeniu MDR | todo | L | P.02 | — | 2026-10-30 |
 | [2.13](DCS-2.13.md) | Edycja dat Forecast przez Originatora | todo | M | — | — | 2026-10-30 |
 | [2.14](DCS-2.14.md) | Zmiana terminu etapu — przeniesienie do Forecast | todo | M | — | — | 2026-11-06 |
 | [2.15](DCS-2.15.md) | My Page: kolejka zadań użytkownika | todo | L | — | — | 2026-11-06 |
 | [2.16](DCS-2.16.md) | My Page: sekcja Ready for dispatch dla Document Controllera | todo | M | — | — | 2026-11-06 |
+| [2.20](DCS-2.20.md) | Podgląd PDF w profilu dokumentu (PDF.js) | todo | M | — | — | — |
+| [2.21](DCS-2.21.md) | Adnotacje na PDF w podglądzie: pinezka, obszar, tekst, lista komentarzy | todo | XL | 2.20, 2.09 | — | — |
 | [3.02](DCS-3.02.md) | Transmittale: model danych i numeracja | todo | M | — | — | 2026-11-13 |
 | [3.03](DCS-3.03.md) | Tworzenie transmittalu i paczki do klienta | todo | M | — | — | 2026-11-13 |
 | [3.04](DCS-3.04.md) | Rejestr wysyłek i potwierdzenia | todo | S | — | — | 2026-11-13 |

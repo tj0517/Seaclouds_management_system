@@ -9,8 +9,8 @@ model_approved: null
 effort: null
 branch: null
 due: 2026-11-06
-depends_on: []
-blocked_by_questions: []
+depends_on: [DCS-2.09]
+blocked_by_questions: [O-17]
 touches_db: TODO
 touches_prod: false
 pr: null
@@ -42,5 +42,6 @@ Nazwa pliku: `[NR]_[REV]_COM.xlsx`. Arkusz dołączany do kolejnej rewizji jako 
 - Ref: brief sekcje 6.6, procedura 5.3 · TJE
 
 ## Notatki z realizacji
+- 2026-09-23 tj: Comment Sheet = eksport adnotacji z PDF (każda adnotacja jako wiersz ze stroną i odniesieniem); czeka na szablon od klienta (O-17).
 - 2026-09-22: zaimportowane z Notion (https://app.notion.com/p/3ccc2fbc059581d18802dc3bf6086b85).
 - 2026-09-22: `touches_db: TODO` — strona nie mówi, czy logika żyje w bazie (funkcje/triggery/constrainty), czy w aplikacji; do rozstrzygnięcia przed startem.
