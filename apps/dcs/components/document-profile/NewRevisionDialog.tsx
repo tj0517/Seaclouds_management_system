@@ -23,8 +23,7 @@
 // After saving, the dialog closes and the page navigates to the Revisions tab
 // with the new row expanded (`?tab=revisions&open=<id>`) — the tab is a query
 // parameter because this dialog lives in the panel beside the tabs.
-import { useEffect, useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { SELECT_CLASS } from '@/components/AddMemberForm'
 import { Button } from '@/components/ui/button'
@@ -64,9 +63,7 @@ const optionLabel = (option: Option) => (option.label && option.label !== option
 
 export default function NewRevisionDialog({ config }: { config: NewRevisionFormConfig }) {
   const { documentId, documentNumber, steps, acceptanceCodes, scl, cpy } = config
-  const router = useRouter()
-  const { run, pending: actionPending } = usePendingAction()
-  const [navigating, startNavigation] = useTransition()
+  const { run, navigate, pending } = usePendingAction()
 
   const [open, setOpen] = useState(false)
   const [stepId, setStepId] = useState(config.defaultStepId)
@@ -78,14 +75,22 @@ export default function NewRevisionDialog({ config }: { config: NewRevisionFormC
   const [acceptanceCodeId, setAcceptanceCodeId] = useState('')
   const [proposal, setProposal] = useState<Proposal | null>(null)
   const [error, setError] = useState<string | null>(null)
-
-  const pending = actionPending || navigating
+  // Set once the new revision is created. The dialog is then shown closed on the first render in
+  // which the destination route (Revisions tab, new row expanded) has committed (`pending` false
+  // again) — same pattern as AddFileDialog (1b.09): closing on `setOpen(false)` alone let the
+  // dialog vanish before the new row was in the DOM (DCS 1b.08b, tj 2026-09-22).
+  const [closeWhenNavigated, setCloseWhenNavigated] = useState(false)
+  const shown = open && !(closeWhenNavigated && !pending)
 
   // The proposal for the step on screen. Async results only touch state after the
   // await, and a result that arrives for a step the user has already left is
   // dropped — the request that answers the CURRENT step is the one that shows.
+  // Keyed on `shown`, not `open`: `open` stays true from the click that creates a
+  // revision until the trigger is clicked again (closeWhenNavigated hides the
+  // dialog without resetting `open`), so keying on it would skip the refetch on
+  // the very next open when stepId happens to be unchanged (e.g. A -> B, both IDC).
   useEffect(() => {
-    if (!open || !stepId) return
+    if (!shown || !stepId) return
     let stale = false
     void proposeRevisionCode({ documentId, stepId }).then((result) => {
       if (!stale) setProposal({ stepId, result })
@@ -93,7 +98,7 @@ export default function NewRevisionDialog({ config }: { config: NewRevisionFormC
     return () => {
       stale = true
     }
-  }, [open, stepId, documentId])
+  }, [shown, stepId, documentId])
 
   const loading = proposal?.stepId !== stepId
   const proposedCode = proposal && proposal.stepId === stepId && proposal.result.ok ? proposal.result.data.code : null
@@ -108,6 +113,7 @@ export default function NewRevisionDialog({ config }: { config: NewRevisionFormC
     setAcceptanceCodeId('')
     setProposal(null)
     setError(null)
+    setCloseWhenNavigated(false)
   }
 
   const dateValid = isValidDateString(revisionDate)
@@ -138,13 +144,14 @@ export default function NewRevisionDialog({ config }: { config: NewRevisionFormC
       setError(result.message ?? result.error)
       return
     }
-    setOpen(false)
-    startNavigation(() => router.push(`/documents/${documentId}?tab=revisions&open=${result.data.id}`))
+    // Stay open, spinner on "Creating…", until the Revisions tab with the new row has committed.
+    setCloseWhenNavigated(true)
+    navigate(`/documents/${documentId}?tab=revisions&open=${result.data.id}`)
   }
 
   return (
     <Dialog
-      open={open}
+      open={shown}
       onOpenChange={(next) => {
         if (!next && pending) return
         setOpen(next)

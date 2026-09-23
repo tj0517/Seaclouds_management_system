@@ -32,6 +32,10 @@ export default function ApproveRevisionButton({
   const { run, refresh, pending } = usePendingAction()
   const [open, setOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Same pattern as AddFileDialog (1b.09) / NewRevisionDialog (1b.08b): stay open, on
+  // "Approving…", until the refreshed tree — the Approved badge, files gated — has committed.
+  const [closeWhenRefreshed, setCloseWhenRefreshed] = useState(false)
+  const shown = open && !(closeWhenRefreshed && !pending)
 
   const submit = async () => {
     setError(null)
@@ -41,17 +45,20 @@ export default function ApproveRevisionButton({
       setError(result.message ?? result.error)
       return
     }
-    setOpen(false)
+    setCloseWhenRefreshed(true)
     refresh()
   }
 
   return (
     <Dialog
-      open={open}
+      open={shown}
       onOpenChange={(next) => {
         if (!next && pending) return
         setOpen(next)
-        if (next) setError(null)
+        if (next) {
+          setError(null)
+          setCloseWhenRefreshed(false)
+        }
       }}
     >
       <DialogTrigger asChild>

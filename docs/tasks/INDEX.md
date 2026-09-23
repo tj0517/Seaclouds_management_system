@@ -13,7 +13,7 @@ Liczone tylko `kind: code`: zamknięte = zamknięte z Notion (42, bez 1a.21a —
 | id | tytuł | status | trudność | zależności | pytania | due |
 |---|---|---|---|---|---|---|
 | [1a.27](DCS-1a.27.md) | Skan sekretów w CI (gitleaks) — PR z kluczem w kodzie jest zatrzymany | todo | S | — | — | — |
-| [1b.08b](DCS-1b.08b.md) | Stan „w toku\" w oknie New Revision (przycisk zapisu bez informacji zwrotnej) | todo | S | — | — | 2026-09-29 |
+| [1b.08b](DCS-1b.08b.md) | Stan „w toku\" w oknie New Revision (przycisk zapisu bez informacji zwrotnej) | in_progress | S | — | — | 2026-09-29 |
 | [1b.18](DCS-1b.18.md) | Macierz osób i ról na stronie projektu (przydzielanie ról jednym kliknięciem) | todo | M | — | — | — |
 | [1b.19](DCS-1b.19.md) | DC edytuje ustawienia DCS projektu (cykle, budżet, numeracja CPY, status MDR) | todo | M | — | — | — |
 | [1b.20](DCS-1b.20.md) | Tabela dokumentów projektu: pełne nazwy typu, dyscypliny i obszaru | todo | S | — | — | — |

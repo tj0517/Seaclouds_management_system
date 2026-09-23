@@ -31,7 +31,7 @@
 // Optional environment: E2E_BASE_URL, E2E_SUPABASE_URL, E2E_ANON_KEY (else
 // NEXT_PUBLIC_SUPABASE_ANON_KEY, else apps/dcs/.env.local), E2E_DB_CONTAINER,
 // E2E_SHOTS (screenshot directory, default: the OS temp dir).
-/* global document */
+/* global document, window, MutationObserver */
 import { chromium } from 'playwright'
 import crypto from 'node:crypto'
 import { execSync } from 'node:child_process'
@@ -224,6 +224,41 @@ const createAndLand = async (page) => {
   await page.waitForSelector('[data-revision-row]', { timeout: 15000 })
 }
 
+/**
+ * Arms a MutationObserver in the page (same pattern as revision-files.mjs's armSampler, DCS
+ * 1b.09). From now until readSamples(), every DOM change records whether an in-progress
+ * indicator is on screen (the dialog's spinner, "Creating…") and whether the row
+ * `rowSelector` names is already in the list — proof for DCS 1b.08b: the dialog must not
+ * close, leaving neither, between the click and the new row landing.
+ */
+async function armSampler(page, rowSelector) {
+  await page.evaluate((selector) => {
+    window.__sampler?.disconnect()
+    window.__samples = []
+    const snap = () => {
+      const dlg = document.querySelector('[role=dialog]')
+      const button = dlg?.querySelector('button[type=submit]')
+      window.__samples.push({
+        open: dlg?.getAttribute('data-state') === 'open',
+        label: button?.textContent?.trim() ?? '',
+        disabled: button ? button.disabled : null,
+        indicator: !!document.querySelector('[role=dialog] .animate-spin') || /Creating…/.test(document.body.innerText),
+        row: !!document.querySelector(selector),
+      })
+    }
+    window.__sampler = new MutationObserver(snap)
+    window.__sampler.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['disabled', 'data-state'] })
+  }, rowSelector)
+}
+const readSamples = (page) => page.evaluate(() => window.__samples)
+/** The samples between the click (first one with the indicator) and the first one with the row present, inclusive. */
+function fromClickToRow(samples) {
+  const start = samples.findIndex((e) => e.indicator)
+  if (start < 0) return []
+  const end = samples.findIndex((e, i) => i >= start && e.row)
+  return samples.slice(start, end < 0 ? samples.length : end + 1)
+}
+
 const browser = await chromium.launch()
 
 // =================================================================
@@ -276,7 +311,15 @@ const browser = await chromium.launch()
   // ---- second revision ----
   await openDialog(page)
   rec('a: the second revision is proposed as B — same step as the current revision, plus one', (await proposed(page)) === 'B')
+  await armSampler(page, '[data-revision-row="B"]')
   await createAndLand(page)
+  const spanB = fromClickToRow(await readSamples(page))
+  const staleB = spanB.filter((e) => !e.indicator && !e.row)
+  rec(
+    'a/1b.08b: no sample between the click and the new row shows the dialog gone with neither the "Creating…" indicator nor the row — the dialog does not close early',
+    spanB.length > 0 && staleB.length === 0,
+    staleB.length ? `stale samples: ${JSON.stringify(staleB.slice(0, 3))}` : `${spanB.length} samples from the click to the row`,
+  )
   const rowB = page.locator('[data-revision-row="B"]')
   const rowA2 = page.locator('[data-revision-row="A"]')
   rec('a: B is current and expanded, A is SUPERSEDED and collapsed', (await rowB.innerText()).includes('Current') && /SUPERSEDED/.test(await rowA2.innerText()) && (await page.locator('[data-revision-files="B"]').count()) === 1 && (await page.locator('[data-revision-files="A"]').count()) === 0)
@@ -302,10 +345,27 @@ const browser = await chromium.launch()
   const mdr = psql(`select scl_revision || '|' || coalesce(issue_date::text, '') || '|' || workflow_status_code from dcs.v_mdr where document_id = '${D_ORIG}'`)
   rec('a/6: dcs.v_mdr shows the new SCL revision, its date and the document status — the view is unchanged', mdr === `00|${today}|STARTED`, mdr)
 
+  // ---- DCS 1b.08b: a double click on Create revision makes exactly one revision ----
+  await openDialog(page)
+  rec('1b.08b: the fourth revision is proposed as 01 (IFR continues past 00)', (await proposed(page)) === '01')
+  await dialog(page)
+    .locator('#revision-reason')
+    .fill('E2E double-click guard')
+  const beforeDbl = page.url()
+  await dialog(page).getByRole('button', { name: 'Create revision' }).dblclick()
+  await page.waitForURL((u) => u.searchParams.get('tab') === 'revisions' && u.href !== beforeDbl, { timeout: 15000 })
+  await page.waitForLoadState('networkidle')
+  await page.waitForSelector('[data-revision-row="01"]', { timeout: 15000 })
+  rec(
+    '1b.08b/DB: a double click on Create revision stores exactly one new revision (01, not 01 and 02)',
+    revisionsOf(D_ORIG) === 'A:SUPERSEDED,B:SUPERSEDED,00:SUPERSEDED,01:IFR' && docState(D_ORIG) === 'STARTED|01',
+    `${revisionsOf(D_ORIG)} / ${docState(D_ORIG)}`,
+  )
+
   // The panel and the History tab.
   await go(page, url)
   t = await text(page)
-  rec('a: the current-revision panel shows 00 / IFR', /SCL revision\s*\n?\s*00/.test(t))
+  rec('a: the current-revision panel shows 01 / IFR', /SCL revision\s*\n?\s*01/.test(t))
   await page.getByRole('tab', { name: 'History' }).click()
   await ctx.close()
 
