@@ -31,6 +31,10 @@ export default function VoidDocumentDialog({ documentId, documentNumber }: { doc
   const [open, setOpen] = useState(false)
   const [reason, setReason] = useState('')
   const [error, setError] = useState<string | null>(null)
+  // Same pattern as AddFileDialog (1b.09) / NewRevisionDialog (1b.08b): stay open, on "Voiding…",
+  // until the refreshed tree — document shown as Void — has committed.
+  const [closeWhenRefreshed, setCloseWhenRefreshed] = useState(false)
+  const shown = open && !(closeWhenRefreshed && !pending)
 
   const reasonValid = reason.trim() !== ''
 
@@ -46,19 +50,20 @@ export default function VoidDocumentDialog({ documentId, documentNumber }: { doc
       setError(result.message ?? result.error)
       return
     }
-    setOpen(false)
+    setCloseWhenRefreshed(true)
     refresh()
   }
 
   return (
     <Dialog
-      open={open}
+      open={shown}
       onOpenChange={(next) => {
         if (!next && pending) return
         setOpen(next)
         if (next) {
           setReason('')
           setError(null)
+          setCloseWhenRefreshed(false)
         }
       }}
     >

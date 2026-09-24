@@ -30,7 +30,7 @@
 // Optional environment: E2E_BASE_URL, E2E_SUPABASE_URL, E2E_ANON_KEY (else
 // NEXT_PUBLIC_SUPABASE_ANON_KEY, else apps/dcs/.env.local), E2E_DB_CONTAINER,
 // E2E_SHOTS (screenshot directory, default: the OS temp dir).
-/* global document */
+/* global document, window, MutationObserver */
 import { chromium } from 'playwright'
 import crypto from 'node:crypto'
 import { execSync } from 'node:child_process'
@@ -230,6 +230,40 @@ const documentFieldAudit = (doc) =>
       order by occurred_at`,
   )
 
+/**
+ * Arms a MutationObserver in the page (same pattern as revision-files.mjs's armSampler, DCS
+ * 1b.09, and new-revision.mjs's, DCS 1b.08b). From now until readSamples(), every DOM change
+ * records whether an in-progress indicator is on screen (the dialog's spinner, "Approving…" /
+ * "Voiding…") and whether `targetText` is already visible in the body — proof for DCS 1b.08b's
+ * scope item 4 (the same close-before-refresh-commits bug found in VoidDocumentDialog and
+ * ApproveRevisionButton, fixed with the AddFileDialog pattern): the dialog must not close,
+ * leaving neither, between the click and the refreshed page showing the result.
+ */
+async function armSampler(page, targetText) {
+  await page.evaluate((text) => {
+    window.__sampler?.disconnect()
+    window.__samples = []
+    const snap = () => {
+      const dlg = document.querySelector('[role=dialog]')
+      window.__samples.push({
+        open: dlg?.getAttribute('data-state') === 'open',
+        indicator: !!document.querySelector('[role=dialog] .animate-spin') || /Approving…|Voiding…/.test(document.body.innerText),
+        target: document.body.innerText.includes(text),
+      })
+    }
+    window.__sampler = new MutationObserver(snap)
+    window.__sampler.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['disabled', 'data-state'] })
+  }, targetText)
+}
+const readSamples = (page) => page.evaluate(() => window.__samples)
+/** The samples between the click (first one with the indicator) and the first one with the target text present, inclusive. */
+function fromClickToTarget(samples) {
+  const start = samples.findIndex((e) => e.indicator)
+  if (start < 0) return []
+  const end = samples.findIndex((e, i) => i >= start && e.target)
+  return samples.slice(start, end < 0 ? samples.length : end + 1)
+}
+
 const browser = await chromium.launch()
 
 // =================================================================
@@ -318,9 +352,17 @@ const browser = await chromium.launch()
   const approveBtn = page.locator('aside[aria-label="Current revision"] button', { hasText: 'Approve' })
   await approveBtn.click()
   await page.waitForSelector('text=cannot be undone')
+  await armSampler(page, 'Approved')
   await page.getByRole('dialog').getByRole('button', { name: 'Approve' }).click()
-  await page.waitForTimeout(1000)
+  await page.waitForFunction(() => document.body.innerText.includes('Approved'), null, { timeout: 15000 })
   await page.waitForSelector('h1')
+  const spanApprove = fromClickToTarget(await readSamples(page))
+  const staleApprove = spanApprove.filter((e) => !e.indicator && !e.target)
+  rec(
+    'c/1b.08b: no sample between the click and the Approved badge shows the dialog gone with neither the "Approving…" indicator nor the badge',
+    spanApprove.length > 0 && staleApprove.length === 0,
+    staleApprove.length ? `stale samples: ${JSON.stringify(staleApprove.slice(0, 3))}` : `${spanApprove.length} samples from the click to the badge`,
+  )
   const panelText = await page.locator('aside[aria-label="Current revision"]').innerText()
   rec('c: the panel shows the Approved badge', panelText.includes('Approved'))
   const addFileBtn = page.locator('aside[aria-label="Current revision"] button', { hasText: 'Add File' })
@@ -335,9 +377,17 @@ const browser = await chromium.launch()
   await shot(page, 'status-d1-void-dialog-empty-reason')
   const REASON = 'E2E 1b.11: client cancelled the scope after the design freeze'
   await page.getByLabel('Reason').fill(REASON)
+  await armSampler(page, REASON)
   await voidSubmit.click()
-  await page.waitForTimeout(1000)
+  await page.waitForFunction((text) => document.body.innerText.includes(text), REASON, { timeout: 15000 })
   await page.waitForSelector('h1')
+  const spanVoid = fromClickToTarget(await readSamples(page))
+  const staleVoid = spanVoid.filter((e) => !e.indicator && !e.target)
+  rec(
+    'd/1b.08b: no sample between the click and the stored reason appearing shows the dialog gone with neither the "Voiding…" indicator nor the reason',
+    spanVoid.length > 0 && staleVoid.length === 0,
+    staleVoid.length ? `stale samples: ${JSON.stringify(staleVoid.slice(0, 3))}` : `${spanVoid.length} samples from the click to the reason`,
+  )
   const afterVoid = await page.locator('main').innerText()
   rec('d: the document shows Void and the stored reason', afterVoid.includes(REASON))
   await shot(page, 'status-d2-void-document', { fullPage: true })

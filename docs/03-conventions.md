@@ -402,8 +402,10 @@ Zapisane przy DCS 1b.07 (2026-09-20).
   | `DictionaryEntryDialog`, `DictionaryTypeTable` | `/admin/dictionaries` | `e2e:pending` |
   | `MdrToolbar` (zapisz, zmień nazwę, domyślny, usuń; eksport tylko `run`) | `/mdr` | `e2e:pending` |
   | `CreateProjectWizard`, `DocumentCreateForm` | `/admin/projects/new`, `/documents/new` | `e2e:pending` |
-  | `NewRevisionDialog` | `/documents/[id]` | `e2e:revision` |
+  | `NewRevisionDialog` | `/documents/[id]` | `e2e:revision` (od DCS 1b.08b: `armSampler`/`fromClickToRow` — żadna próbka między kliknięciem a nowym wierszem nie pokazuje okna zniknionego bez wskaźnika „Creating…” ani bez wiersza; podwójne kliknięcie na „Create revision” tworzy dokładnie jedną rewizję) |
   | `AddFileDialog` (panel i rozwinięty wiersz zakładki Revisions) | `/documents/[id]` | `e2e:pending` (`addfile`, `E2E_PROBE_N`), `e2e:files` |
+  | `VoidDocumentDialog` | `/documents/[id]` | `e2e:status` (DCS 1b.08b: `armSampler`/`fromClickToTarget` na sekcji `d` — żadna próbka między kliknięciem a pojawieniem się zapisanego powodu nie pokazuje okna zniknionego bez wskaźnika „Voiding…” ani bez powodu) |
+  | `ApproveRevisionButton` | `/documents/[id]` | `e2e:status` (DCS 1b.08b: ten sam wzorzec na sekcji `c` — żadna próbka między kliknięciem a odznaką „Approved” nie pokazuje okna zniknionego bez wskaźnika „Approving…” ani bez odznaki) |
 - **Czwarty skrypt, `e2e:files` (DCS 1b.09 PR 2):** `apps/dcs/e2e/revision-files.mjs`, te same
   wymagania, ta sama fixtura (od 1b.09 zakłada też `tes.profile@local.test` — członek TES bez
   roli DCS — i `view.profile@local.test`, rola `view`). Tworzy własny dokument z dwiema rewizjami
