@@ -3030,3 +3030,26 @@ nothing in the schema or the app reconciles the two — no CHECK ties them toget
 back toward the other. Recorded, not fixed: the Phase 2 workflow engine is expected to own this
 relationship properly; until then the DC is trusted to keep them sensible, the same trust the manual status
 ladder on the document itself already relies on.
+
+## iii) `ci` job `Start local Supabase stack (database only)` — Docker Hub rate limit on the runner (DCS 1b.08b, PR #92, 2026-09-23)
+
+Three consecutive `ci` runs on PR #92 (`feat/dcs-1b08b-new-revision-pending`) failed in the same step,
+`Start local Supabase stack (database only)`, all with the identical Docker/GHCR pull error, not a test
+failure:
+
+```
+failed to display json stream: error pulling image configuration: download failed after attempts=1: toomanyrequests: retry-after: 216.841µs, allowed: 44000/minute
+Try rerunning the command with --debug to troubleshoot the error.
+##[error]Process completed with exit code 1.
+```
+
+(Run 35904869666, attempts 1–3, jobs 107329904564 / 107330406582 / 107330753919 — same message each
+time, pulling `ghcr.io/supabase/postgres:17.6.1.075` and other stack images before any pgTAP or app
+code runs.) The PR's diff touches only `apps/dcs/components/document-profile/*.tsx`,
+`apps/dcs/e2e/new-revision.mjs` and two `docs/tasks/*.md` files — nothing in `supabase/`, CI config, or
+the Docker image pins — so this is the runner hitting a registry rate limit, not a regression from this
+PR. Not reproduced locally (`supabase db reset` ran clean repeatedly against the same images, just
+already cached on this machine). Recorded, not fixed: nothing in this repo controls GitHub-hosted
+runners' shared egress IP or Docker Hub's anonymous-pull quota. If this becomes frequent, the fix belongs
+in `.github/workflows/ci.yml` (authenticated GHCR/Docker Hub pull, or an image cache step), not in a
+retry loop.
