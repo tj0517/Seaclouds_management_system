@@ -142,4 +142,49 @@ export const holds = (page, fn, arg, timeout) => page.waitForFunction(fn, arg, {
 
 export const shot = (page, name, options = {}) => page.screenshot({ path: path.join(SHOTS, `${name}.png`), caret: 'initial', ...options })
 
+/**
+ * Arms a MutationObserver in the page. From now until readSamples(), every DOM
+ * change records whether an in-progress indicator is on screen (a progress bar,
+ * a spinner, or the pending button label matched by `pendingLabel`) and whether
+ * the row/output `rowSelector` names is already there. The stale-list rule:
+ * every sample has one or the other. Moved here from revision-files.mjs (DCS
+ * 1b.09) when a third script (DCS 1b.08b) needed it (docs/deferred-tasks.md, yy);
+ * behaviour is unchanged from the original.
+ */
+export async function armSampler(page, rowSelector, pendingLabel = /Adding…/) {
+  await page.evaluate(
+    ({ selector, labelSource }) => {
+      // One observer at a time: the previous one would keep answering for ITS row.
+      window.__sampler?.disconnect()
+      window.__samples = []
+      const labelRe = new RegExp(labelSource)
+      const snap = () => {
+        const dialog = document.querySelector('[role=dialog]')
+        const bar = document.querySelector('[role=dialog] [role=progressbar]')
+        const button = document.querySelector('[role=dialog] button[type=submit]')
+        window.__samples.push({
+          open: dialog?.getAttribute('data-state') === 'open',
+          value: bar ? Number(bar.getAttribute('aria-valuenow')) : null,
+          text: bar?.parentElement?.querySelector('p')?.textContent ?? '',
+          label: button?.textContent?.trim() ?? '',
+          disabled: button ? button.disabled : null,
+          indicator: !!bar || !!document.querySelector('.animate-spin') || labelRe.test(document.body.innerText),
+          row: !!document.querySelector(selector),
+        })
+      }
+      window.__sampler = new MutationObserver(snap)
+      window.__sampler.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['aria-valuenow', 'disabled', 'data-state'] })
+    },
+    { selector: rowSelector, labelSource: pendingLabel.source },
+  )
+}
+export const readSamples = (page) => page.evaluate(() => window.__samples)
+/** The samples between the click (first one with the dialog busy) and the first one with the row present, inclusive. */
+export function fromClickToRow(samples) {
+  const start = samples.findIndex((e) => e.indicator)
+  if (start < 0) return []
+  const end = samples.findIndex((e, i) => i >= start && e.row)
+  return samples.slice(start, end < 0 ? samples.length : end + 1)
+}
+
 export { here }

@@ -43,12 +43,12 @@
 // Optional environment: E2E_BASE_URL, E2E_SUPABASE_URL, E2E_ANON_KEY, E2E_DB_CONTAINER,
 // E2E_SHOTS, E2E_SKIP_EXPIRY=1 (skips the 61 s wait for the expired-URL check),
 // E2E_IMAGES_DIR (see above).
-/* global document, window, MutationObserver */
+/* global document */
 import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { API, BASE, IDS, accessToken, anonKey, guardLocal, go, holds, launch, psql, session, shot, toAal2 } from './support.mjs'
+import { API, BASE, IDS, accessToken, anonKey, armSampler, fromClickToRow, guardLocal, go, holds, launch, psql, readSamples, session, shot, toAal2 } from './support.mjs'
 
 guardLocal()
 const ANON = anonKey()
@@ -129,44 +129,6 @@ async function download(page, name) {
   const dl = await Promise.all([page.waitForEvent('download', { timeout: 10000 }).catch(() => null), button.click({ timeout: 8000 }).catch(() => null)]).then(([d]) => d)
   const alert = dl ? '' : (await page.locator('[role=alert]').first().innerText().catch(() => '')) || (await button.isDisabled().catch(() => false) ? 'Download button disabled' : '')
   return { dl, alert }
-}
-
-/**
- * Arms a MutationObserver in the page. From now until readSamples(), every DOM
- * change records whether an in-progress indicator is on screen (a progress bar
- * in the dialog, a spinner, "Adding…") and whether the row `rowSelector` names
- * is already in the list. The stale-list rule: every sample has one or the other.
- */
-async function armSampler(page, rowSelector) {
-  await page.evaluate((selector) => {
-    // One observer at a time: the previous one would keep answering for ITS row.
-    window.__sampler?.disconnect()
-    window.__samples = []
-    const snap = () => {
-      const dialog = document.querySelector('[role=dialog]')
-      const bar = document.querySelector('[role=dialog] [role=progressbar]')
-      const button = document.querySelector('[role=dialog] button[type=submit]')
-      window.__samples.push({
-        open: dialog?.getAttribute('data-state') === 'open',
-        value: bar ? Number(bar.getAttribute('aria-valuenow')) : null,
-        text: bar?.parentElement?.querySelector('p')?.textContent ?? '',
-        label: button?.textContent?.trim() ?? '',
-        disabled: button ? button.disabled : null,
-        indicator: !!bar || !!document.querySelector('.animate-spin') || /Adding…/.test(document.body.innerText),
-        row: !!document.querySelector(selector),
-      })
-    }
-    window.__sampler = new MutationObserver(snap)
-    window.__sampler.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['aria-valuenow', 'disabled', 'data-state'] })
-  }, rowSelector)
-}
-const readSamples = (page) => page.evaluate(() => window.__samples)
-/** The samples between the click (first one with the dialog busy) and the first one with the row present, inclusive. */
-function fromClickToRow(samples) {
-  const start = samples.findIndex((e) => e.indicator)
-  if (start < 0) return []
-  const end = samples.findIndex((e, i) => i >= start && e.row)
-  return samples.slice(start, end < 0 ? samples.length : end + 1)
 }
 
 const signDownload = (jwt, path) =>

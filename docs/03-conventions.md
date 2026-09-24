@@ -402,7 +402,8 @@ Zapisane przy DCS 1b.07 (2026-09-20).
   | `DictionaryEntryDialog`, `DictionaryTypeTable` | `/admin/dictionaries` | `e2e:pending` |
   | `MdrToolbar` (zapisz, zmień nazwę, domyślny, usuń; eksport tylko `run`) | `/mdr` | `e2e:pending` |
   | `CreateProjectWizard`, `DocumentCreateForm` | `/admin/projects/new`, `/documents/new` | `e2e:pending` |
-  | `NewRevisionDialog` | `/documents/[id]` | `e2e:revision` |
+  | `NewRevisionDialog` | `/documents/[id]` | `e2e:revision` (sondujący `armSampler`, DCS 1b.08b) |
+  | `ApproveRevisionButton`, `VoidDocumentDialog` | `/documents/[id]` | `e2e:status` (sondujący `armSampler`, DCS 1b.08b) |
   | `AddFileDialog` (panel i rozwinięty wiersz zakładki Revisions) | `/documents/[id]` | `e2e:pending` (`addfile`, `E2E_PROBE_N`), `e2e:files` |
 - **Czwarty skrypt, `e2e:files` (DCS 1b.09 PR 2):** `apps/dcs/e2e/revision-files.mjs`, te same
   wymagania, ta sama fixtura (od 1b.09 zakłada też `tes.profile@local.test` — członek TES bez
@@ -609,9 +610,14 @@ Zapisane przy DCS 1b.07 (2026-09-20).
   `e2e:files` h/5, `armSampler` w `apps/dcs/e2e/revision-files.mjs`).
 - Stan: **DCS 1b.09 (Add File) jest pierwszym przepływem zgodnym z regułą** —
   dialog zostaje otwarty z paskiem na 100% i przyciskiem „Adding…” aż do
-  odświeżonej listy. **Znana luka: New Revision (`NewRevisionDialog`) — zadanie
-  DCS 1b.08b**, nie ruszane w PR #81. Pozostałe ekrany z tabeli hooka niżej
-  mają wskaźnik na przycisku, ale nie były sprawdzane pod kątem trzeciego punktu.
+  odświeżonej listy. **DCS 1b.08b domknęło New Revision, Approve i Void
+  document** (wszystkie trzy dialogi zapisu na profilu dokumentu) tym samym
+  wzorcem (`closeWhenRefreshed` + `refresh()`/`navigate()` z
+  `use-pending-action.ts`), dowiedzione próbkowaniem DOM (`armSampler`,
+  przeniesiony z `revision-files.mjs` do `support.mjs` przy tej okazji —
+  wpis (yy)) w `e2e:revision` i `e2e:status`, z czerwonym dowodem na każdy
+  z trzech (PR domykający 1b.08b). Pozostałe ekrany z tabeli hooka niżej mają
+  wskaźnik na przycisku, ale nie były sprawdzane pod kątem trzeciego punktu.
 
 ## Dostęp do ekranów `/admin` w DCS
 

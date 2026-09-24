@@ -3030,3 +3030,13 @@ nothing in the schema or the app reconciles the two — no CHECK ties them toget
 back toward the other. Recorded, not fixed: the Phase 2 workflow engine is expected to own this
 relationship properly; until then the DC is trusted to keep them sensible, the same trust the manual status
 ladder on the document itself already relies on.
+
+## iii) DCS 1b.08b — `e2e:files` section (i) needs macOS `sips`, missing on this Linux dev machine (2026-09-24)
+
+`apps/dcs/e2e/revision-files.mjs` section (i) (PR #81 round 4, realistic image uploads) generates its test
+images with the macOS-only `sips` tool via `execFileSync`. On this Linux machine it fails with
+`Error: spawnSync sips ENOENT` — pre-existing, not introduced by 1b.08b's `armSampler` extraction to
+`support.mjs` (sections a–h, including the two sections that use `armSampler`, h/3 and h/5, ran and passed
+first: 55/55 before the crash). Not fixed here: `E2E_IMAGES_DIR` is documented as the workaround (point the
+script at a directory of pre-made images instead of generating them), but no such directory exists on this
+machine and building one is out of this task's scope.

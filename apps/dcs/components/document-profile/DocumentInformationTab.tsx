@@ -17,9 +17,19 @@ import type { DocumentStatusAccess, VoidDocumentAccess, getDocument } from '@/li
 
 type DocumentDetail = NonNullable<Awaited<ReturnType<typeof getDocument>>>
 
-export function Field({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
+export function Field({
+  label,
+  children,
+  className,
+  'data-testid': dataTestId,
+}: {
+  label: string
+  children: ReactNode
+  className?: string
+  'data-testid'?: string
+}) {
   return (
-    <div className={className ?? 'space-y-0.5'}>
+    <div className={className ?? 'space-y-0.5'} data-testid={dataTestId}>
       <dt className="text-xs text-muted-foreground">{label}</dt>
       <dd className="text-sm">{children}</dd>
     </div>
@@ -121,7 +131,7 @@ export default function DocumentInformationTab({
           </div>
         )}
         {document.void_reason ? (
-          <Field label="Void reason" className="space-y-0.5">
+          <Field label="Void reason" className="space-y-0.5" data-testid="void-reason">
             {document.void_reason}
             {document.void_at ? <span className="text-muted-foreground"> — {formatTimestamp(document.void_at)}</span> : null}
           </Field>

@@ -38,6 +38,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { armSampler, fromClickToRow, readSamples } from './support.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const BASE = process.env.E2E_BASE_URL ?? 'http://localhost:3001'
@@ -68,7 +69,9 @@ fs.mkdirSync(SHOTS, { recursive: true })
 const PEJ = '6c0909ce-9b74-4bda-8e92-10811ff5a0fc' // SC2602, cpy_numbering = true after the fixture
 const M_DOC = 'f7000000-0000-4000-8000-000000000001' // the ladder + revision status + Approve + Void walkthrough
 const M_DOC2 = 'f7000000-0000-4000-8000-000000000002' // RED proofs only, kept apart so they never race the walkthrough
-const MY_DOCS = [M_DOC, M_DOC2]
+const M_DOC3 = 'f7000000-0000-4000-8000-000000000003' // 1b.08b: Approve double-click, kept apart from the walkthrough
+const M_DOC4 = 'f7000000-0000-4000-8000-000000000004' // 1b.08b: Void double-click, kept apart from the walkthrough
+const MY_DOCS = [M_DOC, M_DOC2, M_DOC3, M_DOC4]
 const TOTP_SECRET = 'JBSWY3DPEHPK3PXP'
 
 const base32 = (s) => {
@@ -206,8 +209,19 @@ psql(`
          '${STATUS.NOT_STARTED}'
     from (values
       ('${M_DOC}'::uuid, 'E2E 1b.11 manual status ladder'),
-      ('${M_DOC2}'::uuid, 'E2E 1b.11 RED proofs')
+      ('${M_DOC2}'::uuid, 'E2E 1b.11 RED proofs'),
+      ('${M_DOC3}'::uuid, 'E2E 1b.08b Approve double-click'),
+      ('${M_DOC4}'::uuid, 'E2E 1b.08b Void double-click')
     ) as v(id, title);
+`)
+// M_DOC3 needs a final-step (IFC) current revision for Approve to act on — inserted
+// directly rather than through the New Revision dialog, since only the Approve flow
+// itself is under test here (the New Revision dialog is proven in new-revision.mjs).
+psql(`
+  insert into dcs.revisions (id, document_id, project_id, scl_revision, step_id, status_id, revision_date, created_by)
+  values ('f8000000-0000-4000-8000-000000000003', '${M_DOC3}', '${PEJ}', 'A',
+          (select id from dcs.dictionaries where dict_type = 'workflow_step' and code = 'IFC'),
+          '${STATUS.IFC}', date '2026-09-22', 'f1000000-0000-4000-8000-000000000001');
 `)
 
 const docStatus = (doc) =>
@@ -318,9 +332,19 @@ const browser = await chromium.launch()
   const approveBtn = page.locator('aside[aria-label="Current revision"] button', { hasText: 'Approve' })
   await approveBtn.click()
   await page.waitForSelector('text=cannot be undone')
+  await armSampler(page, '[data-testid="approval-badge"]', /Approving…/)
   await page.getByRole('dialog').getByRole('button', { name: 'Approve' }).click()
-  await page.waitForTimeout(1000)
-  await page.waitForSelector('h1')
+  await page.waitForFunction(() => !!document.querySelector('[data-testid="approval-badge"]'), null, { timeout: 15000 })
+  await page.waitForFunction(() => !document.querySelector('[role=dialog]'), null, { timeout: 5000 })
+  const samplesApprove = await readSamples(page)
+  const windowApprove = fromClickToRow(samplesApprove)
+  const staleApprove = windowApprove.filter((e) => !e.indicator && !e.row)
+  const closedEarlyApprove = windowApprove.filter((e) => !e.open && !e.row)
+  rec(
+    '1b.08b: from the Approve click until the Approved badge is in the DOM every sample shows an indicator or the badge, and the dialog is open in every sample before the badge',
+    windowApprove.length > 0 && staleApprove.length === 0 && closedEarlyApprove.length === 0,
+    staleApprove.length || closedEarlyApprove.length ? `stale: ${JSON.stringify(staleApprove.slice(0, 3))} closed-early: ${JSON.stringify(closedEarlyApprove.slice(0, 3))}` : `${windowApprove.length} samples from the click to the badge`,
+  )
   const panelText = await page.locator('aside[aria-label="Current revision"]').innerText()
   rec('c: the panel shows the Approved badge', panelText.includes('Approved'))
   const addFileBtn = page.locator('aside[aria-label="Current revision"] button', { hasText: 'Add File' })
@@ -335,9 +359,19 @@ const browser = await chromium.launch()
   await shot(page, 'status-d1-void-dialog-empty-reason')
   const REASON = 'E2E 1b.11: client cancelled the scope after the design freeze'
   await page.getByLabel('Reason').fill(REASON)
+  await armSampler(page, '[data-testid="void-reason"]', /Voiding…/)
   await voidSubmit.click()
-  await page.waitForTimeout(1000)
-  await page.waitForSelector('h1')
+  await page.waitForFunction(() => !!document.querySelector('[data-testid="void-reason"]'), null, { timeout: 15000 })
+  await page.waitForFunction(() => !document.querySelector('[role=dialog]'), null, { timeout: 5000 })
+  const samplesVoid = await readSamples(page)
+  const windowVoid = fromClickToRow(samplesVoid)
+  const staleVoid = windowVoid.filter((e) => !e.indicator && !e.row)
+  const closedEarlyVoid = windowVoid.filter((e) => !e.open && !e.row)
+  rec(
+    '1b.08b: from the Void click until the Void reason is in the DOM every sample shows an indicator or the reason, and the dialog is open in every sample before it',
+    windowVoid.length > 0 && staleVoid.length === 0 && closedEarlyVoid.length === 0,
+    staleVoid.length || closedEarlyVoid.length ? `stale: ${JSON.stringify(staleVoid.slice(0, 3))} closed-early: ${JSON.stringify(closedEarlyVoid.slice(0, 3))}` : `${windowVoid.length} samples from the click to the reason`,
+  )
   const afterVoid = await page.locator('main').innerText()
   rec('d: the document shows Void and the stored reason', afterVoid.includes(REASON))
   await shot(page, 'status-d2-void-document', { fullPage: true })
@@ -345,6 +379,30 @@ const browser = await chromium.launch()
   // 2026-09-22 (tj): on a Void document, no role sees a status control — DC included.
   rec('d: the DC sees no status <select> on the now-Void document', (await page.getByLabel('Workflow status').count()) === 0)
   rec('d: the DC sees no "Void document" control either (already Void)', (await page.getByRole('button', { name: 'Void document' }).count()) === 0)
+
+  // ---- 1b.08b: a double click on "Approve" locks exactly one revision, on its own document (M_DOC3) ----
+  await go(page, `${BASE}/documents/${M_DOC3}`)
+  const lockedCount = () => Number(psql(`select count(*) from dcs.revisions where document_id = '${M_DOC3}' and locked_at is not null`))
+  rec('1b.08b: setup — M_DOC3 starts with its revision unlocked', lockedCount() === 0)
+  await page.locator('aside[aria-label="Current revision"] button', { hasText: 'Approve' }).click()
+  await page.waitForSelector('text=cannot be undone')
+  await page.getByRole('dialog').getByRole('button', { name: 'Approve' }).dblclick()
+  await page.waitForFunction(() => !!document.querySelector('[data-testid="approval-badge"]'), null, { timeout: 15000 })
+  await page.waitForFunction(() => !document.querySelector('[role=dialog]'), null, { timeout: 5000 })
+  rec('1b.08b: a double click on "Approve" locks exactly one revision (the hook\'s single-flight latch)', lockedCount() === 1, `${lockedCount()} locked revisions`)
+
+  // ---- 1b.08b: a double click on "Void document" voids the document exactly once, on its own document (M_DOC4) ----
+  await go(page, `${BASE}/documents/${M_DOC4}`)
+  const voidReasonRows = () => Number(psql(`select count(*) from public.audit_log where table_name = 'dcs.documents' and record_id = '${M_DOC4}' and field_name = 'void_reason'`))
+  rec('1b.08b: setup — M_DOC4 has no void_reason audit row yet', voidReasonRows() === 0)
+  await page.getByRole('button', { name: 'Void document' }).click()
+  await page.waitForSelector('text=takes no further revisions')
+  await page.getByLabel('Reason').fill('E2E 1b.08b: double-click Void')
+  await page.getByRole('dialog').getByRole('button', { name: 'Void document' }).dblclick()
+  await page.waitForFunction(() => !!document.querySelector('[data-testid="void-reason"]'), null, { timeout: 15000 })
+  await page.waitForFunction(() => !document.querySelector('[role=dialog]'), null, { timeout: 5000 })
+  rec('1b.08b: a double click on "Void document" writes exactly one void_reason audit row (the hook\'s single-flight latch)', voidReasonRows() === 1, `${voidReasonRows()} audit rows`)
+
   await ctx.close()
 }
 

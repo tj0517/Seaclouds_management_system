@@ -83,13 +83,18 @@ export default function NewRevisionDialog({ config }: { config: NewRevisionFormC
   // the navigation to the Revisions tab has committed (`pending` false again) — derived, so no effect
   // and no extra render; `reset()` clears it when the dialog is opened next (AddFileDialog's pattern).
   const [closeWhenRefreshed, setCloseWhenRefreshed] = useState(false)
+  // `open` stays true through the pending-close window (see submit()) so the dialog
+  // itself does not unmount mid-navigation; `shown` is what is actually on screen.
   const shown = open && !(closeWhenRefreshed && !pending)
 
-  // The proposal for the step on screen. Async results only touch state after the
-  // await, and a result that arrives for a step the user has already left is
-  // dropped — the request that answers the CURRENT step is the one that shows.
+  // The proposal for the step on screen. Keyed off `shown`, not `open`: `open` stays
+  // true across an auto-close (submit() never flips it back), so a dependency on
+  // `open` alone would never re-fire on the next click and the field would be stuck
+  // on the previous step's proposal (or "…") forever. Async results only touch state
+  // after the await, and a result that arrives for a step the user has already left
+  // is dropped — the request that answers the CURRENT step is the one that shows.
   useEffect(() => {
-    if (!open || !stepId) return
+    if (!shown || !stepId) return
     let stale = false
     void proposeRevisionCode({ documentId, stepId }).then((result) => {
       if (!stale) setProposal({ stepId, result })
@@ -97,7 +102,7 @@ export default function NewRevisionDialog({ config }: { config: NewRevisionFormC
     return () => {
       stale = true
     }
-  }, [open, stepId, documentId])
+  }, [shown, stepId, documentId])
 
   const loading = proposal?.stepId !== stepId
   const proposedCode = proposal && proposal.stepId === stepId && proposal.result.ok ? proposal.result.data.code : null

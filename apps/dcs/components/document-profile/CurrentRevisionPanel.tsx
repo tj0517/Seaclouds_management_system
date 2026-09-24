@@ -114,7 +114,10 @@ function RevisionDetails({
         <Row label="Reason for issue">{revision.reason_for_issue ?? '—'}</Row>
         <Row label="Approval">
           {revision.locked_at ? (
-            <span className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-800">
+            <span
+              data-testid="approval-badge"
+              className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-800"
+            >
               Approved
             </span>
           ) : (

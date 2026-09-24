@@ -39,6 +39,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { armSampler, fromClickToRow, readSamples } from './support.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const BASE = process.env.E2E_BASE_URL ?? 'http://localhost:3001'
@@ -260,7 +261,17 @@ const browser = await chromium.launch()
   rec('a: the acceptance code is optional and comes from the dictionary (— none — plus 4 codes)', acceptance.length === 5 && /none/.test(acceptance[0]), acceptance.join(' | '))
   await d.locator('#revision-reason').fill('E2E first issue')
   await shot(page, 'a1-dialog-first-revision')
+  await armSampler(page, '[data-revision-row="A"]', /Creating…/)
   await createAndLand(page)
+  const samplesA1 = await readSamples(page)
+  const windowA1 = fromClickToRow(samplesA1)
+  const staleA1 = windowA1.filter((e) => !e.indicator && !e.row)
+  const closedEarlyA1 = windowA1.filter((e) => !e.open && !e.row)
+  rec(
+    'a/1b.08b: from the click until the new revision row is in the DOM every sample shows "Creating…"/spinner or the row, and the dialog is open in every sample before the row',
+    windowA1.length > 0 && staleA1.length === 0 && closedEarlyA1.length === 0,
+    staleA1.length || closedEarlyA1.length ? `stale: ${JSON.stringify(staleA1.slice(0, 3))} closed-early: ${JSON.stringify(closedEarlyA1.slice(0, 3))}` : `${windowA1.length} samples from the click to the row`,
+  )
 
   const rowA = page.locator('[data-revision-row="A"]')
   rec('a: it landed on the Revisions tab (?tab=revisions&open=…) with the new row present', (await rowA.count()) === 1)
@@ -307,6 +318,32 @@ const browser = await chromium.launch()
   t = await text(page)
   rec('a: the current-revision panel shows 00 / IFR', /SCL revision\s*\n?\s*00/.test(t))
   await page.getByRole('tab', { name: 'History' }).click()
+
+  // ---- 1b.08b: a double click on "Create revision" stores exactly one revision ----
+  const revCountOrig = () => Number(psql(`select count(*) from dcs.revisions where document_id = '${D_ORIG}'`))
+  const beforeDbl = revCountOrig()
+  await openDialog(page)
+  await proposed(page)
+  await dialog(page).locator('#revision-reason').fill('E2E double click')
+  const beforeDblUrl = page.url()
+  await dialog(page).getByRole('button', { name: 'Create revision' }).dblclick()
+  await page.waitForURL((u) => u.searchParams.get('tab') === 'revisions' && u.href !== beforeDblUrl, { timeout: 15000 })
+  await page.waitForLoadState('networkidle')
+  await page.waitForSelector('[data-revision-row]', { timeout: 15000 })
+  rec('a/1b.08b: a double click on "Create revision" stores exactly one revision (the hook\'s single-flight latch)', revCountOrig() === beforeDbl + 1, `${beforeDbl} -> ${revCountOrig()}`)
+
+  // ---- 1b.08b: two synchronous form.requestSubmit() calls — the latch alone, not `disabled` ----
+  const beforeTwice = revCountOrig()
+  await openDialog(page)
+  await proposed(page)
+  await dialog(page).locator('#revision-reason').fill('E2E two submits')
+  const beforeTwiceUrl = page.url()
+  await dialog(page).locator('form').evaluate((form) => { form.requestSubmit(); form.requestSubmit() })
+  await page.waitForURL((u) => u.searchParams.get('tab') === 'revisions' && u.href !== beforeTwiceUrl, { timeout: 15000 })
+  await page.waitForLoadState('networkidle')
+  await page.waitForSelector('[data-revision-row]', { timeout: 15000 })
+  rec('a/1b.08b: two synchronous form.requestSubmit() calls store exactly one revision', revCountOrig() === beforeTwice + 1, `${beforeTwice} -> ${revCountOrig()}`)
+
   await ctx.close()
 
   // ---- RED PROOF: the Originator supplies a code directly, as PostgREST would receive it ----
