@@ -21,6 +21,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Callout, EmptyState, PageBody, PageHeader, ScrollableTable } from '@/components/page-chrome'
 import NavLinkStatus from '@/components/NavLinkStatus'
 import { getProjectIdsWithMdr, listProjectDocuments } from '@/lib/documents'
+import { dictionaryLabel } from '@/lib/document-profile'
 
 export default async function ProjectDocumentsPage({
   params,
@@ -91,10 +92,26 @@ export default async function ProjectDocumentsPage({
                       </Link>
                     </TableCell>
                     <TableCell>{document.title}</TableCell>
-                    <TableCell>{document.doc_type?.code ?? '—'}</TableCell>
-                    <TableCell>{document.discipline?.code ?? '—'}</TableCell>
-                    <TableCell>{document.area?.code ?? '—'}</TableCell>
-                    <TableCell>{document.language?.code ?? '—'}</TableCell>
+                    <TableCell>
+                      <span className="block max-w-[16rem] truncate" title={dictionaryLabel(document.doc_type)}>
+                        {dictionaryLabel(document.doc_type)}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <span className="block max-w-[16rem] truncate" title={dictionaryLabel(document.discipline)}>
+                        {dictionaryLabel(document.discipline)}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <span className="block max-w-[16rem] truncate" title={dictionaryLabel(document.area)}>
+                        {dictionaryLabel(document.area)}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <span className="block max-w-[10rem] truncate" title={dictionaryLabel(document.language)}>
+                        {dictionaryLabel(document.language)}
+                      </span>
+                    </TableCell>
                     <TableCell>
                       <Badge>{document.workflow_status?.label ?? '—'}</Badge>
                     </TableCell>
