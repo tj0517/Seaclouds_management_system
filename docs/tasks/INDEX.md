@@ -5,15 +5,14 @@ Format zadania: [README.md](README.md) (pole `kind` — rodzaj pracy). Zadania z
 
 ## Postęp kodu
 
-**47 / 84 zadań kodowych zamkniętych (56%)** — stan na 2026-09-24.
-Liczone tylko `kind: code`: zamknięte = zamknięte z Notion (42, bez 1a.21a — przygotowanie demo) + `done` w repo (5); otwarte = kodowe `todo`/`in_progress`/`review`/`blocked` (37). Nie wlicza się: prac poza kodem, odłożonych i porzuconych. Przy zmianie statusu zadania kodowego popraw tę linię.
+**48 / 84 zadań kodowych zamkniętych (57%)** — stan na 2026-09-24.
+Liczone tylko `kind: code`: zamknięte = zamknięte z Notion (42, bez 1a.21a — przygotowanie demo) + `done` w repo (6); otwarte = kodowe `todo`/`in_progress`/`review`/`blocked` (36). Nie wlicza się: prac poza kodem, odłożonych i porzuconych. Przy zmianie statusu zadania kodowego popraw tę linię.
 
 ## Kod — otwarte
 
 | id | tytuł | status | trudność | zależności | pytania | due |
 |---|---|---|---|---|---|---|
 | [1a.27](DCS-1a.27.md) | Skan sekretów w CI (gitleaks) — PR z kluczem w kodzie jest zatrzymany | todo | S | — | — | — |
-| [1b.08b](DCS-1b.08b.md) | Stan „w toku\" w oknie New Revision (przycisk zapisu bez informacji zwrotnej) | review | M | — | — | 2026-09-29 |
 | [1b.18](DCS-1b.18.md) | Macierz osób i ról na stronie projektu (przydzielanie ról jednym kliknięciem) | todo | M | — | — | — |
 | [1b.19](DCS-1b.19.md) | DC edytuje ustawienia DCS projektu (cykle, budżet, numeracja CPY, status MDR) | todo | M | — | — | — |
 | [1b.21](DCS-1b.21.md) | Słowniki: wyjaśnienie „Sort order” i „Est. budget (h)” w tabeli i formularzu | todo | S | — | — | — |
@@ -98,6 +97,7 @@ Odłożone przez tj 2026-09-23; terminy zdjęte (poprzednie w notatkach zadań).
 |---|---|---|---|
 | [1a.25c](DCS-1a.25c.md) | Timesheet /mfa: test regresji w repo (Playwright, trzy tryby) | code | M |
 | [1b.04b](DCS-1b.04b.md) | New Document: stan „w toku”, projekt z kontekstu, informacja o nawigacji w toku | code | S |
+| [1b.08b](DCS-1b.08b.md) | Stan „w toku\" w oknie New Revision, Approve i Void (przycisk zapisu bez informacji zwrotnej) | code | M |
 | [1b.09b](DCS-1b.09b.md) | Wyścig hydratacji po logowaniu/MFA (React #418 na liście akcji profilu dokumentu) | code | L |
 | [1b.11](DCS-1b.11.md) | Ręczna zmiana statusu dokumentu przez DC + Void dokumentu (Faza 1: bez silnika obiegu) | code | S |
 | [1b.20](DCS-1b.20.md) | Tabela dokumentów projektu: pełne nazwy typu, dyscypliny i obszaru | code | S |

@@ -1,7 +1,7 @@
 ---
 id: DCS-1b.08b
 title: "Stan „w toku\" w oknie New Revision (przycisk zapisu bez informacji zwrotnej)"
-status: review
+status: done
 kind: code             # code | client | ops | milestone
 difficulty: M
 model: Sonnet
@@ -52,3 +52,4 @@ Ten sam problem w Add File naprawiany w PR #81 (1b.09); tu dotyczy kodu z 1b.08,
 - 2026-09-22 tj (Preview, next 16.2.12): po zapisie New Revision okno znika ~1 s przed pojawieniem się rewizji na liście — ta luka należy do 1b.08b; okno ma zostać otwarte (stan „w toku”) do momentu, gdy odświeżona lista jest w DOM (reguła z 1b.09, 03-conventions).
 - 2026-09-24 tj: zakres rozszerzony na Approve revision i Void document (ten sam błąd zamknięcia przed odświeżeniem), każde z dowodem próbkowania; trudność S → M.
 - 2026-09-24: zaimplementowane — PR #94 (dowody w opisie PR).
+- 2026-09-24 tj: odbiór PR #94 — pending do odświeżenia udowodniony próbkowaniem DOM dla New Revision, Approve i Void (czerwony dowód na każde), podwójne wysłanie = jeden zapis; e2e:revision 43/43, e2e:status 33/33, e2e:profile 40/40.

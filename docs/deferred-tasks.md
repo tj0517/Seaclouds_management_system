@@ -3040,3 +3040,12 @@ images with the macOS-only `sips` tool via `execFileSync`. On this Linux machine
 first: 55/55 before the crash). Not fixed here: `E2E_IMAGES_DIR` is documented as the workaround (point the
 script at a directory of pre-made images instead of generating them), but no such directory exists on this
 machine and building one is out of this task's scope.
+
+## jjj) DCS 1b.08b — a flaky status-ladder assertion in `manual-status.mjs` section (a) (2026-09-24)
+
+`apps/dcs/e2e/manual-status.mjs` section (a) walks the document status ladder (NOT_STARTED → STARTED → IDC
+→ IFR → RETCOM → IFC) by selecting each status, clicking Change status, then `page.waitForTimeout(600)`
+before reading the badge — a fixed delay, not a wait for the DOM to actually show the new status. Seen once,
+during the DCS 1b.08b Void red-proof run: `FAIL a: status ladder reaches IDC — STARTED — Started` (the badge
+still read the previous step's label at the 600ms mark). Passed cleanly on the very next re-run under the
+same conditions. Unrelated to 1b.08b's dialog fix or its `armSampler` assertions — noticed, not fixed.
