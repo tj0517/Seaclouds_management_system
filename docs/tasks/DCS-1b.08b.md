@@ -1,13 +1,13 @@
 ---
 id: DCS-1b.08b
 title: "Stan „w toku\" w oknie New Revision (przycisk zapisu bez informacji zwrotnej)"
-status: todo
+status: in_progress
 kind: code             # code | client | ops | milestone
-difficulty: S
-model: null
+difficulty: M
+model: Sonnet
 model_approved: null
-effort: null
-branch: null
+effort: medium
+branch: fix/profile-dialogs-pending-until-refresh
 due: 2026-09-29
 depends_on: []
 blocked_by_questions: []
@@ -49,3 +49,4 @@ Ten sam problem w Add File naprawiany w PR #81 (1b.09); tu dotyczy kodu z 1b.08,
 ## Notatki z realizacji
 - 2026-09-22: zaimportowane z Notion (https://app.notion.com/p/3e2c2fbc059581f084eee5e9b40f9310).
 - 2026-09-22 tj (Preview, next 16.2.12): po zapisie New Revision okno znika ~1 s przed pojawieniem się rewizji na liście — ta luka należy do 1b.08b; okno ma zostać otwarte (stan „w toku”) do momentu, gdy odświeżona lista jest w DOM (reguła z 1b.09, 03-conventions).
+- 2026-09-24 tj: zakres rozszerzony na Approve revision i Void document (ten sam błąd zamknięcia przed odświeżeniem), każde z dowodem próbkowania; trudność S → M.

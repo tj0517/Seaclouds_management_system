@@ -9,6 +9,11 @@
 // Irreversible in ordinary use: enforce_document_void() (migration
 // 20260922074250) lets only an admin move a document back off Void, and this
 // dialog does not pretend otherwise — the confirmation sentence says so.
+//
+// DCS 1b.08b: the dialog stays open, pending, until refresh() has committed the
+// Void state — closing right after the server call left the old panel on
+// screen with no indicator for the length of the refresh (AddFileDialog's
+// pattern).
 import { useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -31,6 +36,11 @@ export default function VoidDocumentDialog({ documentId, documentNumber }: { doc
   const [open, setOpen] = useState(false)
   const [reason, setReason] = useState('')
   const [error, setError] = useState<string | null>(null)
+  // Set once the document is voided. The dialog is then shown closed on the first render in which
+  // the refresh has committed (`pending` false again) — derived, so no effect and no extra render;
+  // cleared when the dialog is opened next (AddFileDialog's pattern).
+  const [closeWhenRefreshed, setCloseWhenRefreshed] = useState(false)
+  const shown = open && !(closeWhenRefreshed && !pending)
 
   const reasonValid = reason.trim() !== ''
 
@@ -46,19 +56,21 @@ export default function VoidDocumentDialog({ documentId, documentNumber }: { doc
       setError(result.message ?? result.error)
       return
     }
-    setOpen(false)
+    // Stay open, button on "Voiding…", until the refreshed panel has committed.
+    setCloseWhenRefreshed(true)
     refresh()
   }
 
   return (
     <Dialog
-      open={open}
+      open={shown}
       onOpenChange={(next) => {
         if (!next && pending) return
         setOpen(next)
         if (next) {
           setReason('')
           setError(null)
+          setCloseWhenRefreshed(false)
         }
       }}
     >

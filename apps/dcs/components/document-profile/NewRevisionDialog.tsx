@@ -20,11 +20,14 @@
 // lib/revisions.ts); newRevisionAccess() and sclCodeField() only mirror it to
 // decide what is offered.
 //
-// After saving, the dialog closes and the page navigates to the Revisions tab
-// with the new row expanded (`?tab=revisions&open=<id>`) — the tab is a query
-// parameter because this dialog lives in the panel beside the tabs.
-import { useEffect, useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
+// After saving, the page navigates to the Revisions tab with the new row
+// expanded (`?tab=revisions&open=<id>`) — the tab is a query parameter because
+// this dialog lives in the panel beside the tabs. The dialog itself stays open,
+// pending, until that navigation has rendered (DCS 1b.08b; the AddFileDialog
+// pattern, hooks/use-pending-action.ts's `navigate`): closing on `setOpen(false)`
+// right after the server call left the old Revisions list on screen with no
+// indicator for the length of the navigation.
+import { useEffect, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { SELECT_CLASS } from '@/components/AddMemberForm'
 import { Button } from '@/components/ui/button'
@@ -64,9 +67,7 @@ const optionLabel = (option: Option) => (option.label && option.label !== option
 
 export default function NewRevisionDialog({ config }: { config: NewRevisionFormConfig }) {
   const { documentId, documentNumber, steps, acceptanceCodes, scl, cpy } = config
-  const router = useRouter()
-  const { run, pending: actionPending } = usePendingAction()
-  const [navigating, startNavigation] = useTransition()
+  const { run, navigate, pending } = usePendingAction()
 
   const [open, setOpen] = useState(false)
   const [stepId, setStepId] = useState(config.defaultStepId)
@@ -78,8 +79,11 @@ export default function NewRevisionDialog({ config }: { config: NewRevisionFormC
   const [acceptanceCodeId, setAcceptanceCodeId] = useState('')
   const [proposal, setProposal] = useState<Proposal | null>(null)
   const [error, setError] = useState<string | null>(null)
-
-  const pending = actionPending || navigating
+  // Set once the revision is created. The dialog is then shown closed on the first render in which
+  // the navigation to the Revisions tab has committed (`pending` false again) — derived, so no effect
+  // and no extra render; `reset()` clears it when the dialog is opened next (AddFileDialog's pattern).
+  const [closeWhenRefreshed, setCloseWhenRefreshed] = useState(false)
+  const shown = open && !(closeWhenRefreshed && !pending)
 
   // The proposal for the step on screen. Async results only touch state after the
   // await, and a result that arrives for a step the user has already left is
@@ -108,6 +112,7 @@ export default function NewRevisionDialog({ config }: { config: NewRevisionFormC
     setAcceptanceCodeId('')
     setProposal(null)
     setError(null)
+    setCloseWhenRefreshed(false)
   }
 
   const dateValid = isValidDateString(revisionDate)
@@ -138,13 +143,14 @@ export default function NewRevisionDialog({ config }: { config: NewRevisionFormC
       setError(result.message ?? result.error)
       return
     }
-    setOpen(false)
-    startNavigation(() => router.push(`/documents/${documentId}?tab=revisions&open=${result.data.id}`))
+    // Stay open, button on "Creating…", until the navigation to the Revisions tab has committed.
+    setCloseWhenRefreshed(true)
+    navigate(`/documents/${documentId}?tab=revisions&open=${result.data.id}`)
   }
 
   return (
     <Dialog
-      open={open}
+      open={shown}
       onOpenChange={(next) => {
         if (!next && pending) return
         setOpen(next)

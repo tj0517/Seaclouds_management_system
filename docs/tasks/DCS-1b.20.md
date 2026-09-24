@@ -1,7 +1,7 @@
 ---
 id: DCS-1b.20
 title: "Tabela dokumentów projektu: pełne nazwy typu, dyscypliny i obszaru"
-status: review
+status: done
 kind: code             # code | client | ops | milestone
 difficulty: S
 model: Sonnet
@@ -50,3 +50,4 @@ Tabela dokumentów projektu pokazuje dziś same kody (XD, ME, A01), które nic n
   - Oba zapisy odwrócone po dowodzie: `is_active` z powrotem `true`, `doc_type_id` z powrotem na oryginalny „RA” wpis; potwierdzone odczytem `select d.scl_doc_number, dt.code, dt.label from dcs.documents d join dcs.dictionaries dt on dt.id = d.doc_type_id where d.project_id = '6c0909ce-...'` → oba wiersze „RA / Report”. Żadnego zapisu na scl-dev ani prod.
   - Zrzuty w `.playwright-mcp/1b20-after-fix/` (gitignored, nie w tym PR).
   - `status: review`, `pr: 93` ustawione w tym pliku i w INDEX. Nie scalone — PR czeka na tj.
+- 2026-09-24 tj: odbiór po merge'u PR #93 — „kod — nazwa” i podpowiedź z pełną nazwą sprawdzone na Preview przez tj.

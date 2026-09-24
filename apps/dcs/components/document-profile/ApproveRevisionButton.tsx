@@ -5,6 +5,11 @@
 // anyone (migration 20260921150000), so this is the one action on the panel
 // with no undo, and the dialog says so before the click that cannot be taken
 // back.
+//
+// DCS 1b.08b: the dialog stays open, pending, until refresh() has committed the
+// Approved badge — closing right after the server call left the old panel on
+// screen with no indicator for the length of the refresh (the same gap as
+// NewRevisionDialog; AddFileDialog's pattern).
 import { useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -32,6 +37,11 @@ export default function ApproveRevisionButton({
   const { run, refresh, pending } = usePendingAction()
   const [open, setOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Set once the revision is locked. The dialog is then shown closed on the first render in which
+  // the refresh has committed (`pending` false again) — derived, so no effect and no extra render;
+  // cleared when the dialog is opened next (AddFileDialog's pattern).
+  const [closeWhenRefreshed, setCloseWhenRefreshed] = useState(false)
+  const shown = open && !(closeWhenRefreshed && !pending)
 
   const submit = async () => {
     setError(null)
@@ -41,17 +51,21 @@ export default function ApproveRevisionButton({
       setError(result.message ?? result.error)
       return
     }
-    setOpen(false)
+    // Stay open, button on "Approving…", until the refreshed panel has committed.
+    setCloseWhenRefreshed(true)
     refresh()
   }
 
   return (
     <Dialog
-      open={open}
+      open={shown}
       onOpenChange={(next) => {
         if (!next && pending) return
         setOpen(next)
-        if (next) setError(null)
+        if (next) {
+          setError(null)
+          setCloseWhenRefreshed(false)
+        }
       }}
     >
       <DialogTrigger asChild>
