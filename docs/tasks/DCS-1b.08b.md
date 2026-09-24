@@ -1,7 +1,7 @@
 ---
 id: DCS-1b.08b
 title: "Stan „w toku\" w oknie New Revision (przycisk zapisu bez informacji zwrotnej)"
-status: review
+status: done
 kind: code             # code | client | ops | milestone
 difficulty: S
 model: Sonnet
@@ -63,3 +63,4 @@ Ten sam problem w Add File naprawiany w PR #81 (1b.09); tu dotyczy kodu z 1b.08,
   - Zrzuty ekranu w osobnych katalogach na przebieg (`E2E_SHOTS`), żeby PASS nie nadpisał RED: pre-fix `e2e:status` w jednym katalogu, after-fix `e2e:status` i `e2e:revision` w dwóch kolejnych (ścieżki w scratchpadzie sesji agenta, nie w repo).
   - `docs/03-conventions.md` — tabela pokrycia `usePendingAction` (przy „Trzeci skrypt, `e2e:pending`"): dopisane wiersze `VoidDocumentDialog` i `ApproveRevisionButton` (dowód: `e2e:status`, sekcje `d`/`c`), wiersz `NewRevisionDialog` zaktualizowany o wzmiankę samplera z 1b.08b.
   - `status: review`, `pr: 92` ustawione w nagłówku tego pliku i w wierszu INDEX. Nie scalone — PR czeka na tj; CI PR-a #92 miało 3 kolejne awarie na limicie Docker Hub (bez związku ze zmianą, `docs/deferred-tasks.md` iii) — do ponownego uruchomienia, gdy limit się zresetuje.
+- 2026-09-24 tj: odebrane (PR #92). Udowodnione: New Revision, Void i Approve zostają otwarte ze wskaźnikiem „w toku” do chwili, gdy odświeżony stan jest w DOM — red proof na origin/main (e2e:revision 42/43, e2e:status 27/29) → po poprawce 43/43 i 29/29; podwójny klik = jedna rewizja (e2e + SELECT); e2e:pending 17/17 bez zawieszeń; CI zielone.
