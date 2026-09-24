@@ -13,7 +13,7 @@ depends_on: []
 blocked_by_questions: []
 touches_db: false
 touches_prod: false
-pr: null
+pr: 94
 notion: https://app.notion.com/p/3e2c2fbc059581f084eee5e9b40f9310
 ---
 
@@ -58,3 +58,4 @@ Ten sam problem w Add File naprawiany w PR #81 (1b.09); tu dotyczy kodu z 1b.08,
   `pnpm typecheck`/`lint`/`test:unit` czyste, 605/605.
   `docs/03-conventions.md`: tabela pokrycia hooka i linia „Stan” w sekcji „Stany ładowania w UI” zaktualizowane (New Revision + Approve/Void jako domknięte, nie luka).
   Zamknięcie DCS-1b.20 (PR #93, scalone): `status: done` w tym samym pierwszym commicie tego PR-a.
+  `status: review`, `pr: 94` ustawione w tym pliku i w INDEX. Nie scalone — PR czeka na tj.
