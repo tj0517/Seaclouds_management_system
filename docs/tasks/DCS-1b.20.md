@@ -1,13 +1,13 @@
 ---
 id: DCS-1b.20
 title: "Tabela dokumentów projektu: pełne nazwy typu, dyscypliny i obszaru"
-status: todo
+status: in_progress
 kind: code             # code | client | ops | milestone
 difficulty: S
-model: null
+model: Sonnet
 model_approved: null
-effort: null
-branch: null
+effort: low
+branch: feat/project-documents-dictionary-labels
 due: null
 depends_on: []
 blocked_by_questions: []
@@ -40,3 +40,4 @@ Tabela dokumentów projektu pokazuje dziś same kody (XD, ME, A01), które nic n
 
 ## Notatki z realizacji
 - 2026-09-23 tj: Uwagi z prezentacji Fazy 1 dla klienta, tj 2026-09-23.
+- 2026-09-24 tj: kryterium „nieaktywny wpis” dowodzone lokalnie (bez zapisu na scl-dev); „kod — nazwa” na Preview sprawdza tj przy odbiorze.
