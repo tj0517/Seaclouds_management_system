@@ -13,7 +13,7 @@ depends_on: []
 blocked_by_questions: []
 touches_db: true
 touches_prod: false
-pr: null
+pr: 99
 ---
 
 # DCS-1b.19 — DC edytuje ustawienia DCS projektu (cykle, budżet, numeracja CPY, status MDR)
