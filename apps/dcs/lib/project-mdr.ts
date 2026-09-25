@@ -87,6 +87,17 @@ export type ProjectWithoutMdr = {
   clientId: string | null
   processType: ProcessType | null
   year: number | null
+  /**
+   * DCS-1b.24b: dcs.project_roles hangs on the project, not on enabled DCS
+   * (its own table comment), so the team panel (lib/project-roles.ts) can
+   * already have staffed this project before DCS is ever turned on. The
+   * wizard shows these read-only (changing them is the team panel's job,
+   * out of scope here) and counts them toward "at least one DC"; it must
+   * not resend a pair from this list, since dcs_enable_project_mdr now
+   * silently skips a repeat rather than rejecting it, but resending is still
+   * wasted payload the UI can avoid.
+   */
+  existingRoles: RoleAssignmentInput[]
 }
 
 export type EnableProjectMdrInput = {
@@ -374,6 +385,13 @@ export function mapDbError(
  * small (one row per enabled project) and readable by any authenticated user
  * ("Authenticated users can read mdr settings"), so two plain selects filtered
  * client-side avoid a .not('id', 'in', …) query string built from ids.
+ *
+ * DCS-1b.24b: also reads dcs.project_roles for exactly these projects, so the
+ * wizard's "Team and roles" step can show a project's existing team the
+ * moment it is picked — no client-side round trip. This page is admin-only
+ * (app/(app)/admin/projects/new/page.tsx checks profiles.role before
+ * rendering the wizard), and "Admins manage project roles" is a SELECT-
+ * covering ALL policy, so the read needs no extra grant.
  */
 export async function getProjectsWithoutMdr(supabase: DbClient): Promise<ProjectWithoutMdr[]> {
   const [{ data: projects, error: projectsError }, { data: enabled, error: enabledError }] = await Promise.all([
@@ -384,16 +402,38 @@ export async function getProjectsWithoutMdr(supabase: DbClient): Promise<Project
   if (enabledError) throw new Error(`getProjectsWithoutMdr: ${enabledError.message}`)
 
   const enabledIds = new Set((enabled ?? []).map((row) => row.project_id))
-  return (projects ?? [])
-    .filter((project) => !enabledIds.has(project.id))
-    .map((project) => ({
-      id: project.id,
-      projectCode: project.project_code,
-      name: project.name,
-      clientId: project.client_id,
-      processType: project.process_type,
-      year: project.year,
-    }))
+  const candidates = (projects ?? []).filter((project) => !enabledIds.has(project.id))
+
+  // .in() with an empty array is a malformed PostgREST filter — skip the
+  // query entirely when there is nothing left to enable.
+  const rolesByProject = new Map<string, RoleAssignmentInput[]>()
+  if (candidates.length > 0) {
+    const { data: existingRoles, error: rolesError } = await supabase
+      .schema('dcs')
+      .from('project_roles')
+      .select('project_id, user_id, role')
+      .in(
+        'project_id',
+        candidates.map((project) => project.id),
+      )
+    if (rolesError) throw new Error(`getProjectsWithoutMdr: ${rolesError.message}`)
+
+    for (const row of existingRoles ?? []) {
+      const list = rolesByProject.get(row.project_id) ?? []
+      list.push({ userId: row.user_id, role: row.role })
+      rolesByProject.set(row.project_id, list)
+    }
+  }
+
+  return candidates.map((project) => ({
+    id: project.id,
+    projectCode: project.project_code,
+    name: project.name,
+    clientId: project.client_id,
+    processType: project.process_type,
+    year: project.year,
+    existingRoles: rolesByProject.get(project.id) ?? [],
+  }))
 }
 
 /**

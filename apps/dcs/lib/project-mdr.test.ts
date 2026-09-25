@@ -72,9 +72,10 @@ function stubClient(opts: {
   project?: ProjectRow | null
   settings?: MdrSettingsRow | null
   rpcResult?: { data: string | null; error: { code?: string; message: string } | null }
-  /** getProjectsWithoutMdr's two source reads — unrelated to `project`/`settings` above. */
+  /** getProjectsWithoutMdr's three source reads — unrelated to `project`/`settings` above. */
   projectsList?: ProjectRow[]
   mdrProjectIds?: string[]
+  existingProjectRoles?: { project_id: string; user_id: string; role: string }[]
 }) {
   const {
     sessionUserId = ADMIN,
@@ -84,6 +85,7 @@ function stubClient(opts: {
     rpcResult = { data: PROJECT_ID, error: null },
     projectsList = [],
     mdrProjectIds = [],
+    existingProjectRoles = [],
   } = opts
 
   const projectUpdates: Record<string, unknown>[] = []
@@ -120,22 +122,33 @@ function stubClient(opts: {
       if (name !== 'dcs') throw new Error(`unexpected schema: ${name}`)
       return {
         from: (table: string) => {
-          if (table !== 'mdr_settings') throw new Error(`unexpected dcs table: ${table}`)
-          return {
-            // Two shapes over the same select(): getProjectMdr/updateProjectMdr
-            // chain .eq().maybeSingle(); getProjectsWithoutMdr awaits the
-            // select() result directly — the `then` below is what makes that
-            // work without a real Supabase query builder.
-            select: () => ({
-              eq: () => ({ maybeSingle: () => Promise.resolve({ data: settings, error: null }) }),
-              then: (resolve: (v: { data: { project_id: string }[]; error: null }) => void) =>
-                resolve({ data: mdrProjectIds.map((id) => ({ project_id: id })), error: null }),
-            }),
-            update: (payload: Record<string, unknown>) => {
-              settingsUpdates.push(payload)
-              return { eq: () => Promise.resolve({ data: null, error: null }) }
-            },
+          if (table === 'mdr_settings') {
+            return {
+              // Two shapes over the same select(): getProjectMdr/updateProjectMdr
+              // chain .eq().maybeSingle(); getProjectsWithoutMdr awaits the
+              // select() result directly — the `then` below is what makes that
+              // work without a real Supabase query builder.
+              select: () => ({
+                eq: () => ({ maybeSingle: () => Promise.resolve({ data: settings, error: null }) }),
+                then: (resolve: (v: { data: { project_id: string }[]; error: null }) => void) =>
+                  resolve({ data: mdrProjectIds.map((id) => ({ project_id: id })), error: null }),
+              }),
+              update: (payload: Record<string, unknown>) => {
+                settingsUpdates.push(payload)
+                return { eq: () => Promise.resolve({ data: null, error: null }) }
+              },
+            }
           }
+          if (table === 'project_roles') {
+            // getProjectsWithoutMdr's DCS-1b.24b read: existing roles for the
+            // not-yet-enabled candidates, filtered with .in('project_id', …).
+            return {
+              select: () => ({
+                in: () => Promise.resolve({ data: existingProjectRoles, error: null }),
+              }),
+            }
+          }
+          throw new Error(`unexpected dcs table: ${table}`)
         },
       }
     },
@@ -358,6 +371,7 @@ describe('getProjectsWithoutMdr', () => {
         clientId: notEnabled.client_id,
         processType: notEnabled.process_type,
         year: notEnabled.year,
+        existingRoles: [],
       },
     ])
   })
@@ -368,6 +382,40 @@ describe('getProjectsWithoutMdr', () => {
     const { client } = stubClient({ projectsList: [p1, p2], mdrProjectIds: [] })
     const result = await getProjectsWithoutMdr(client)
     expect(result.map((p) => p.id)).toEqual(['p1', 'p2'])
+  })
+
+  it('attaches each candidate its own existing dcs.project_roles rows (DCS-1b.24b)', async () => {
+    const p1 = makeProject({ id: 'p1' })
+    const p2 = makeProject({ id: 'p2' })
+    const { client } = stubClient({
+      projectsList: [p1, p2],
+      mdrProjectIds: [],
+      existingProjectRoles: [
+        { project_id: 'p1', user_id: 'u-dc', role: 'dc' },
+        { project_id: 'p1', user_id: 'u-orig', role: 'orig' },
+      ],
+    })
+    const result = await getProjectsWithoutMdr(client)
+    expect(result.find((p) => p.id === 'p1')?.existingRoles).toEqual([
+      { userId: 'u-dc', role: 'dc' },
+      { userId: 'u-orig', role: 'orig' },
+    ])
+    expect(result.find((p) => p.id === 'p2')?.existingRoles).toEqual([])
+  })
+
+  it('issues no project_roles query when every project already has DCS enabled', async () => {
+    const enabled = makeProject({ id: 'enabled-id' })
+    const { client } = stubClient({
+      projectsList: [enabled],
+      mdrProjectIds: ['enabled-id'],
+      existingProjectRoles: [{ project_id: 'enabled-id', user_id: 'u-dc', role: 'dc' }],
+    })
+    // If getProjectsWithoutMdr queried project_roles with an empty .in() list
+    // (a malformed PostgREST filter), the stub above would still happily
+    // return this row — the real assertion is the empty result, proving the
+    // candidate list (and therefore the .in() list) was empty.
+    const result = await getProjectsWithoutMdr(client)
+    expect(result).toEqual([])
   })
 })
 

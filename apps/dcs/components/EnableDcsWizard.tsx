@@ -90,10 +90,38 @@ export default function EnableDcsWizard({ projects, candidates }: Props) {
   const project = useMemo(() => projects.find((p) => p.id === projectId) ?? null, [projects, projectId])
   const hasClient = project?.clientId != null
   const nameById = useMemo(() => new Map(candidates.map((c) => [c.id, c.label])), [candidates])
-  const roles: RoleAssignmentInput[] = useMemo(
+
+  // DCS-1b.24b: dcs.project_roles hangs on the project, so the chosen
+  // project can already have a team the team panel assigned before DCS was
+  // ever enabled (apps/dcs/lib/project-roles.ts). Read-only here — this
+  // wizard only adds to it.
+  const existingRoles = useMemo(() => project?.existingRoles ?? [], [project])
+  const existingRolesByUser = useMemo(() => {
+    const map = new Map<string, ProjectRole[]>()
+    for (const { userId, role } of existingRoles) {
+      map.set(userId, [...(map.get(userId) ?? []), role])
+    }
+    return map
+  }, [existingRoles])
+
+  const newRoles: RoleAssignmentInput[] = useMemo(
     () => team.flatMap((member) => member.roles.map((role) => ({ userId: member.userId, role }))),
     [team],
   )
+  // Never resend a pair the project already has — the checkboxes already
+  // refuse to check one (see the disabled state below), this is the
+  // second, payload-level guarantee.
+  const existingPairs = useMemo(
+    () => new Set(existingRoles.map(({ userId, role }) => `${userId}:${role}`)),
+    [existingRoles],
+  )
+  const roles: RoleAssignmentInput[] = useMemo(
+    () => newRoles.filter(({ userId, role }) => !existingPairs.has(`${userId}:${role}`)),
+    [newRoles, existingPairs],
+  )
+  // "At least one DC" counts the team the project already has, not only what
+  // is added in this wizard run (task decision, tj 2026-09-25 / DCS-1b.24b).
+  const teamHasDocController = hasDocController(existingRoles) || hasDocController(roles)
 
   // ---- per-step validity, the thing that gates "Next" -----------------
   const cycleValues = [cycleIdcToIfr, cycleIfrToRetcom, cycleRetcomToIfc].map(Number)
@@ -114,7 +142,8 @@ export default function EnableDcsWizard({ projects, candidates }: Props) {
         // only a warning, unlike the 1a.17 wizard's "no DC" case: that one
         // still let admin choose the DC later on /admin/projects/<id>; this
         // wizard is the only place team assignment happens at enable time.
-        return hasDocController(roles)
+        // Counts a DC the project's team panel already assigned (1b.24b).
+        return teamHasDocController
       case 4:
         return budgetValid
       default:
@@ -136,6 +165,9 @@ export default function EnableDcsWizard({ projects, candidates }: Props) {
   }
 
   const toggleRole = (userId: string, role: ProjectRole) => {
+    // Already held on the project — nothing to toggle, the checkbox is
+    // disabled for exactly this reason.
+    if (existingRolesByUser.get(userId)?.includes(role)) return
     setTeam((prev) =>
       prev.map((member) =>
         member.userId === userId
@@ -333,50 +365,85 @@ export default function EnableDcsWizard({ projects, candidates }: Props) {
       {/* ---------------- Step 3: team and roles ---------------- */}
       {step === 3 && (
         <div className="space-y-4">
-          {!hasDocController(roles) && (
+          {!teamHasDocController && (
             <div className="rounded-lg border border-destructive/25 bg-destructive/10 p-3 text-sm text-destructive">
               At least one Document Controller is required — DCS can only be enabled once this project has a DC.
             </div>
           )}
 
+          {existingRolesByUser.size > 0 && (
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Already assigned</p>
+              <div className="space-y-2">
+                {[...existingRolesByUser.entries()].map(([userId, memberRoles]) => (
+                  <div key={userId} className="rounded-lg border bg-muted p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-sm font-medium">
+                        {nameById.get(userId) ?? `${userId.slice(0, 8)}…`}
+                      </span>
+                      <span className="text-sm text-muted-foreground">
+                        {memberRoles.map((role) => ROLE_LABELS[role]).join(', ')}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Assigned before DCS was enabled — change these on the project&apos;s team panel, not here.
+              </p>
+            </div>
+          )}
+
+          <p className="text-sm font-medium">Add new roles</p>
           {team.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No one assigned yet.</p>
+            <p className="text-sm text-muted-foreground">No new roles added yet.</p>
           ) : (
             <div className="space-y-3">
-              {team.map((member) => (
-                <div key={member.userId} className="rounded-lg border p-3">
-                  <div className="mb-2 flex items-center justify-between">
-                    <span className="text-sm font-medium">
-                      {nameById.get(member.userId) ?? `${member.userId.slice(0, 8)}…`}
-                    </span>
-                    <button
-                      type="button"
-                      className="text-xs text-destructive hover:underline"
-                      onClick={() => setTeam((prev) => prev.filter((m) => m.userId !== member.userId))}
-                    >
-                      Remove
-                    </button>
+              {team.map((member) => {
+                const alreadyHeld = existingRolesByUser.get(member.userId) ?? []
+                return (
+                  <div key={member.userId} className="rounded-lg border p-3">
+                    <div className="mb-2 flex items-center justify-between">
+                      <span className="text-sm font-medium">
+                        {nameById.get(member.userId) ?? `${member.userId.slice(0, 8)}…`}
+                      </span>
+                      <button
+                        type="button"
+                        className="text-xs text-destructive hover:underline"
+                        onClick={() => setTeam((prev) => prev.filter((m) => m.userId !== member.userId))}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                      {PROJECT_ROLES.map((role) => {
+                        const held = alreadyHeld.includes(role)
+                        return (
+                          <label
+                            key={role}
+                            className={`flex items-center gap-1.5 text-sm ${held ? 'text-muted-foreground' : ''}`}
+                          >
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4 rounded border-input accent-[hsl(var(--primary))] focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+                              checked={held || member.roles.includes(role)}
+                              disabled={held}
+                              onChange={() => toggleRole(member.userId, role)}
+                            />
+                            {ROLE_LABELS[role]}
+                            {held && ' (already assigned)'}
+                          </label>
+                        )
+                      })}
+                    </div>
+                    {member.roles.length === 0 && (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        No role ticked — this person will not be added to the project.
+                      </p>
+                    )}
                   </div>
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-                    {PROJECT_ROLES.map((role) => (
-                      <label key={role} className="flex items-center gap-1.5 text-sm">
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4 rounded border-input accent-[hsl(var(--primary))] focus-visible:ring-2 focus-visible:ring-ring"
-                          checked={member.roles.includes(role)}
-                          onChange={() => toggleRole(member.userId, role)}
-                        />
-                        {ROLE_LABELS[role]}
-                      </label>
-                    ))}
-                  </div>
-                  {member.roles.length === 0 && (
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      No role ticked — this person will not be added to the project.
-                    </p>
-                  )}
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
 
