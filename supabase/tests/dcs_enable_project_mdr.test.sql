@@ -31,7 +31,7 @@
 --                                     happy-path and "no client" targets.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(38);
+select plan(43);
 
 -- ============================================================
 -- 0. Function shape (red without the migration)
@@ -335,6 +335,73 @@ select is(
   (select count(*) from dcs.mdr_settings where project_id = 'b241a000-0000-4000-8000-000000000002'::uuid),
   0::bigint,
   'atomicity: the mdr_settings row inserted before the bad role did not survive — one call, one transaction');
+
+-- ============================================================
+-- 9. DCS-1b.24b: a project with a team assigned BEFORE DCS is enabled (the
+--    panel at apps/dcs/lib/project-roles.ts writes dcs.project_roles
+--    regardless of dcs.mdr_settings). Enabling must not fail when the
+--    wizard's payload repeats a (user, role) pair that is already there —
+--    it must skip that pair and add only the new one.
+--
+--    These assertions describe the FIXED behaviour (lives_ok, no duplicate,
+--    exactly one new audit row) and are therefore RED against the migration
+--    this file predates (20260925111841): its project_roles insert has no ON
+--    CONFLICT, so the repeated (ernest, dc) pair trips the UNIQUE
+--    (project_id, user_id, role) index (23505) and lives_ok fails on that
+--    exception — the whole call, including the mdr_settings insert, rolls
+--    back. They turn GREEN once 20260925131237 adds ON CONFLICT DO NOTHING.
+-- ============================================================
+insert into public.projects (id, name, project_code, client_id, process_type, year)
+values ('b241a000-0000-4000-8000-000000000003', '1b.24b Project With Existing Team', 'SC9762', null, 'internal', 2027);
+
+insert into dcs.project_roles (project_id, user_id, role)
+select 'b241a000-0000-4000-8000-000000000003'::uuid, id, 'dc'::dcs.project_role
+  from auth.users where email = 'ejezionek@gmail.com';
+
+create temp table t_preteam as
+select
+  (select count(*) from dcs.project_roles
+    where project_id = 'b241a000-0000-4000-8000-000000000003'::uuid) as n_roles_before,
+  (select count(*) from public.audit_log
+    where table_name = 'dcs.project_roles' and action = 'INSERT'
+      and project_id = 'b241a000-0000-4000-8000-000000000003'::uuid) as n_audit_before;
+
+set local role authenticated;
+select set_config('request.jwt.claims',
+  json_build_object('sub', (select admin_id from t_fixture), 'role', 'authenticated', 'aal', 'aal2')::text, true);
+
+select lives_ok(
+  format(
+    $$select public.dcs_enable_project_mdr(
+        'b241a000-0000-4000-8000-000000000003'::uuid, false, 7, 10, 7, null,
+        json_build_array(
+          json_build_object('user_id', %L, 'role', 'dc'),
+          json_build_object('user_id', %L, 'role', 'orig')
+        )::jsonb)$$,
+    (select ernest_id from t_fixture), (select tymon_id from t_fixture)
+  ),
+  'GREEN: enabling succeeds even though the payload repeats ernest''s already-assigned dc row');
+reset role;
+
+select is(
+  (select count(*) from dcs.mdr_settings where project_id = 'b241a000-0000-4000-8000-000000000003'::uuid),
+  1::bigint,
+  'GREEN: the mdr_settings row exists — the repeated pair no longer rolls back the whole call');
+select is(
+  (select count(*) from dcs.project_roles where project_id = 'b241a000-0000-4000-8000-000000000003'::uuid),
+  (select n_roles_before from t_preteam) + 1,
+  'GREEN: exactly one new role row (tymon/orig) — the repeated (ernest, dc) pair created no duplicate');
+select set_eq(
+  $$select role::text from dcs.project_roles where project_id = 'b241a000-0000-4000-8000-000000000003'::uuid$$,
+  $$values ('dc'), ('orig')$$,
+  'the pre-existing dc and the newly-added orig are both there, nothing else');
+
+select is(
+  (select count(*) from public.audit_log
+    where table_name = 'dcs.project_roles' and action = 'INSERT'
+      and project_id = 'b241a000-0000-4000-8000-000000000003'::uuid),
+  (select n_audit_before from t_preteam) + 1,
+  'audit_log gained exactly one INSERT row — the skipped (ernest, dc) pair produced none, the new (tymon, orig) pair produced one');
 
 select * from finish();
 rollback;

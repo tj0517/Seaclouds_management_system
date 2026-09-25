@@ -1,19 +1,19 @@
 ---
 id: DCS-1b.24b
 title: "Enable DCS: kreator i funkcja uwzględniają zespół przypisany przed włączeniem DCS"
-status: todo
+status: done
 kind: code             # code | client | ops | milestone
 difficulty: M
-model: null
+model: sonnet
 model_approved: null
-effort: null
-branch: null
+effort: medium
+branch: fix/dcs-1b24b-existing-team
 due: 2026-09-26
 depends_on: [DCS-1b.24]
 blocked_by_questions: []
 touches_db: true
 touches_prod: false
-pr: null
+pr: 98
 ---
 
 # DCS-1b.24b — Enable DCS przy istniejącym zespole projektu
@@ -47,6 +47,21 @@ Role w `dcs.project_roles` wiszą na projekcie, nie na włączonym DCS, więc pa
 - `CLAUDE.md`, `docs/03-conventions.md`, `docs/02-data-model.md`
 - `supabase/migrations/20260925111841_dcs_enable_project_mdr.sql`, `supabase/tests/dcs_enable_project_mdr.test.sql`
 - `apps/dcs/components/EnableDcsWizard.tsx`, `apps/dcs/lib/project-mdr.ts`, `apps/dcs/app/(app)/admin/projects/new/page.tsx`, `apps/dcs/lib/project-roles.ts`
+
+## Notatki z realizacji
+- 2026-09-25 tj (STOP gate, przegląd zmienionego ciała `dcs_enable_project_mdr`): zatwierdzone jako nowa
+  migracja `20260925131237_dcs_enable_project_mdr_skip_existing_roles.sql` (`ON CONFLICT (project_id, user_id,
+  role) DO NOTHING`), z warunkami: (1) "istniejące role nie dostają nowego wpisu w audit_log" musi być
+  udowodnione asercją pgTAP (licznik audit_log dla pary istniejącej niezmieniony, dla nowej pary +1), nie tylko
+  rozumowaniem — `audit_project_roles` to AFTER INSERT na prod, sprawdzone odczytem; (2) dotychczasowe asercje
+  "bad role payload" mają zostać zielone — ON CONFLICT celuje wyłącznie w (project_id, user_id, role), więc
+  nieznany user lub rola nadal muszą zgłaszać błąd; (3) REVOKE/GRANT i komentarz funkcji odtworzone w nowej
+  migracji. Wszystkie trzy warunki spełnione — `supabase test db`: 43 asercje w pliku testowym, pełny zestaw
+  zielony (1286 testów).
+- 2026-09-25 tj: odbiór PR #98 — udowodnione pgTAP: powtórzona para (osoba, rola) pominięta bez błędu i bez
+  duplikatu, dziennik tylko dla nowej pary, dotychczasowe asercje zielone; UI potwierdzone zrzutami na WSL
+  obejrzanymi przez tj. Uwaga: SC2602 włączony na prod 2026-09-25 15:50 przed wdrożeniem tej migracji (stara
+  funkcja, bez nowych ról).
 
 ## Notatki z realizacji
 - 2026-09-25 tj: błąd znaleziony przy pierwszym włączeniu DCS na prod (SC2602, 23505 na `project_roles_project_id_user_id_role_key`; transakcja cofnięta, dane nietknięte). Wybrana poprawka zamiast obejścia.
