@@ -97,7 +97,7 @@ Supabase, prod ref `tfbzivfsqsgebegcvfah`.
   Kronika obserwacji (PR #58–#79) mieszka w `docs/deferred-tasks.md` (aaa), dopóki
   pytanie jest otwarte; nie kasować jej bez zgody.
 
-  **Ostatni odczyt (jedna linia, nadpisywana):** PR #100 (DCS 1b.18 — Macierz osób i ról na stronie projektu), przed review — opisuje HEAD PR-a `233d152`, jedynego commita PR-a i jedynego ruszającego `apps/`: `ci` `success` (4m37s); Vercel `dcs` `Deployment has completed`, `seaclouds-management-system` `Skipped - Not affected` (`gh pr checks 100`, 2026-09-25).
+  **Ostatni odczyt (jedna linia, nadpisywana):** PR #101 (DCS 1b.21 — Słowniki: wyjaśnienie „Sort order” i „Est. budget (h)”), przed review — HEAD PR-a `b1c014d` jest docs-only, opisuje ostatni commit ruszający `apps/` (`b06c9d3`; drzewo `apps/`+`packages/` w HEAD identyczne): `ci` `success` (4m36s); Vercel `dcs` `Skipped - Not affected`, `seaclouds-management-system` `Skipped - Not affected` (`gh pr checks 101`, 2026-09-25).
 - Różnica w ochronie, istotna przy podawaniu URL-i: `dcs` ma
   `ssoProtection = all_except_custom_domains`, więc Preview **i** produkcyjny
   `*.vercel.app` stoją za logowaniem Vercela, a publiczny jest wyłącznie
