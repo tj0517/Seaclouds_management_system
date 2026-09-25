@@ -1,21 +1,23 @@
 'use client'
 
-// DCS 1a.17: the DCS-side project edit dialog — the fields the Create Project
-// MDR wizard sets, changeable afterwards. Mirrors ClientDialog (1a.16): one
-// dialog, diff-only save through a server action, errors shown in place.
+// DCS 1a.17 → 1b.19: the DCS-side project edit dialog. Originally covered
+// both halves of a project's configuration (decision O-13: identity in
+// public.projects, DCS configuration in dcs.mdr_settings); since 1b.19 it
+// edits dcs.mdr_settings only — client agreement 2026-09-25 made name /
+// client / process type / year read-only in DCS for everyone, admin
+// included, until the admin portal (ADR-0014) exists to edit them (until
+// then O-20). They are shown here for context, disabled, with a note saying
+// where they actually get changed. This dialog is only rendered at all when
+// settings is non-null (app/(app)/admin/projects/[projectId]/page.tsx) —
+// with nothing left to edit once identity is read-only, "DCS does not run
+// this project" is no longer a state this dialog needs to handle.
 //
-// The fields span the two tables a project's configuration is split between
-// (decision O-13): name / client / process type / year live in
-// public.projects, while cpy_numbering / the three cycle lengths /
-// budget_hours / status live in dcs.mdr_settings. updateProjectMdr
-// (lib/project-mdr.ts) diffs each table separately and issues no statement at
-// all for a table whose fields did not change.
+// Open to the project's DC as well as an admin since 1b.19 (requireAdminOrDc
+// in lib/project-mdr.ts's updateProjectMdr) — previously admin-only.
 //
-// *** BOTH HALVES ARE AUDITED (since 1a.17b) ***
+// *** AUDITED (since 1a.17b) ***
 // Every field in this dialog leaves a trail in public.audit_log — one row per
-// column that actually changed, with the editor's user_id and IP. The
-// public.projects half has been audited since 1a.08; the dcs.mdr_settings
-// half (the review cycle, the budget, cpy_numbering, status) joined in 1a.17b,
+// column that actually changed, with the editor's user_id and IP.
 // migration 20260916145603_audit_mdr_settings. That table has no `uuid id` —
 // its PK is project_id — so audit_trigger() resolves record_id by row shape
 // (`coalesce(id, project_id)`) and the cycle entries key on the project.
@@ -23,14 +25,6 @@
 // inherit and Phase 2 computes Planned dates from it: "who shortened the
 // cycle from 10 days to 3" is answerable from audit_log, not guesswork off
 // mdr_settings.updated_at.
-//
-// project_code is absent by design, not omission: it is the first segment of
-// every document number in the project (SC2601-SCL-RA-0012-EN), so changing
-// it would retroactively alter numbers already issued — the same argument
-// that made dcs.dictionaries.code immutable in 1a.15b. Here it is enforced by
-// the app only (UpdateProjectMdrInput has no such field, and
-// parseUpdateProjectMdrInput drops one from a raw payload); the database
-// still allows the UPDATE, exactly the gap 1a.15b closed for dictionaries.
 import { useState, type ReactNode } from 'react'
 import { Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -51,12 +45,10 @@ import { updateProjectMdr } from '@/app/data/actions/project-mdr'
 import {
   MDR_STATUSES,
   MDR_STATUS_LABELS,
-  PROCESS_TYPES,
   PROCESS_TYPE_LABELS,
   skipsClientStep,
   type MdrSettingsRow,
   type MdrStatus,
-  type ProcessType,
   type ProjectRow,
 } from '@/lib/project-mdr'
 
@@ -64,7 +56,8 @@ type ClientOption = { id: string; name: string; code: string }
 
 type Props = {
   project: ProjectRow
-  settings: MdrSettingsRow | null
+  /** Always present — the caller only renders this dialog once DCS runs the project. */
+  settings: MdrSettingsRow
   clients: ClientOption[]
   trigger: ReactNode
 }
@@ -76,61 +69,53 @@ export default function EditProjectDialog({ project, settings, clients, trigger 
   const [open, setOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const [name, setName] = useState(project.name)
-  const [clientId, setClientId] = useState(project.client_id ?? '')
-  const [processType, setProcessType] = useState<ProcessType | ''>(project.process_type ?? '')
-  const [year, setYear] = useState(project.year === null ? '' : String(project.year))
-  const [cpyNumbering, setCpyNumbering] = useState(settings?.cpy_numbering ?? false)
-  const [cycleIdcToIfr, setCycleIdcToIfr] = useState(String(settings?.cycle_idc_to_ifr ?? ''))
-  const [cycleIfrToRetcom, setCycleIfrToRetcom] = useState(String(settings?.cycle_ifr_to_retcom ?? ''))
-  const [cycleRetcomToIfc, setCycleRetcomToIfc] = useState(String(settings?.cycle_retcom_to_ifc ?? ''))
-  const [budgetHours, setBudgetHours] = useState(settings?.budget_hours === null || settings === null ? '' : String(settings.budget_hours))
-  const [status, setStatus] = useState<MdrStatus>(settings?.status ?? 'active')
+  const [cpyNumbering, setCpyNumbering] = useState(settings.cpy_numbering)
+  const [cycleIdcToIfr, setCycleIdcToIfr] = useState(String(settings.cycle_idc_to_ifr))
+  const [cycleIfrToRetcom, setCycleIfrToRetcom] = useState(String(settings.cycle_ifr_to_retcom))
+  const [cycleRetcomToIfc, setCycleRetcomToIfc] = useState(String(settings.cycle_retcom_to_ifc))
+  const [budgetHours, setBudgetHours] = useState(settings.budget_hours === null ? '' : String(settings.budget_hours))
+  const [status, setStatus] = useState<MdrStatus>(settings.status)
 
   const reset = () => {
-    setName(project.name)
-    setClientId(project.client_id ?? '')
-    setProcessType(project.process_type ?? '')
-    setYear(project.year === null ? '' : String(project.year))
-    setCpyNumbering(settings?.cpy_numbering ?? false)
-    setCycleIdcToIfr(String(settings?.cycle_idc_to_ifr ?? ''))
-    setCycleIfrToRetcom(String(settings?.cycle_ifr_to_retcom ?? ''))
-    setCycleRetcomToIfc(String(settings?.cycle_retcom_to_ifc ?? ''))
-    setBudgetHours(settings?.budget_hours === null || settings === null ? '' : String(settings.budget_hours))
-    setStatus(settings?.status ?? 'active')
+    setCpyNumbering(settings.cpy_numbering)
+    setCycleIdcToIfr(String(settings.cycle_idc_to_ifr))
+    setCycleIfrToRetcom(String(settings.cycle_ifr_to_retcom))
+    setCycleRetcomToIfc(String(settings.cycle_retcom_to_ifc))
+    setBudgetHours(settings.budget_hours === null ? '' : String(settings.budget_hours))
+    setStatus(settings.status)
     setError(null)
   }
 
-  const internal = processType !== '' && skipsClientStep(processType)
+  // Shared with Timesheet, read-only here (client agreement 2026-09-25) —
+  // same invariant dcs_enable_project_mdr enforces on creation: CPY numbering
+  // needs a client, and an internal project has none at all.
+  const internal = project.process_type !== null && skipsClientStep(project.process_type)
+  const hasClient = project.client_id !== null
+  const cpyDisabled = internal || !hasClient
+  const cpyHint = internal
+    ? 'An internal project has no client.'
+    : !hasClient
+      ? 'This project has no client, so it cannot use CPY numbering.'
+      : null
+  const client = clients.find((c) => c.id === project.client_id)
 
   const handleSubmit = async () => {
     setError(null)
 
-    // Every field is sent on every save; updateProjectMdr compares each one
-    // against the stored row and patches only what differs. Sending the whole
-    // form is what makes "the user cleared this field" (null) distinguishable
-    // from "the form never carried it" (undefined) — and the diff is what
-    // keeps audit_log down to the columns that actually changed.
     const result = await run(() =>
       updateProjectMdr({
-      projectId: project.id,
-      name,
-      clientId: internal || clientId === '' ? null : clientId,
-      // '' is the "Not classified" option and means NULL, not "leave alone" —
-      // the column is nullable and the 20260902114743 backfill deliberately
-      // left every SCYYNN code unclassified, so clearing it back has to work.
-      processType: processType === '' ? null : processType,
-      year: year.trim() === '' ? null : Number(year),
-      ...(settings
-        ? {
-            cpyNumbering: internal ? false : cpyNumbering,
-            cycleIdcToIfr: Number(cycleIdcToIfr),
-            cycleIfrToRetcom: Number(cycleIfrToRetcom),
-            cycleRetcomToIfc: Number(cycleRetcomToIfc),
-            budgetHours: budgetHours.trim() === '' ? null : Number(budgetHours),
-            status,
-          }
-        : {}),
+        projectId: project.id,
+        // Sent as-is, not forced to false while disabled: the checkbox is
+        // non-interactive in that state, so cpyNumbering already equals
+        // settings.cpy_numbering and this is a no-op in the diff. Forcing it
+        // would silently flip off an existing (inconsistent, pre-existing)
+        // true value as a side effect of saving an unrelated field.
+        cpyNumbering,
+        cycleIdcToIfr: Number(cycleIdcToIfr),
+        cycleIfrToRetcom: Number(cycleIfrToRetcom),
+        cycleRetcomToIfc: Number(cycleRetcomToIfc),
+        budgetHours: budgetHours.trim() === '' ? null : Number(budgetHours),
+        status,
       }),
     )
 
@@ -155,131 +140,105 @@ export default function EditProjectDialog({ project, settings, clients, trigger 
       <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Edit project</DialogTitle>
-          <DialogDescription>
-            {settings
-              ? 'Only the fields you actually change are written.'
-              : 'DCS does not run this project (no MDR settings) — only its identity can be edited here. An admin can turn DCS on from Admin → Enable DCS.'}
-          </DialogDescription>
+          <DialogTitle>Edit DCS settings</DialogTitle>
+          <DialogDescription>Only the fields you actually change are written.</DialogDescription>
         </DialogHeader>
 
         <div className="max-h-[60vh] space-y-3 overflow-y-auto pr-1">
           <div className="space-y-1">
             <Label htmlFor="edit-project-name">Name</Label>
-            <Input id="edit-project-name" value={name} onChange={(e) => setName(e.target.value)} />
+            <Input id="edit-project-name" value={project.name} readOnly disabled />
           </div>
 
           <div className="space-y-1">
             <Label htmlFor="edit-project-code">Project code</Label>
             <Input id="edit-project-code" value={project.project_code} readOnly disabled />
-            <p className="text-xs text-muted-foreground">
-              The first segment of every document number in this project — it cannot be changed once issued.
-            </p>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <Label htmlFor="edit-process-type">Process type</Label>
-              <select
+              <Input
                 id="edit-process-type"
-                className={`w-full ${SELECT_CLASS}`}
-                value={processType}
-                onChange={(e) => setProcessType(e.target.value as ProcessType | '')}
-              >
-                <option value="">Not classified</option>
-                {PROCESS_TYPES.map((type) => (
-                  <option key={type} value={type}>
-                    {PROCESS_TYPE_LABELS[type]}
-                  </option>
-                ))}
-              </select>
+                value={project.process_type ? PROCESS_TYPE_LABELS[project.process_type] : 'Not classified'}
+                readOnly
+                disabled
+              />
             </div>
             <div className="space-y-1">
               <Label htmlFor="edit-year">Year</Label>
-              <Input id="edit-year" inputMode="numeric" value={year} onChange={(e) => setYear(e.target.value)} />
+              <Input id="edit-year" value={project.year === null ? '—' : String(project.year)} readOnly disabled />
             </div>
           </div>
 
           <div className="space-y-1">
             <Label htmlFor="edit-client">Client</Label>
-            <select
-              id="edit-client"
-              className={`w-full ${SELECT_CLASS}`}
-              value={internal ? '' : clientId}
-              disabled={internal}
-              onChange={(e) => setClientId(e.target.value)}
-            >
-              <option value="">No client</option>
-              {clients.map((client) => (
-                <option key={client.id} value={client.id}>
-                  {client.code} — {client.name}
-                </option>
-              ))}
-            </select>
-            {internal && <p className="text-xs text-muted-foreground">An internal project has no client.</p>}
+            <Input id="edit-client" value={client ? `${client.code} — ${client.name}` : 'No client'} readOnly disabled />
           </div>
 
-          {settings && (
-            <>
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 rounded border-input accent-[hsl(var(--primary))] focus-visible:ring-2 focus-visible:ring-ring"
-                  checked={internal ? false : cpyNumbering}
-                  disabled={internal}
-                  onChange={(e) => setCpyNumbering(e.target.checked)}
-                />
-                CPY numbering
-              </label>
+          <p className="text-xs text-muted-foreground">
+            Name, project code, process type, year and client are Timesheet&apos;s and read-only here — Timesheet
+            is where they are changed.
+          </p>
 
-              <div className="grid grid-cols-3 gap-3">
-                <div className="space-y-1">
-                  <Label htmlFor="edit-cycle-idc">IDC → IFR</Label>
-                  <Input id="edit-cycle-idc" inputMode="numeric" value={cycleIdcToIfr} onChange={(e) => setCycleIdcToIfr(e.target.value)} />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="edit-cycle-ifr">IFR → RETCOM</Label>
-                  <Input id="edit-cycle-ifr" inputMode="numeric" value={cycleIfrToRetcom} onChange={(e) => setCycleIfrToRetcom(e.target.value)} />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="edit-cycle-retcom">RETCOM → IFC</Label>
-                  <Input id="edit-cycle-retcom" inputMode="numeric" value={cycleRetcomToIfc} onChange={(e) => setCycleRetcomToIfc(e.target.value)} />
-                </div>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Changing a cycle does not move dates on documents that already exist — that is Phase 2.
-              </p>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded border-input accent-[hsl(var(--primary))] focus-visible:ring-2 focus-visible:ring-ring"
+              checked={cpyNumbering}
+              disabled={cpyDisabled}
+              onChange={(e) => setCpyNumbering(e.target.checked)}
+            />
+            CPY numbering
+          </label>
+          {cpyHint && <p className="text-xs text-muted-foreground">{cpyHint}</p>}
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label htmlFor="edit-budget">Budget hours</Label>
-                  <Input
-                    id="edit-budget"
-                    inputMode="decimal"
-                    value={budgetHours}
-                    onChange={(e) => setBudgetHours(e.target.value)}
-                    placeholder="no budget"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="edit-status">MDR status</Label>
-                  <select
-                    id="edit-status"
-                    className={`w-full ${SELECT_CLASS}`}
-                    value={status}
-                    onChange={(e) => setStatus(e.target.value as MdrStatus)}
-                  >
-                    {MDR_STATUSES.map((value) => (
-                      <option key={value} value={value}>
-                        {MDR_STATUS_LABELS[value]}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="text-xs text-muted-foreground">Documentation open or closed — not the same as Timesheet&apos;s active flag.</p>
-                </div>
-              </div>
-            </>
-          )}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="space-y-1">
+              <Label htmlFor="edit-cycle-idc">IDC → IFR</Label>
+              <Input id="edit-cycle-idc" inputMode="numeric" value={cycleIdcToIfr} onChange={(e) => setCycleIdcToIfr(e.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="edit-cycle-ifr">IFR → RETCOM</Label>
+              <Input id="edit-cycle-ifr" inputMode="numeric" value={cycleIfrToRetcom} onChange={(e) => setCycleIfrToRetcom(e.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="edit-cycle-retcom">RETCOM → IFC</Label>
+              <Input id="edit-cycle-retcom" inputMode="numeric" value={cycleRetcomToIfc} onChange={(e) => setCycleRetcomToIfc(e.target.value)} />
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Changing a cycle does not move dates on documents that already exist — that is Phase 2.
+          </p>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label htmlFor="edit-budget">Budget hours</Label>
+              <Input
+                id="edit-budget"
+                inputMode="decimal"
+                value={budgetHours}
+                onChange={(e) => setBudgetHours(e.target.value)}
+                placeholder="no budget"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="edit-status">MDR status</Label>
+              <select
+                id="edit-status"
+                className={`w-full ${SELECT_CLASS}`}
+                value={status}
+                onChange={(e) => setStatus(e.target.value as MdrStatus)}
+              >
+                {MDR_STATUSES.map((value) => (
+                  <option key={value} value={value}>
+                    {MDR_STATUS_LABELS[value]}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-muted-foreground">Documentation open or closed — not the same as Timesheet&apos;s active flag.</p>
+            </div>
+          </div>
 
           {error && <p className="text-xs text-destructive">Error: {error}</p>}
         </div>
@@ -288,7 +247,7 @@ export default function EditProjectDialog({ project, settings, clients, trigger 
           <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={pending}>
             Cancel
           </Button>
-          <Button type="button" onClick={handleSubmit} disabled={pending || name.trim() === ''}>
+          <Button type="button" onClick={handleSubmit} disabled={pending}>
             {pending && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
             {pending ? 'Saving…' : 'Save'}
           </Button>

@@ -3097,3 +3097,23 @@ and neither blocks nor misleads a reader who follows the comment trail:
 - `apps/dcs/lib/single-flight.ts`'s file-level comment still names `createProjectMdr` as an example of a
   non-idempotent action; the function it refers to was removed in 1b.24 (replaced by `enableProjectMdr`).
   Cosmetic only — the comment's point (non-idempotent server actions need single-flight) still holds.
+
+## lll) `dcs.mdr_settings` has no database-level guard against CPY numbering without a client on UPDATE (DCS-1b.19, 2026-09-25)
+
+Read on scl-dev and prod (`pg_policy`, `pg_constraint`, `pg_trigger` on `dcs.mdr_settings`, both identical
+2026-09-25): the "CPY numbering needs a client" rule exists nowhere as a CHECK or trigger on the table
+itself — `dcs_enable_project_mdr()` only enforces it in its own function body, on INSERT (enabling DCS),
+and only for callers that go through that RPC. `updateProjectMdr` (`apps/dcs/lib/project-mdr.ts`) now
+re-checks the same rule in the app, on the row as it would be after the edit, before it ever calls the
+mdr_settings UPDATE — closing the gap for the DCS-1b.19 edit flow.
+
+What this does NOT close: `"Doc controllers manage mdr settings"` is `FOR ALL` (the same shape jjj already
+flags for DELETE), so a project's own DC — or an admin — can still `update dcs.mdr_settings set
+cpy_numbering = true where project_id = …` directly through PostgREST or the Supabase client, bypassing
+`updateProjectMdr` entirely, and the database will not refuse it even without a client. Not exploited or
+reproduced here — flagged from reading the schema, same as jjj.
+
+A fix would add a CHECK or trigger on `dcs.mdr_settings` mirroring `dcs_enable_project_mdr`'s rule (join to
+`public.projects.client_id`, since a CHECK constraint cannot reference another table directly — a trigger
+is the likely shape). Out of scope for DCS-1b.19 per its own task file ("if the database does not already
+enforce it on UPDATE, report that as a finding — do not add a migration without asking").
