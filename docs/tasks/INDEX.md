@@ -5,8 +5,8 @@ Format zadania: [README.md](README.md) (pole `kind` — rodzaj pracy). Zadania z
 
 ## Postęp kodu
 
-**47 / 84 zadań kodowych zamkniętych (56%)** — stan na 2026-09-24.
-Liczone tylko `kind: code`: zamknięte = zamknięte z Notion (42, bez 1a.21a — przygotowanie demo) + `done` w repo (5); otwarte = kodowe `todo`/`in_progress`/`review`/`blocked` (37). Nie wlicza się: prac poza kodem, odłożonych i porzuconych. Przy zmianie statusu zadania kodowego popraw tę linię.
+**48 / 88 zadań kodowych zamkniętych (55%)** — stan na 2026-09-25.
+Liczone tylko `kind: code`: zamknięte = zamknięte z Notion (42, bez 1a.21a — przygotowanie demo) + `done` w repo (6); otwarte = kodowe `todo`/`in_progress`/`review`/`blocked` (40). Nie wlicza się: prac poza kodem, odłożonych i porzuconych. Przy zmianie statusu zadania kodowego popraw tę linię.
 
 ## Kod — otwarte
 
@@ -15,10 +15,13 @@ Liczone tylko `kind: code`: zamknięte = zamknięte z Notion (42, bez 1a.21a —
 | [1a.27](DCS-1a.27.md) | Skan sekretów w CI (gitleaks) — PR z kluczem w kodzie jest zatrzymany | todo | S | — | — | — |
 | [1b.18](DCS-1b.18.md) | Macierz osób i ról na stronie projektu (przydzielanie ról jednym kliknięciem) | todo | M | — | — | — |
 | [1b.19](DCS-1b.19.md) | DC edytuje ustawienia DCS projektu (cykle, budżet, numeracja CPY, status MDR) | todo | M | — | — | — |
-| [1b.20](DCS-1b.20.md) | Tabela dokumentów projektu: pełne nazwy typu, dyscypliny i obszaru | review | S | — | — | — |
 | [1b.21](DCS-1b.21.md) | Słowniki: wyjaśnienie „Sort order” i „Est. budget (h)” w tabeli i formularzu | todo | S | — | — | — |
 | [1b.22](DCS-1b.22.md) | Okno edycji dokumentu dla DC (bez pól tworzących numer SCL) | todo | M | — | — | — |
 | [1b.23](DCS-1b.23.md) | Profil dokumentu: bez technicznego Document ID, pliki w „Current revision” tylko z nazwą | todo | S | — | — | — |
+| [1b.24](DCS-1b.24.md) | Włączenie DCS dla istniejącego projektu Timesheeta (kreator „Enable DCS” zamiast zakładania projektu) | todo | L | — | — | — |
+| [1b.25](DCS-1b.25.md) | MDR projektu jako zakładka na stronie projektu (obok listy dokumentów) | todo | M | — | — | — |
+| [1b.26](DCS-1b.26.md) | Numer wykonawcy (contractor) na dokumencie — trzeci numer obok SCL i CPY | todo | M | — | — | — |
+| [1b.27](DCS-1b.27.md) | Pola do wpisania odróżnione od pól automatycznych (tło i ramka) | todo | S | — | — | — |
 | [2.01](DCS-2.01.md) | Schemat approval_tasks i comments | todo | L | — | — | 2026-10-02 |
 | [2.02](DCS-2.02.md) | Silnik obiegu: tryb równoległy (IDC) | todo | L | — | — | 2026-10-16 |
 | [2.03](DCS-2.03.md) | Silnik obiegu: tryb szeregowy (IFR i wyżej) | todo | L | — | — | 2026-10-23 |
@@ -101,6 +104,7 @@ Odłożone przez tj 2026-09-23; terminy zdjęte (poprzednie w notatkach zadań).
 | [1b.09b](DCS-1b.09b.md) | Wyścig hydratacji po logowaniu/MFA (React #418 na liście akcji profilu dokumentu) | code | L |
 | [1b.11](DCS-1b.11.md) | Ręczna zmiana statusu dokumentu przez DC + Void dokumentu (Faza 1: bez silnika obiegu) | code | S |
 | [1b.08b](DCS-1b.08b.md) | Stan „w toku” w oknie New Revision (przycisk zapisu bez informacji zwrotnej) | code | S |
+| [1b.20](DCS-1b.20.md) | Tabela dokumentów projektu: pełne nazwy typu, dyscypliny i obszaru | code | S |
 
 ## Zamknięte (historia w Notion)
 
