@@ -1,13 +1,13 @@
 ---
 id: DCS-1b.24
 title: "Włączenie DCS dla istniejącego projektu Timesheeta (kreator „Enable DCS” zamiast zakładania projektu)"
-status: todo
+status: in_progress
 kind: code             # code | client | ops | milestone
 difficulty: L
 model: null
 model_approved: null
 effort: null
-branch: null
+branch: feat/dcs-1b24-enable-dcs
 due: null
 depends_on: []
 blocked_by_questions: []
