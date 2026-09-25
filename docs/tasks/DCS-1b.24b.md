@@ -1,13 +1,13 @@
 ---
 id: DCS-1b.24b
 title: "Enable DCS: kreator i funkcja uwzględniają zespół przypisany przed włączeniem DCS"
-status: todo
+status: in_progress
 kind: code             # code | client | ops | milestone
 difficulty: M
-model: null
+model: sonnet
 model_approved: null
-effort: null
-branch: null
+effort: medium
+branch: fix/dcs-1b24b-existing-team
 due: 2026-09-26
 depends_on: [DCS-1b.24]
 blocked_by_questions: []
