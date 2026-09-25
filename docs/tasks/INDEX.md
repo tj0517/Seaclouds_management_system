@@ -5,8 +5,8 @@ Format zadania: [README.md](README.md) (pole `kind` — rodzaj pracy). Zadania z
 
 ## Postęp kodu
 
-**49 / 89 zadań kodowych zamkniętych (55%)** — stan na 2026-09-25.
-Liczone tylko `kind: code`: zamknięte = zamknięte z Notion (42, bez 1a.21a — przygotowanie demo) + `done` w repo (7); otwarte = kodowe `todo`/`in_progress`/`review`/`blocked` (40). Nie wlicza się: prac poza kodem, odłożonych i porzuconych. Przy zmianie statusu zadania kodowego popraw tę linię.
+**50 / 89 zadań kodowych zamkniętych (56%)** — stan na 2026-09-25.
+Liczone tylko `kind: code`: zamknięte = zamknięte z Notion (42, bez 1a.21a — przygotowanie demo) + `done` w repo (8); otwarte = kodowe `todo`/`in_progress`/`review`/`blocked` (39). Nie wlicza się: prac poza kodem, odłożonych i porzuconych. Przy zmianie statusu zadania kodowego popraw tę linię.
 
 ## Kod — otwarte
 
@@ -21,7 +21,6 @@ Liczone tylko `kind: code`: zamknięte = zamknięte z Notion (42, bez 1a.21a —
 | [1b.25](DCS-1b.25.md) | MDR projektu jako zakładka na stronie projektu (obok listy dokumentów) | todo | M | — | — | — |
 | [1b.26](DCS-1b.26.md) | Numer wykonawcy (contractor) na dokumencie — trzeci numer obok SCL i CPY | todo | M | — | — | — |
 | [1b.27](DCS-1b.27.md) | Pola do wpisania odróżnione od pól automatycznych (tło i ramka) | todo | S | — | — | — |
-| [1b.24b](DCS-1b.24b.md) | Enable DCS: kreator i funkcja uwzględniają zespół przypisany przed włączeniem DCS | review | M | 1b.24 | — | 2026-09-26 |
 | [2.01](DCS-2.01.md) | Schemat approval_tasks i comments | todo | L | — | — | 2026-10-02 |
 | [2.02](DCS-2.02.md) | Silnik obiegu: tryb równoległy (IDC) | todo | L | — | — | 2026-10-16 |
 | [2.03](DCS-2.03.md) | Silnik obiegu: tryb szeregowy (IFR i wyżej) | todo | L | — | — | 2026-10-23 |
@@ -106,6 +105,7 @@ Odłożone przez tj 2026-09-23; terminy zdjęte (poprzednie w notatkach zadań).
 | [1b.08b](DCS-1b.08b.md) | Stan „w toku” w oknie New Revision (przycisk zapisu bez informacji zwrotnej) | code | S |
 | [1b.20](DCS-1b.20.md) | Tabela dokumentów projektu: pełne nazwy typu, dyscypliny i obszaru | code | S |
 | [1b.24](DCS-1b.24.md) | Włączenie DCS dla istniejącego projektu Timesheeta (kreator „Enable DCS” zamiast zakładania projektu) | code | L |
+| [1b.24b](DCS-1b.24b.md) | Enable DCS: kreator i funkcja uwzględniają zespół przypisany przed włączeniem DCS | code | M |
 
 ## Zamknięte (historia w Notion)
 

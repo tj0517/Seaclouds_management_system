@@ -1,7 +1,7 @@
 ---
 id: DCS-1b.24b
 title: "Enable DCS: kreator i funkcja uwzględniają zespół przypisany przed włączeniem DCS"
-status: review
+status: done
 kind: code             # code | client | ops | milestone
 difficulty: M
 model: sonnet
@@ -58,6 +58,10 @@ Role w `dcs.project_roles` wiszą na projekcie, nie na włączonym DCS, więc pa
   nieznany user lub rola nadal muszą zgłaszać błąd; (3) REVOKE/GRANT i komentarz funkcji odtworzone w nowej
   migracji. Wszystkie trzy warunki spełnione — `supabase test db`: 43 asercje w pliku testowym, pełny zestaw
   zielony (1286 testów).
+- 2026-09-25 tj: odbiór PR #98 — udowodnione pgTAP: powtórzona para (osoba, rola) pominięta bez błędu i bez
+  duplikatu, dziennik tylko dla nowej pary, dotychczasowe asercje zielone; UI potwierdzone zrzutami na WSL
+  obejrzanymi przez tj. Uwaga: SC2602 włączony na prod 2026-09-25 15:50 przed wdrożeniem tej migracji (stara
+  funkcja, bez nowych ról).
 
 ## Notatki z realizacji
 - 2026-09-25 tj: błąd znaleziony przy pierwszym włączeniu DCS na prod (SC2602, 23505 na `project_roles_project_id_user_id_role_key`; transakcja cofnięta, dane nietknięte). Wybrana poprawka zamiast obejścia.
