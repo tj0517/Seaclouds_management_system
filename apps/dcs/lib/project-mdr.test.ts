@@ -59,12 +59,16 @@ function makeSettings(overrides: Partial<MdrSettingsRow> = {}): MdrSettingsRow {
 
 /**
  * Stubs the exact chains lib/project-mdr.ts issues: auth.getUser(), the
- * guard's profiles.select().eq().single(), the RPC, and the two table reads /
- * two table updates the edit path uses. `projectUpdates` and
- * `settingsUpdates` record every patch that was actually sent — the diff-only
- * assertions read them, and an empty array is the assertion that NO statement
- * was issued at all (which, on dcs.mdr_settings, is the difference between
- * leaving updated_at alone and bumping it — see the module comment).
+ * guard's profiles.select().eq().single(), fetchUserProjectRoles'
+ * select().eq('user_id', …) (requireAdminOrDc's non-admin branch, DCS-1b.19),
+ * the RPC, and the project/mdr_settings reads and mdr_settings update the
+ * edit path uses. `projectUpdates` and `settingsUpdates` record every patch
+ * that was actually sent — the diff-only assertions read them, and an empty
+ * array is the assertion that NO statement was issued at all (which, on
+ * dcs.mdr_settings, is the difference between leaving updated_at alone and
+ * bumping it — see the module comment). `projectUpdates` stays empty in every
+ * updateProjectMdr test since 1b.19: that function no longer writes
+ * public.projects at all.
  */
 function stubClient(opts: {
   sessionUserId?: string | null
@@ -76,6 +80,8 @@ function stubClient(opts: {
   projectsList?: ProjectRow[]
   mdrProjectIds?: string[]
   existingProjectRoles?: { project_id: string; user_id: string; role: string }[]
+  /** requireAdminOrDc's non-admin branch: the acting user's own dcs.project_roles rows. */
+  userProjectRoles?: { project_id: string; role: string }[]
 }) {
   const {
     sessionUserId = ADMIN,
@@ -86,6 +92,7 @@ function stubClient(opts: {
     projectsList = [],
     mdrProjectIds = [],
     existingProjectRoles = [],
+    userProjectRoles = [],
   } = opts
 
   const projectUpdates: Record<string, unknown>[] = []
@@ -140,11 +147,15 @@ function stubClient(opts: {
             }
           }
           if (table === 'project_roles') {
-            // getProjectsWithoutMdr's DCS-1b.24b read: existing roles for the
-            // not-yet-enabled candidates, filtered with .in('project_id', …).
             return {
               select: () => ({
+                // getProjectsWithoutMdr's DCS-1b.24b read: existing roles for
+                // the not-yet-enabled candidates, filtered with
+                // .in('project_id', …).
                 in: () => Promise.resolve({ data: existingProjectRoles, error: null }),
+                // fetchUserProjectRoles (lib/auth-helpers.ts), requireAdminOrDc's
+                // non-admin branch: every project_roles row for the acting user.
+                eq: () => Promise.resolve({ data: userProjectRoles, error: null }),
               }),
             }
           }
@@ -274,40 +285,32 @@ describe('parseEnableProjectMdrInput', () => {
 // ---------------------------------------------------------------------------
 
 describe('parseUpdateProjectMdrInput', () => {
-  it('drops a projectCode key present in a raw payload', () => {
-    // Not merely unused by the type: project_code is the first segment of
-    // every document number, so the update path must not accept one even
-    // from a hand-made call (same pattern as parseUpdateClientInput).
-    const result = parseUpdateProjectMdrInput({ projectId: PROJECT_ID, projectCode: 'SC9999', name: 'Beta' })
+  // DCS-1b.19: name/client/processType/year/projectCode are public.projects'
+  // identity fields — shared with Timesheet, read-only in DCS for everyone —
+  // so none of them survive parsing, no matter who sends them or what they
+  // contain (same pattern as parseUpdateClientInput's projectCode drop).
+  it.each(['projectCode', 'name', 'clientId', 'processType', 'year'])('drops a %s key present in a raw payload', (key) => {
+    const result = parseUpdateProjectMdrInput({ projectId: PROJECT_ID, [key]: 'anything', budgetHours: 10 })
     expect(result.ok).toBe(true)
-    expect(result.ok && 'projectCode' in result.data).toBe(false)
+    expect(result.ok && key in result.data).toBe(false)
   })
 
   it('leaves omitted fields undefined so the diff can tell "unchanged" from "cleared"', () => {
-    const result = parseUpdateProjectMdrInput({ projectId: PROJECT_ID, name: 'Beta' })
-    expect(result.ok && result.data).toEqual({ projectId: PROJECT_ID, name: 'Beta' })
+    const result = parseUpdateProjectMdrInput({ projectId: PROJECT_ID, status: 'closed' })
+    expect(result.ok && result.data).toEqual({ projectId: PROJECT_ID, status: 'closed' })
     expect(result.ok && result.data.budgetHours).toBeUndefined()
   })
 
-  it('keeps an explicit null as "clear this field"', () => {
-    const result = parseUpdateProjectMdrInput({ projectId: PROJECT_ID, budgetHours: null, clientId: null })
+  it('keeps an explicit null budget as "clear this field"', () => {
+    const result = parseUpdateProjectMdrInput({ projectId: PROJECT_ID, budgetHours: null })
     expect(result.ok && result.data.budgetHours).toBeNull()
-    expect(result.ok && result.data.clientId).toBeNull()
   })
 
-  it('treats processType null as "clear to not classified", not as absent', () => {
-    // public.projects.process_type is nullable and the 20260902114743
-    // backfill deliberately left every SCYYNN code unclassified, so the
-    // dialog's "Not classified" option has to be able to put it back.
-    const result = parseUpdateProjectMdrInput({ projectId: PROJECT_ID, processType: null })
-    expect(result.ok && result.data.processType).toBeNull()
-    expect(result.ok && 'processType' in result.data).toBe(true)
-  })
-
-  it('rejects switching a project to internal while keeping its client', () => {
-    expect(
-      parseUpdateProjectMdrInput({ projectId: PROJECT_ID, processType: 'internal', clientId: CLIENT_ID }),
-    ).toMatchObject({ ok: false, error: 'internal_project_has_client' })
+  it('rejects a cpyNumbering that is not a boolean', () => {
+    expect(parseUpdateProjectMdrInput({ projectId: PROJECT_ID, cpyNumbering: 'yes' })).toMatchObject({
+      ok: false,
+      error: 'invalid_input',
+    })
   })
 
   it('rejects an unknown MDR status', () => {
@@ -487,15 +490,39 @@ describe('enableProjectMdr', () => {
 // updateProjectMdr — diff-only, across two tables
 // ---------------------------------------------------------------------------
 
-describe('updateProjectMdr (diff-only)', () => {
-  it('refuses a non-admin without touching either table', async () => {
+describe('updateProjectMdr (diff-only, dcs.mdr_settings only — DCS-1b.19)', () => {
+  it('refuses a plain member (no project role at all) without touching mdr_settings', async () => {
     const { client, projectUpdates, settingsUpdates } = stubClient({ sessionUserId: EMPLOYEE, role: 'employee' })
-    expect(await updateProjectMdr(client, { projectId: PROJECT_ID, name: 'Beta' })).toEqual({
+    expect(await updateProjectMdr(client, { projectId: PROJECT_ID, status: 'closed' })).toEqual({
       ok: false,
       error: 'forbidden',
     })
     expect(projectUpdates).toEqual([])
     expect(settingsUpdates).toEqual([])
+  })
+
+  it('refuses a DC of a different project — holding "dc" anywhere is not enough', async () => {
+    const { client, settingsUpdates } = stubClient({
+      sessionUserId: EMPLOYEE,
+      role: 'employee',
+      userProjectRoles: [{ project_id: 'some-other-project', role: 'dc' }],
+    })
+    expect(await updateProjectMdr(client, { projectId: PROJECT_ID, status: 'closed' })).toEqual({
+      ok: false,
+      error: 'forbidden',
+    })
+    expect(settingsUpdates).toEqual([])
+  })
+
+  it('allows the project\'s own DC, not just an admin', async () => {
+    const { client, settingsUpdates } = stubClient({
+      sessionUserId: EMPLOYEE,
+      role: 'employee',
+      userProjectRoles: [{ project_id: PROJECT_ID, role: 'dc' }],
+    })
+    const result = await updateProjectMdr(client, { projectId: PROJECT_ID, budgetHours: 2000 })
+    expect(result.ok).toBe(true)
+    expect(settingsUpdates).toEqual([{ budget_hours: 2000 }])
   })
 
   it('issues NO statement at all when every field matches the stored row', async () => {
@@ -505,10 +532,6 @@ describe('updateProjectMdr (diff-only)', () => {
     const { client, projectUpdates, settingsUpdates } = stubClient({})
     const result = await updateProjectMdr(client, {
       projectId: PROJECT_ID,
-      name: 'Alpha',
-      clientId: CLIENT_ID,
-      processType: 'project',
-      year: 2026,
       cpyNumbering: false,
       cycleIdcToIfr: 7,
       cycleIfrToRetcom: 10,
@@ -521,14 +544,10 @@ describe('updateProjectMdr (diff-only)', () => {
     expect(settingsUpdates).toEqual([])
   })
 
-  it('writes only the changed column when a cycle moves — and touches public.projects not at all', async () => {
+  it('writes only the changed column when a cycle moves', async () => {
     const { client, projectUpdates, settingsUpdates } = stubClient({})
     await updateProjectMdr(client, {
       projectId: PROJECT_ID,
-      name: 'Alpha',
-      clientId: CLIENT_ID,
-      processType: 'project',
-      year: 2026,
       cpyNumbering: false,
       cycleIdcToIfr: 14,
       cycleIfrToRetcom: 10,
@@ -540,13 +559,6 @@ describe('updateProjectMdr (diff-only)', () => {
     expect(projectUpdates).toEqual([])
   })
 
-  it('writes only the changed column when the client moves — and touches mdr_settings not at all', async () => {
-    const { client, projectUpdates, settingsUpdates } = stubClient({})
-    await updateProjectMdr(client, { projectId: PROJECT_ID, clientId: null })
-    expect(projectUpdates).toEqual([{ client_id: null }])
-    expect(settingsUpdates).toEqual([])
-  })
-
   it('writes only budget_hours when only the budget moves', async () => {
     const { client, projectUpdates, settingsUpdates } = stubClient({})
     await updateProjectMdr(client, { projectId: PROJECT_ID, budgetHours: 2000 })
@@ -554,44 +566,59 @@ describe('updateProjectMdr (diff-only)', () => {
     expect(projectUpdates).toEqual([])
   })
 
-  it('patches both tables when fields on both changed, still one column each', async () => {
+  it('patches several mdr_settings columns in one statement when several move together', async () => {
     const { client, projectUpdates, settingsUpdates } = stubClient({})
-    await updateProjectMdr(client, { projectId: PROJECT_ID, name: 'Beta', status: 'closed' })
-    expect(projectUpdates).toEqual([{ name: 'Beta' }])
-    expect(settingsUpdates).toEqual([{ status: 'closed' }])
+    await updateProjectMdr(client, { projectId: PROJECT_ID, budgetHours: 2000, status: 'closed' })
+    expect(projectUpdates).toEqual([])
+    expect(settingsUpdates).toEqual([{ budget_hours: 2000, status: 'closed' }])
   })
 
-  it('refuses to add a client to a project that is already internal', async () => {
-    // The stored row says internal and the edit only mentions the client, so
-    // parseUpdateProjectMdrInput cannot see the conflict — updateProjectMdr
-    // evaluates the rule against the row as it would be after the edit.
-    const { client, projectUpdates } = stubClient({
-      project: makeProject({ process_type: 'internal', client_id: null }),
+  it('never touches public.projects, even when the payload smuggles identity fields', async () => {
+    // parseUpdateProjectMdrInput already drops these; this proves the
+    // guarantee end to end, through the real update path, not just the parser.
+    const { client, projectUpdates } = stubClient({})
+    const result = await updateProjectMdr(client, {
+      projectId: PROJECT_ID,
+      name: 'Smuggled',
+      clientId: null,
+      processType: 'internal',
+      year: 1999,
+      budgetHours: 2000,
     })
-    expect(await updateProjectMdr(client, { projectId: PROJECT_ID, clientId: CLIENT_ID })).toMatchObject({
-      ok: false,
-      error: 'internal_project_has_client',
-    })
+    expect(result.ok).toBe(true)
     expect(projectUpdates).toEqual([])
   })
 
-  it('clears process_type when the edit sets it to null', async () => {
-    const { client, projectUpdates } = stubClient({})
-    const result = await updateProjectMdr(client, { projectId: PROJECT_ID, processType: null })
-    expect(result.ok).toBe(true)
-    expect(projectUpdates).toEqual([{ process_type: null }])
-  })
-
-  it('checks the internal rule against the process type AFTER the edit, not before', async () => {
-    // Clearing an internal project's type while giving it a client is legal —
-    // it stops being internal. A `??` here would compare against the old
-    // 'internal' and refuse it.
-    const { client, projectUpdates } = stubClient({
+  it('refuses turning on CPY numbering for an internal project', async () => {
+    const { client, settingsUpdates } = stubClient({
       project: makeProject({ process_type: 'internal', client_id: null }),
     })
-    const result = await updateProjectMdr(client, { projectId: PROJECT_ID, processType: null, clientId: CLIENT_ID })
+    expect(await updateProjectMdr(client, { projectId: PROJECT_ID, cpyNumbering: true })).toMatchObject({
+      ok: false,
+      error: 'internal_project_has_client',
+    })
+    expect(settingsUpdates).toEqual([])
+  })
+
+  it('refuses turning on CPY numbering for a project with no client', async () => {
+    const { client, settingsUpdates } = stubClient({
+      project: makeProject({ process_type: 'project', client_id: null }),
+    })
+    expect(await updateProjectMdr(client, { projectId: PROJECT_ID, cpyNumbering: true })).toMatchObject({
+      ok: false,
+      error: 'cpy_needs_client',
+    })
+    expect(settingsUpdates).toEqual([])
+  })
+
+  it('allows CPY numbering once the project has a client', async () => {
+    const { client, settingsUpdates } = stubClient({
+      project: makeProject({ process_type: 'project', client_id: CLIENT_ID }),
+      settings: makeSettings({ cpy_numbering: false }),
+    })
+    const result = await updateProjectMdr(client, { projectId: PROJECT_ID, cpyNumbering: true })
     expect(result.ok).toBe(true)
-    expect(projectUpdates).toEqual([{ client_id: CLIENT_ID, process_type: null }])
+    expect(settingsUpdates).toEqual([{ cpy_numbering: true }])
   })
 
   it('will not enrol a project into DCS through an edit when it has no mdr_settings row', async () => {
@@ -603,16 +630,9 @@ describe('updateProjectMdr (diff-only)', () => {
     expect(settingsUpdates).toEqual([])
   })
 
-  it('still edits the projects half of a project DCS does not run', async () => {
-    const { client, projectUpdates } = stubClient({ settings: null })
-    const result = await updateProjectMdr(client, { projectId: PROJECT_ID, name: 'Beta' })
-    expect(result.ok).toBe(true)
-    expect(projectUpdates).toEqual([{ name: 'Beta' }])
-  })
-
   it('reports a missing project rather than writing blind', async () => {
     const { client } = stubClient({ project: null })
-    expect(await updateProjectMdr(client, { projectId: PROJECT_ID, name: 'Beta' })).toMatchObject({
+    expect(await updateProjectMdr(client, { projectId: PROJECT_ID, status: 'closed' })).toMatchObject({
       ok: false,
       error: 'not_found',
     })

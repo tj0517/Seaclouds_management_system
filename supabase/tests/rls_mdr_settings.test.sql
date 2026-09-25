@@ -5,9 +5,16 @@
 -- Test projects are created here rather than in seed: mdr_settings rows must
 -- NOT exist for real projects (a missing row means "DCS does not run this
 -- project"), and the CASCADE test deletes its project.
+--
+-- Section 5 (DCS-1b.19): "Doc controllers manage mdr settings" predates this
+-- task (read confirmed identical on scl-dev and prod, 2026-09-25) — these
+-- assertions are the first to actually exercise it: a project's own DC can
+-- UPDATE its mdr_settings row directly, a DC of a DIFFERENT project cannot,
+-- and section 2 above already covers a plain member (tymon, before he is
+-- given any dcs.project_roles row in section 5).
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(13);
+select plan(16);
 
 -- ============================================================
 -- Schema assertions (red without the migrations)
@@ -31,6 +38,7 @@ create temp table t_fixture as
 select
   (select id from auth.users where email = 'tjezionek2000@gmail.com') as employee_id,
   (select id from auth.users where email = 'tjezionekspam@gmail.com') as admin_id,
+  (select id from auth.users where email = 'ejezionek@gmail.com') as ernest_id,
   (select count(*) from dcs.mdr_settings) as total_settings;
 grant select on t_fixture to authenticated;
 
@@ -152,6 +160,70 @@ select is(
   0::bigint,
   'deleting a project cascades to its mdr settings'
 );
+
+-- ============================================================
+-- 5. DCS-1b.19: a project's own DC updates mdr_settings directly; a DC of a
+-- DIFFERENT project is refused (a plain member is already covered by
+-- section 2, before tymon holds any project_roles row at all).
+-- ============================================================
+insert into public.projects (id, name, project_code) values
+  ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa4', 'DCS Test Delta', 'SC9904');
+insert into dcs.mdr_settings (project_id, budget_hours)
+values ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa4', 200);
+
+-- ernest is Delta's DC; tymon is Alpha's DC — neither is DC of the other's
+-- project, which is exactly the case this section proves refused.
+insert into dcs.project_roles (project_id, user_id, role)
+values ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa4', (select ernest_id from t_fixture), 'dc');
+insert into dcs.project_roles (project_id, user_id, role)
+values ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1', (select employee_id from t_fixture), 'dc');
+
+set local role authenticated;
+
+-- 5a. GREEN: Delta's own DC (ernest) updates its budget and cycle.
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', (select ernest_id from t_fixture), 'role', 'authenticated')::text,
+  true
+);
+update dcs.mdr_settings set budget_hours = 300, cycle_ifr_to_retcom = 20
+ where project_id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa4';
+select results_eq(
+  $$select budget_hours, cycle_ifr_to_retcom from dcs.mdr_settings
+      where project_id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa4'$$,
+  $$values (300::numeric, 20)$$,
+  'GREEN: Delta''s own DC (ernest) updates its budget and cycle'
+);
+
+-- 5b. RED: tymon, DC of Alpha, is refused on Delta (another project).
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', (select employee_id from t_fixture), 'role', 'authenticated')::text,
+  true
+);
+update dcs.mdr_settings set budget_hours = 999
+ where project_id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa4';
+select is(
+  (select budget_hours from dcs.mdr_settings where project_id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa4'),
+  300::numeric,
+  'RED: a DC of another project (tymon on Alpha) cannot update Delta''s settings'
+);
+
+-- 5c. RED, the other direction: ernest (Delta's DC only) cannot update Alpha.
+select set_config(
+  'request.jwt.claims',
+  json_build_object('sub', (select ernest_id from t_fixture), 'role', 'authenticated')::text,
+  true
+);
+update dcs.mdr_settings set budget_hours = 999
+ where project_id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1';
+select is(
+  (select budget_hours from dcs.mdr_settings where project_id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1'),
+  500::numeric,
+  'RED: a DC of another project (ernest on Delta) cannot update Alpha''s settings either'
+);
+
+reset role;
 
 select * from finish();
 rollback;

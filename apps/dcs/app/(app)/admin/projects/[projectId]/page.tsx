@@ -22,9 +22,14 @@
 // DCS 1a.17: this page also became the project's MDR summary and the home of
 // EditProjectDialog — the wizard sends you here after creating a project, and
 // this is where its settings are changed afterwards. The summary renders for
-// every reader (mdr_settings' SELECT policy admits any signed-in user); the
-// Edit button only for an admin, matching updateProjectMdr's requireAdmin and
-// the "Admins manage mdr settings" / "Admin zarządza projektami" policies.
+// every reader (mdr_settings' SELECT policy admits any signed-in user).
+//
+// DCS 1b.19: the Edit button is for an admin OR the project's own DC (same
+// `canEdit` the team panel below already computes — requireAdminOrDc in
+// lib/project-mdr.ts's updateProjectMdr mirrors it exactly), and only when
+// DCS actually runs this project (settings !== null): identity (name /
+// client / process type / year) is read-only in DCS for everyone now, so a
+// project with no mdr_settings row has nothing left in this dialog to edit.
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { createClient } from '@scl/db/server'
@@ -59,10 +64,6 @@ export default async function ProjectTeamPage({ params }: { params: Promise<{ pr
 
   const isAdmin = sessionProfile?.role === 'admin'
 
-  // Only the Edit dialog needs the client list, and only an admin sees it —
-  // so this read is skipped entirely otherwise rather than being fetched and
-  // thrown away (clients' SELECT policy would also return a narrower set).
-  const clients = isAdmin ? await getActiveClients(supabase) : []
   let canEdit = isAdmin
   if (!canEdit) {
     const { data: ownDcRow } = await supabase
@@ -75,6 +76,15 @@ export default async function ProjectTeamPage({ params }: { params: Promise<{ pr
       .limit(1)
     canEdit = (ownDcRow?.length ?? 0) > 0
   }
+  // DCS-1b.19: the DCS-settings dialog, not just an admin's — but only when
+  // there is a settings row to edit (see the file comment).
+  const canEditMdr = canEdit && settings !== null
+
+  // Only the Edit dialog needs the client list (read-only display of the
+  // project's client), and only when the dialog will actually render — so
+  // this read is skipped entirely otherwise rather than being fetched and
+  // thrown away.
+  const clients = canEditMdr ? await getActiveClients(supabase) : []
 
   const { data: teamRows, error: teamError } = await supabase
     .schema('dcs')
@@ -124,7 +134,7 @@ export default async function ProjectTeamPage({ params }: { params: Promise<{ pr
                 <NavLinkStatus />
               </Link>
             </Button>
-            {isAdmin ? (
+            {settings && canEditMdr ? (
               <EditProjectDialog
                 project={project}
                 settings={settings}

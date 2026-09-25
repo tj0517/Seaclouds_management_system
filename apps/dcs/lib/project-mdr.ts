@@ -23,7 +23,7 @@ import { Constants } from '@scl/db'
 import type { Database, Enums, Json, Tables, TablesUpdate } from '@scl/db'
 import { requireAdmin } from './clients-admin'
 import type { ProjectRole } from './project-roles'
-import { PROJECT_ROLES } from './project-roles'
+import { PROJECT_ROLES, requireAdminOrDc } from './project-roles'
 
 export type ProcessType = Enums<'project_process_type'>
 export type MdrStatus = Enums<{ schema: 'dcs' }, 'mdr_status'>
@@ -116,21 +116,19 @@ export type EnableProjectMdrInput = {
  * recorded in updateDictionaryEntry (an omitted optional field silently
  * nulled out).
  *
- * Deliberately has no `projectCode` field, at the type level and again at
- * runtime in parseUpdateProjectMdrInput: project_code is the first segment of
- * every DCS document number (SC2601-SCL-RA-0012-EN, docs/00-glossary.md), so
- * changing it would retroactively alter existing numbers — the same argument
- * that made dcs.dictionaries.code immutable in 1a.15b. Unlike that one this
- * is app-level only; the database still permits the UPDATE (see the report's
- * "left unfixed" list).
+ * DCS-1b.19: name/client/processType/year are gone — client agreement
+ * 2026-09-25 made shared project identity read-only in DCS for everyone,
+ * admin included (it moves to the admin portal, ADR-0014; until then O-20).
+ * Deliberately has no `projectCode` field either, at the type level and again
+ * at runtime in parseUpdateProjectMdrInput: project_code is the first segment
+ * of every DCS document number (SC2601-SCL-RA-0012-EN, docs/00-glossary.md),
+ * so changing it would retroactively alter existing numbers — the same
+ * argument that made dcs.dictionaries.code immutable in 1a.15b. Unlike that
+ * one this is app-level only; the database still permits the UPDATE (see the
+ * report's "left unfixed" list).
  */
 export type UpdateProjectMdrInput = {
   projectId: string
-  name?: string
-  clientId?: string | null
-  /** `null` clears it back to "not classified" — the column is nullable (O-13 backfill left SCYYNN codes NULL). */
-  processType?: ProcessType | null
-  year?: number | null
   cpyNumbering?: boolean
   cycleIdcToIfr?: number
   cycleIfrToRetcom?: number
@@ -153,10 +151,6 @@ type DbClient = SupabaseClient<Database>
 // covers them directly (vitest.config.ts is node-only: no jsdom, so the
 // decisions live here and the components stay thin, see components/IfRole.tsx).
 // ---------------------------------------------------------------------------
-
-function isProcessType(value: unknown): value is ProcessType {
-  return typeof value === 'string' && (PROCESS_TYPES as readonly string[]).includes(value)
-}
 
 function isMdrStatus(value: unknown): value is MdrStatus {
   return typeof value === 'string' && (MDR_STATUSES as readonly string[]).includes(value)
@@ -267,8 +261,12 @@ export function parseEnableProjectMdrInput(raw: unknown): ActionResult<EnablePro
 /**
  * `raw` is whatever an untrusted caller sends the update server action —
  * deliberately destructures only the fields UpdateProjectMdrInput declares,
- * so a `projectCode` key present in `raw` is dropped at runtime, not merely
- * unused by the type (same pattern as parseUpdateClientInput).
+ * so `name` / `clientId` / `processType` / `year` / `projectCode` keys
+ * present in `raw` are dropped at runtime, not merely unused by the type
+ * (same pattern as parseUpdateClientInput). DCS-1b.19: those four are
+ * public.projects' identity fields — shared with Timesheet, read-only in DCS
+ * for everyone — so this parser never forwards them, no matter who is
+ * calling or what the payload contains.
  */
 export function parseUpdateProjectMdrInput(raw: unknown): ActionResult<UpdateProjectMdrInput> {
   if (typeof raw !== 'object' || raw === null) return fail('invalid_input', 'payload is not an object')
@@ -279,26 +277,6 @@ export function parseUpdateProjectMdrInput(raw: unknown): ActionResult<UpdatePro
   }
   const out: UpdateProjectMdrInput = { projectId: r.projectId }
 
-  if (r.name !== undefined) {
-    if (typeof r.name !== 'string' || r.name.trim() === '') return fail('invalid_input', 'project name cannot be empty')
-    out.name = r.name.trim()
-  }
-  if (r.clientId !== undefined) {
-    if (r.clientId !== null && (typeof r.clientId !== 'string' || !UUID_RE.test(r.clientId))) {
-      return fail('invalid_input', 'client id is not a uuid')
-    }
-    out.clientId = r.clientId as string | null
-  }
-  if (r.processType !== undefined) {
-    if (r.processType !== null && !isProcessType(r.processType)) return fail('invalid_input', 'unknown process type')
-    out.processType = r.processType
-  }
-  if (r.year !== undefined) {
-    if (r.year !== null && (typeof r.year !== 'number' || !Number.isInteger(r.year))) {
-      return fail('invalid_input', 'year must be a whole number')
-    }
-    out.year = r.year as number | null
-  }
   if (r.cpyNumbering !== undefined) {
     if (typeof r.cpyNumbering !== 'boolean') return fail('invalid_input', 'cpyNumbering must be a boolean')
     out.cpyNumbering = r.cpyNumbering
@@ -317,16 +295,6 @@ export function parseUpdateProjectMdrInput(raw: unknown): ActionResult<UpdatePro
   if (r.status !== undefined) {
     if (!isMdrStatus(r.status)) return fail('invalid_input', 'unknown MDR status')
     out.status = r.status
-  }
-
-  // The internal-project rule again, this time against the fields actually
-  // being changed. Only decidable here when the edit sets processType itself;
-  // an edit that changes only client_id is checked in updateProjectMdr, which
-  // has the stored row to compare against.
-  if (out.processType != null && skipsClientStep(out.processType)) {
-    if (out.clientId != null || out.cpyNumbering === true) {
-      return fail('internal_project_has_client', 'an internal project has no client and no CPY numbering')
-    }
   }
 
   return { ok: true, data: out }
@@ -488,102 +456,97 @@ export async function getProjectMdr(supabase: DbClient, projectId: string): Prom
 }
 
 /**
- * Diff-only update across the two tables a project's configuration is split
- * between: identity in public.projects, DCS configuration in
- * dcs.mdr_settings (decision O-13). Reads both current rows and writes only
- * the fields that were both provided and actually differ — and issues NO
- * statement at all for a table whose patch came out empty.
+ * Diff-only update of a project's DCS configuration, dcs.mdr_settings only.
+ * Reads the current row and writes only the fields that were both provided
+ * and actually differ — and issues NO statement at all when the patch comes
+ * out empty.
  *
- * That last part is not a micro-optimisation. On dcs.mdr_settings an UPDATE
- * that changes nothing still fires set_updated_at() and moves updated_at, so
- * an empty patch sent anyway would rewrite the row's timestamp and make it
- * look edited when nothing was. Since 1a.17b that statement would be a no-op
- * in the audit log too — audit_trigger() writes one row per column that
- * actually changed, and a full row resent unchanged changes none — but a
- * write with nothing to write remains a write, and updated_at is not free.
+ * That is not a micro-optimisation. An UPDATE that changes nothing still
+ * fires set_updated_at() and moves updated_at, so an empty patch sent anyway
+ * would rewrite the row's timestamp and make it look edited when nothing
+ * was. Since 1a.17b that statement would be a no-op in the audit log too —
+ * audit_trigger() writes one row per column that actually changed, and a
+ * full row resent unchanged changes none — but a write with nothing to write
+ * remains a write, and updated_at is not free.
  * supabase/tests/dictionaries_code_immutable.test.sql section 2 and
  * supabase/tests/audit_mdr_settings.test.sql section 3 both prove the log
  * side: audit_log cannot distinguish "no UPDATE sent" from "full row resent
  * unchanged", which is exactly why the app sends nothing.
  *
- * Both tables are audited: public.projects since 1a.08, dcs.mdr_settings
- * since 1a.17b (migration 20260916145603) — one audit_log row per column that
- * actually changed, which is what acceptance criterion 6 reads.
+ * dcs.mdr_settings has been audited since 1a.17b (migration 20260916145603)
+ * — one audit_log row per column that actually changed, which is what the
+ * "changes are logged" acceptance criterion reads.
+ *
+ * DCS-1b.19: this no longer touches public.projects at all (name / client /
+ * process type / year are Timesheet's, read-only in DCS for everyone — see
+ * UpdateProjectMdrInput's own comment), and the guard is admin-or-the-
+ * project's-DC (requireAdminOrDc, lib/project-roles.ts), not admin-only —
+ * "Doc controllers manage mdr settings" already allows it at the RLS layer
+ * (verified by reading pg_policy on scl-dev and prod, both identical), this
+ * is the app's first line of defence in front of it (CLAUDE.md).
+ *
+ * The CPY-numbering invariant ("no client → no CPY numbering",
+ * dcs_enable_project_mdr's own rule) is re-checked here against the row as
+ * it will be after the edit, because nothing in the database enforces it on
+ * UPDATE — dcs_enable_project_mdr's is_admin()-gated check only ever runs on
+ * INSERT. Recorded as a finding (docs/deferred-tasks.md, lll) rather than
+ * fixed with a migration — a direct RPC/PostgREST caller can still bypass
+ * this app-level check, this closes only the UI path.
  */
 export async function updateProjectMdr(
   supabase: DbClient,
   rawInput: unknown,
 ): Promise<ActionResult<ProjectMdr>> {
-  const auth = await requireAdmin(supabase)
-  if (!auth.ok) return auth
-
   const parsed = parseUpdateProjectMdrInput(rawInput)
   if (!parsed.ok) return parsed
   const input = parsed.data
 
+  const auth = await requireAdminOrDc(supabase, input.projectId)
+  if (!auth.ok) return auth
+
   const current = await getProjectMdr(supabase, input.projectId)
   if (!current) return fail('not_found', 'no such project')
-
-  // The internal-project rule, evaluated against the row as it will be after
-  // this edit — an edit that adds a client to an already-internal project
-  // never mentions processType, so parseUpdateProjectMdrInput cannot see it.
-  // `!== undefined`, not `??`: processType null means "clear to not
-  // classified" and must be evaluated as such — `null ?? current` would fall
-  // back to the OLD type and check the invariant against a value the edit is
-  // removing.
-  const nextProcessType = input.processType !== undefined ? input.processType : current.project.process_type
-  const nextClientId = input.clientId !== undefined ? input.clientId : current.project.client_id
-  const nextCpy = input.cpyNumbering !== undefined ? input.cpyNumbering : (current.settings?.cpy_numbering ?? false)
-  if (nextProcessType !== null && skipsClientStep(nextProcessType) && (nextClientId != null || nextCpy)) {
-    return fail('internal_project_has_client', 'an internal project has no client and no CPY numbering')
-  }
-
-  const projectPatch: TablesUpdate<'projects'> = {}
-  if (input.name !== undefined && input.name !== current.project.name) projectPatch.name = input.name
-  if (input.clientId !== undefined && input.clientId !== current.project.client_id) {
-    projectPatch.client_id = input.clientId
-  }
-  if (input.processType !== undefined && input.processType !== current.project.process_type) {
-    projectPatch.process_type = input.processType
-  }
-  if (input.year !== undefined && input.year !== current.project.year) projectPatch.year = input.year
-
-  const settingsPatch: TablesUpdate<{ schema: 'dcs' }, 'mdr_settings'> = {}
-  if (current.settings) {
-    const s = current.settings
-    if (input.cpyNumbering !== undefined && input.cpyNumbering !== s.cpy_numbering) {
-      settingsPatch.cpy_numbering = input.cpyNumbering
-    }
-    if (input.cycleIdcToIfr !== undefined && input.cycleIdcToIfr !== s.cycle_idc_to_ifr) {
-      settingsPatch.cycle_idc_to_ifr = input.cycleIdcToIfr
-    }
-    if (input.cycleIfrToRetcom !== undefined && input.cycleIfrToRetcom !== s.cycle_ifr_to_retcom) {
-      settingsPatch.cycle_ifr_to_retcom = input.cycleIfrToRetcom
-    }
-    if (input.cycleRetcomToIfc !== undefined && input.cycleRetcomToIfc !== s.cycle_retcom_to_ifc) {
-      settingsPatch.cycle_retcom_to_ifc = input.cycleRetcomToIfc
-    }
-    if (input.budgetHours !== undefined && input.budgetHours !== s.budget_hours) {
-      settingsPatch.budget_hours = input.budgetHours
-    }
-    if (input.status !== undefined && input.status !== s.status) settingsPatch.status = input.status
-  } else if (
-    input.cpyNumbering !== undefined ||
-    input.cycleIdcToIfr !== undefined ||
-    input.cycleIfrToRetcom !== undefined ||
-    input.cycleRetcomToIfc !== undefined ||
-    input.budgetHours !== undefined ||
-    input.status !== undefined
-  ) {
-    // No mdr_settings row means DCS does not run this project. Creating one
-    // here would quietly enrol it, which is the wizard's job, not an edit's.
+  if (!current.settings) {
+    // No mdr_settings row means DCS does not run this project — nothing for
+    // this action to edit (enabling DCS is the admin-only wizard's job).
     return fail('not_found', 'this project has no MDR settings — create its MDR first')
   }
+  const s = current.settings
 
-  if (Object.keys(projectPatch).length > 0) {
-    const { error } = await supabase.from('projects').update(projectPatch).eq('id', input.projectId)
-    if (error) return mapDbError(error.code, error.message)
+  // Only checked when cpy_numbering is actually being turned ON — not
+  // whenever the field is merely present in the payload (EditProjectDialog
+  // always sends it, even when the checkbox is disabled and unchanged).
+  // Otherwise an already-inconsistent row (reachable only outside the app —
+  // see the module comment's "not fixed with a migration" note) would block
+  // every future save of the OTHER fields on that row, with no way to clear
+  // it since the checkbox stays disabled either way.
+  const projectIsInternal = current.project.process_type !== null && skipsClientStep(current.project.process_type)
+  const cpyTurningOn = input.cpyNumbering === true && s.cpy_numbering !== true
+  if (cpyTurningOn && projectIsInternal) {
+    return fail('internal_project_has_client', 'an internal project has no client and no CPY numbering')
   }
+  if (cpyTurningOn && current.project.client_id === null) {
+    return fail('cpy_needs_client', 'CPY numbering needs a client')
+  }
+
+  const settingsPatch: TablesUpdate<{ schema: 'dcs' }, 'mdr_settings'> = {}
+  if (input.cpyNumbering !== undefined && input.cpyNumbering !== s.cpy_numbering) {
+    settingsPatch.cpy_numbering = input.cpyNumbering
+  }
+  if (input.cycleIdcToIfr !== undefined && input.cycleIdcToIfr !== s.cycle_idc_to_ifr) {
+    settingsPatch.cycle_idc_to_ifr = input.cycleIdcToIfr
+  }
+  if (input.cycleIfrToRetcom !== undefined && input.cycleIfrToRetcom !== s.cycle_ifr_to_retcom) {
+    settingsPatch.cycle_ifr_to_retcom = input.cycleIfrToRetcom
+  }
+  if (input.cycleRetcomToIfc !== undefined && input.cycleRetcomToIfc !== s.cycle_retcom_to_ifc) {
+    settingsPatch.cycle_retcom_to_ifc = input.cycleRetcomToIfc
+  }
+  if (input.budgetHours !== undefined && input.budgetHours !== s.budget_hours) {
+    settingsPatch.budget_hours = input.budgetHours
+  }
+  if (input.status !== undefined && input.status !== s.status) settingsPatch.status = input.status
+
   if (Object.keys(settingsPatch).length > 0) {
     const { error } = await supabase
       .schema('dcs')

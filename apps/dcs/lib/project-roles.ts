@@ -95,8 +95,17 @@ export function parseSetProjectRolesInput(input: unknown): SetProjectRolesInput 
  * error-mapping contract every caller in this file relies on. It reuses that
  * helper's two exported primitives (fetchUserProjectRoles, hasAnyRole)
  * instead of re-querying dcs.project_roles by hand.
+ *
+ * Exported (DCS-1b.19): lib/project-mdr.ts's updateProjectMdr reuses this
+ * exact guard for the DCS-settings edit — a project's DC and an admin, no
+ * one else. The return type is deliberately narrower than ActionResult<T>
+ * (only the two errors this function ever produces) so it structurally fits
+ * both this file's ProjectMdrError-flavoured ActionResult and project-mdr.ts's.
  */
-async function requireAdminOrDc(supabase: DbClient, projectId: string): Promise<ActionResult<string>> {
+export async function requireAdminOrDc(
+  supabase: DbClient,
+  projectId: string,
+): Promise<{ ok: true; data: string } | { ok: false; error: 'unauthenticated' | 'forbidden' }> {
   const {
     data: { user },
   } = await supabase.auth.getUser()
