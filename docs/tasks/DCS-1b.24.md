@@ -1,7 +1,7 @@
 ---
 id: DCS-1b.24
 title: "Włączenie DCS dla istniejącego projektu Timesheeta (kreator „Enable DCS” zamiast zakładania projektu)"
-status: in_progress
+status: review
 kind: code             # code | client | ops | milestone
 difficulty: L
 model: null
@@ -13,7 +13,7 @@ depends_on: []
 blocked_by_questions: []
 touches_db: true
 touches_prod: false
-pr: null
+pr: 96
 ---
 
 # DCS-1b.24 — Włączenie DCS dla istniejącego projektu Timesheeta

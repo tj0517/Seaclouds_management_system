@@ -18,7 +18,7 @@ Liczone tylko `kind: code`: zamknięte = zamknięte z Notion (42, bez 1a.21a —
 | [1b.21](DCS-1b.21.md) | Słowniki: wyjaśnienie „Sort order” i „Est. budget (h)” w tabeli i formularzu | todo | S | — | — | — |
 | [1b.22](DCS-1b.22.md) | Okno edycji dokumentu dla DC (bez pól tworzących numer SCL) | todo | M | — | — | — |
 | [1b.23](DCS-1b.23.md) | Profil dokumentu: bez technicznego Document ID, pliki w „Current revision” tylko z nazwą | todo | S | — | — | — |
-| [1b.24](DCS-1b.24.md) | Włączenie DCS dla istniejącego projektu Timesheeta (kreator „Enable DCS” zamiast zakładania projektu) | in_progress | L | — | — | — |
+| [1b.24](DCS-1b.24.md) | Włączenie DCS dla istniejącego projektu Timesheeta (kreator „Enable DCS” zamiast zakładania projektu) | review | L | — | — | — |
 | [1b.25](DCS-1b.25.md) | MDR projektu jako zakładka na stronie projektu (obok listy dokumentów) | todo | M | — | — | — |
 | [1b.26](DCS-1b.26.md) | Numer wykonawcy (contractor) na dokumencie — trzeci numer obok SCL i CPY | todo | M | — | — | — |
 | [1b.27](DCS-1b.27.md) | Pola do wpisania odróżnione od pól automatycznych (tło i ramka) | todo | S | — | — | — |
