@@ -1,7 +1,7 @@
 ---
 id: DCS-1b.21
 title: "Słowniki: wyjaśnienie „Sort order” i „Est. budget (h)” w tabeli i formularzu"
-status: review
+status: done
 kind: code             # code | client | ops | milestone
 difficulty: S
 model: sonnet
@@ -43,3 +43,4 @@ Na prezentacji padło pytanie, co znaczą kolumny „Sort order” i „Budget h
 - 2026-09-23 tj: Uwagi z prezentacji Fazy 1 dla klienta, tj 2026-09-23.
 - 2026-09-25 tj: przed napisaniem tekstu podpowiedzi potwierdzone w `DocumentCreateForm.tsx` (`onDocTypeChange`, `budgetHoursFromMeta`): budżet dokumentu jest podpowiadany z `meta` typu dokumentu i pole zostaje edytowalne — Originator może je nadpisać. Zgodne z Celem, bez rozbieżności — nie było potrzeby zatrzymania.
 - 2026-09-25 tj: dowód przeglądarkowy od razu na lokalnym buildzie produkcyjnym (bez czekania na Preview PR-a) — ten sam powód co DCS-1b.19/1b.18, Preview jest pomijany przez Vercela (`CLAUDE.md`, „Ostatni odczyt”).
+- 2026-09-25 tj: odbiór PR #101 — zmiana tylko w dwóch komponentach słowników (nazwa Est. budget (h) + podpowiedzi), podpowiedź o nadpisywaniu potwierdzona w DocumentCreateForm; testy/typecheck/lint zielone; zrzuty z lokalnego buildu (Preview pominięty).
