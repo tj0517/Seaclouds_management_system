@@ -159,7 +159,7 @@ export default function EditProjectDialog({ project, settings, clients, trigger 
           <DialogDescription>
             {settings
               ? 'Only the fields you actually change are written.'
-              : 'DCS does not run this project (no MDR settings) — only its identity can be edited here.'}
+              : 'DCS does not run this project (no MDR settings) — only its identity can be edited here. An admin can turn DCS on from Admin → Enable DCS.'}
           </DialogDescription>
         </DialogHeader>
 

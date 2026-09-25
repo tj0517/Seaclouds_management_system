@@ -170,7 +170,19 @@ export default async function ProjectTeamPage({ params }: { params: Promise<{ pr
           </div>
         </dl>
       ) : (
-        <Callout>DCS does not run this project — it has no MDR settings row (docs/02-data-model.md).</Callout>
+        <Callout>
+          DCS does not run this project — it has no MDR settings row (docs/02-data-model.md).{' '}
+          {isAdmin ? (
+            <>
+              <Link href="/admin/projects/new" className="font-medium underline-offset-4 hover:underline">
+                Enable DCS
+              </Link>{' '}
+              to turn it on.
+            </>
+          ) : (
+            'An admin must enable DCS for it first.'
+          )}
+        </Callout>
       )}
 
       {!hasDc && <Callout tone="warning">No Document Controller assigned to this project.</Callout>}

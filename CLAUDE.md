@@ -97,7 +97,7 @@ Supabase, prod ref `tfbzivfsqsgebegcvfah`.
   Kronika obserwacji (PR #58–#79) mieszka w `docs/deferred-tasks.md` (aaa), dopóki
   pytanie jest otwarte; nie kasować jej bez zgody.
 
-  **Ostatni odczyt (jedna linia, nadpisywana):** PR #92 (DCS 1b.08b — New Revision/Void/Approve pending state), przyjęty przez tj, przed merge'em — opisuje HEAD PR-a `fe94bee`; drzewo `apps/` + `packages/` jest w nim identyczne z `a33b82f`, ostatnim commitem PR-a ruszającym `apps/`/`packages/` (`git diff --stat a33b82f fe94bee -- apps packages` puste, `fe94bee` ruszał wyłącznie `docs/tasks/`): `ci` `success` (3m55s); oba projekty Vercel `Skipped - Not affected` (`gh pr checks 92`, 2026-09-24).
+  **Ostatni odczyt (jedna linia, nadpisywana):** PR #96 (DCS 1b.24 — Enable DCS dla istniejącego projektu), przed review — opisuje HEAD PR-a `654a29d`; drzewo `apps/` + `packages/` jest w nim identyczne z `39c10c5`, ostatnim commitem PR-a ruszającym `apps/`/`packages/` (`git diff --stat 39c10c5 654a29d -- apps packages` puste, dwa kolejne commity ruszały wyłącznie `docs/tasks/`/`docs/deferred-tasks.md`): `ci` `success` (4m51s); oba projekty Vercel `Skipped - Not affected` (`gh pr checks 96`, 2026-09-25).
 - Różnica w ochronie, istotna przy podawaniu URL-i: `dcs` ma
   `ssoProtection = all_except_custom_domains`, więc Preview **i** produkcyjny
   `*.vercel.app` stoją za logowaniem Vercela, a publiczny jest wyłącznie

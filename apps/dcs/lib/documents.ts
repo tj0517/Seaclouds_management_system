@@ -650,7 +650,7 @@ export async function createDocument(supabase: DbClient, rawInput: unknown): Pro
   if (!mdr) {
     return fail(
       'no_mdr_settings',
-      'DCS does not run this project yet: it has no MDR configuration. Its Document Controller must create the project MDR before any document can be added.',
+      'DCS does not run this project yet: it has no MDR configuration. An admin must enable DCS for it first (Admin → Enable DCS) before any document can be added.',
     )
   }
 

@@ -1226,6 +1226,18 @@ export type Database = {
         }
         Returns: string
       }
+      dcs_enable_project_mdr: {
+        Args: {
+          p_budget_hours?: number
+          p_cpy_numbering?: boolean
+          p_cycle_idc_to_ifr?: number
+          p_cycle_ifr_to_retcom?: number
+          p_cycle_retcom_to_ifc?: number
+          p_project_id: string
+          p_roles?: Json
+        }
+        Returns: string
+      }
       dcs_profile_directory: {
         Args: never
         Returns: {

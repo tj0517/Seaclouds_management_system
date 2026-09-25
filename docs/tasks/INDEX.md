@@ -5,8 +5,8 @@ Format zadania: [README.md](README.md) (pole `kind` — rodzaj pracy). Zadania z
 
 ## Postęp kodu
 
-**48 / 88 zadań kodowych zamkniętych (55%)** — stan na 2026-09-25.
-Liczone tylko `kind: code`: zamknięte = zamknięte z Notion (42, bez 1a.21a — przygotowanie demo) + `done` w repo (6); otwarte = kodowe `todo`/`in_progress`/`review`/`blocked` (40). Nie wlicza się: prac poza kodem, odłożonych i porzuconych. Przy zmianie statusu zadania kodowego popraw tę linię.
+**49 / 88 zadań kodowych zamkniętych (56%)** — stan na 2026-09-25.
+Liczone tylko `kind: code`: zamknięte = zamknięte z Notion (42, bez 1a.21a — przygotowanie demo) + `done` w repo (7); otwarte = kodowe `todo`/`in_progress`/`review`/`blocked` (39). Nie wlicza się: prac poza kodem, odłożonych i porzuconych. Przy zmianie statusu zadania kodowego popraw tę linię.
 
 ## Kod — otwarte
 
@@ -18,7 +18,6 @@ Liczone tylko `kind: code`: zamknięte = zamknięte z Notion (42, bez 1a.21a —
 | [1b.21](DCS-1b.21.md) | Słowniki: wyjaśnienie „Sort order” i „Est. budget (h)” w tabeli i formularzu | todo | S | — | — | — |
 | [1b.22](DCS-1b.22.md) | Okno edycji dokumentu dla DC (bez pól tworzących numer SCL) | todo | M | — | — | — |
 | [1b.23](DCS-1b.23.md) | Profil dokumentu: bez technicznego Document ID, pliki w „Current revision” tylko z nazwą | todo | S | — | — | — |
-| [1b.24](DCS-1b.24.md) | Włączenie DCS dla istniejącego projektu Timesheeta (kreator „Enable DCS” zamiast zakładania projektu) | todo | L | — | — | — |
 | [1b.25](DCS-1b.25.md) | MDR projektu jako zakładka na stronie projektu (obok listy dokumentów) | todo | M | — | — | — |
 | [1b.26](DCS-1b.26.md) | Numer wykonawcy (contractor) na dokumencie — trzeci numer obok SCL i CPY | todo | M | — | — | — |
 | [1b.27](DCS-1b.27.md) | Pola do wpisania odróżnione od pól automatycznych (tło i ramka) | todo | S | — | — | — |
@@ -105,6 +104,7 @@ Odłożone przez tj 2026-09-23; terminy zdjęte (poprzednie w notatkach zadań).
 | [1b.11](DCS-1b.11.md) | Ręczna zmiana statusu dokumentu przez DC + Void dokumentu (Faza 1: bez silnika obiegu) | code | S |
 | [1b.08b](DCS-1b.08b.md) | Stan „w toku” w oknie New Revision (przycisk zapisu bez informacji zwrotnej) | code | S |
 | [1b.20](DCS-1b.20.md) | Tabela dokumentów projektu: pełne nazwy typu, dyscypliny i obszaru | code | S |
+| [1b.24](DCS-1b.24.md) | Włączenie DCS dla istniejącego projektu Timesheeta (kreator „Enable DCS” zamiast zakładania projektu) | code | L |
 
 ## Zamknięte (historia w Notion)
 

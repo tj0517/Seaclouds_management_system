@@ -1,19 +1,19 @@
 ---
 id: DCS-1b.24
 title: "Włączenie DCS dla istniejącego projektu Timesheeta (kreator „Enable DCS” zamiast zakładania projektu)"
-status: todo
+status: done
 kind: code             # code | client | ops | milestone
 difficulty: L
-model: null
+model: Sonnet 5
 model_approved: null
 effort: null
-branch: null
+branch: feat/dcs-1b24-enable-dcs
 due: null
 depends_on: []
 blocked_by_questions: []
 touches_db: true
 touches_prod: false
-pr: null
+pr: 96
 ---
 
 # DCS-1b.24 — Włączenie DCS dla istniejącego projektu Timesheeta
@@ -57,3 +57,14 @@ Na produkcji jest 8 projektów założonych w Timesheecie i żaden nie działa w
 
 ## Notatki z realizacji
 - 2026-09-25 tj: ustalenie z klientem — DCS nie zakłada projektów, tylko włącza DCS dla projektów z Timesheeta; pola wspólne w DCS tylko do odczytu (także dla admina), docelowo zarządzane w portalu admina.
+- 2026-09-25 tj (STOP gate, przegląd projektu funkcji `dcs_enable_project_mdr`): zatwierdzone ze zmianami —
+  kody błędów P0002 (brak projektu) i 23505 (już włączony) OK; `mapDbError` w `apps/dcs/lib/project-mdr.ts`
+  musi rozróżniać "już włączony" po treści komunikatu (test vitest); dodać `comment on function`; poprawić
+  wskazane literówki w liście miejsc do zmiany tekstu ("DCS does not run…"); „co najmniej jeden DC" ma być
+  egzekwowane tylko w kreatorze (blokada, nie ostrzeżenie) — baza dalej przyjmuje pusty zespół, tak jak
+  `dcs_create_project_mdr`; polityka `"Doc controllers manage mdr settings"` (ALL, pozwala DC skasować własny
+  wiersz `dcs.mdr_settings`) zanotowana w `docs/deferred-tasks.md` (jjj), nie zmieniana w tym zadaniu.
+- 2026-09-25 tj: odbiór PR #96 — udowodnione pgTAP: odmowa nie-admina (42501, z treścią), podwójne
+  włączenie (23505), nieistniejący projekt (P0002), CPY bez klienta (22023), brak zmian w
+  public.projects/sub_projects, wpisy w audit_log; UI potwierdzone zrzutami Playwright na WSL obejrzanymi
+  przez tj. e2e wizard i martwy kod → deferred.

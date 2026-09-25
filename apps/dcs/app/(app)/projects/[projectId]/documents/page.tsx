@@ -31,12 +31,20 @@ export default async function ProjectDocumentsPage({
   const { projectId } = await params
   const supabase = await createClient()
 
-  const [{ data: project }, documents, projectIdsWithMdr] = await Promise.all([
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  const [{ data: project }, documents, projectIdsWithMdr, { data: sessionProfile }] = await Promise.all([
     supabase.from('projects').select('name, project_code').eq('id', projectId).maybeSingle(),
     listProjectDocuments(supabase, projectId),
     getProjectIdsWithMdr(supabase),
+    user
+      ? supabase.from('profiles').select('role').eq('id', user.id).maybeSingle()
+      : Promise.resolve({ data: null }),
   ])
   if (!project) notFound()
+  const isAdmin = sessionProfile?.role === 'admin'
 
   return (
     <>
@@ -59,8 +67,17 @@ export default async function ProjectDocumentsPage({
       <PageBody>
         {!projectIdsWithMdr.has(projectId) ? (
           <Callout tone="warning">
-            DCS does not run this project: it has no MDR configuration, so no document can be created on it. Its
-            Document Controller must create the project MDR first.
+            DCS does not run this project: it has no MDR configuration, so no document can be created on it.{' '}
+            {isAdmin ? (
+              <>
+                <Link href="/admin/projects/new" className="font-medium underline-offset-4 hover:underline">
+                  Enable DCS
+                </Link>{' '}
+                for it to get started.
+              </>
+            ) : (
+              'An admin must enable DCS for it first.'
+            )}
           </Callout>
         ) : null}
 
