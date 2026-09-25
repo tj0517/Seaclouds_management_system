@@ -3053,3 +3053,21 @@ already cached on this machine). Recorded, not fixed: nothing in this repo contr
 runners' shared egress IP or Docker Hub's anonymous-pull quota. If this becomes frequent, the fix belongs
 in `.github/workflows/ci.yml` (authenticated GHCR/Docker Hub pull, or an image cache step), not in a
 retry loop.
+
+## jjj) A project's Document Controller can DELETE their own `dcs.mdr_settings` row — i.e. turn DCS back off (DCS-1b.24, 2026-09-25)
+
+Noticed while reading the baseline policies for the "Enable DCS" function (`dcs_enable_project_mdr`,
+migration 20260925111841): `"Doc controllers manage mdr settings"` on `dcs.mdr_settings` is `FOR ALL`
+(`is_doc_controller(project_id)`), not scoped to `UPDATE`. The same shape exists on `dcs.project_roles`
+(`"Doc controllers manage project roles"`, also `ALL`). Read confirmed identical on scl-dev and prod
+2026-09-25 — this predates 1b.24, nothing in this task's migration touches either policy.
+
+Practical effect: a project's own DC can run `delete from dcs.mdr_settings where project_id = …` (or the
+matching PostgREST call) through their own session and disable DCS for their project — no admin action
+required, and no confirmation step in the app currently calls this path, so it would have to be a
+deliberate RPC call, not a UI accident. Not exploited or reproduced here — flagged from reading the
+policy, not from a failing test.
+
+Out of scope for DCS-1b.24 (enabling DCS, not policy hardening) — recorded so it is not read as a hole
+this task introduced. A fix would scope both `ALL` policies down to `UPDATE`, or add an explicit
+`FOR DELETE` policy naming who may disable DCS (task decision, not an agent's).

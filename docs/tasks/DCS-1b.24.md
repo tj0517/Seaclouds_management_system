@@ -57,3 +57,10 @@ Na produkcji jest 8 projektów założonych w Timesheecie i żaden nie działa w
 
 ## Notatki z realizacji
 - 2026-09-25 tj: ustalenie z klientem — DCS nie zakłada projektów, tylko włącza DCS dla projektów z Timesheeta; pola wspólne w DCS tylko do odczytu (także dla admina), docelowo zarządzane w portalu admina.
+- 2026-09-25 tj (STOP gate, przegląd projektu funkcji `dcs_enable_project_mdr`): zatwierdzone ze zmianami —
+  kody błędów P0002 (brak projektu) i 23505 (już włączony) OK; `mapDbError` w `apps/dcs/lib/project-mdr.ts`
+  musi rozróżniać "już włączony" po treści komunikatu (test vitest); dodać `comment on function`; poprawić
+  wskazane literówki w liście miejsc do zmiany tekstu ("DCS does not run…"); „co najmniej jeden DC" ma być
+  egzekwowane tylko w kreatorze (blokada, nie ostrzeżenie) — baza dalej przyjmuje pusty zespół, tak jak
+  `dcs_create_project_mdr`; polityka `"Doc controllers manage mdr settings"` (ALL, pozwala DC skasować własny
+  wiersz `dcs.mdr_settings`) zanotowana w `docs/deferred-tasks.md` (jjj), nie zmieniana w tym zadaniu.
