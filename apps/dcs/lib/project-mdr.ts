@@ -1,20 +1,23 @@
-// DCS 1a.17: the Create Project MDR wizard and the DCS EditProjectDialog.
+// DCS 1a.17 → 1b.24: the "Enable DCS" wizard and the DCS EditProjectDialog.
 // Independent of Next.js (same split as lib/clients-admin.ts and
 // lib/project-roles.ts): takes any typed Supabase client, so this runs from a
 // server action (session client, RLS applies) and from a verification script.
 // The 'use server' wrappers live in app/data/actions/project-mdr.ts.
 //
-// Creation is ONE call to public.dcs_create_project_mdr() (migration
-// 20260911103639), never four inserts issued from here. Four PostgREST calls
-// are four transactions: a failure on the third leaves a project with no CTR
-// codes and no way to undo it from the client. The function is the
-// transaction boundary; this module only marshals the payload and translates
-// the database's errors into something the wizard can point at.
+// DCS 1b.24 (client agreement, tj 2026-09-25): DCS no longer creates
+// projects — Timesheet owns project identity, and DCS only turns itself on
+// for a project that already exists. Enabling is ONE call to
+// public.dcs_enable_project_mdr() (migration 20260925111841), never two
+// inserts issued from here — the same "one function, one transaction"
+// argument dcs_create_project_mdr's own comment makes, restated for the
+// enable path. public.dcs_create_project_mdr() itself is untouched and stays
+// in the database (dropping it is a separate, gated task); nothing in this
+// app calls it any more.
 //
 // The guard below is the app's own line of defence in front of RLS, not the
 // control (CLAUDE.md). The database refuses a non-admin twice over — the
-// in-body is_admin() check in the function, and the INSERT policies on all
-// four tables — and keeps refusing if this file is bypassed entirely.
+// in-body is_admin() check in the function, and the ALL policies on both
+// tables — and keeps refusing if this file is bypassed entirely.
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { Constants } from '@scl/db'
 import type { Database, Enums, Json, Tables, TablesUpdate } from '@scl/db'
@@ -57,28 +60,13 @@ export const DEFAULT_CYCLE = {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-/**
- * Mirrors the DB CHECK projects_project_code_format (migration
- * 20260901082600) disjunct for disjunct:
- *   project_code ~ '^SC\d{4}$' OR project_code ~ '^SCMS' OR = 'SCC005'
- * Note the second is deliberately unanchored at the end (SCMS-IT, SCMS_TEST
- * both pass) and the third is a NAMED legacy exception, never a pattern — do
- * not relax it to /^SCC/ (see O-11). SCC005 can never actually be created
- * through the wizard, because unique_project_code already holds it; it stays
- * here only so this predicate is not stricter than the constraint it mirrors.
- */
-export function isValidProjectCode(code: string): boolean {
-  return /^SC\d{4}$/.test(code) || /^SCMS/.test(code) || code === 'SCC005'
-}
-
 export type ProjectMdrError =
   | 'unauthenticated'
   | 'forbidden'
   | 'invalid_input'
-  | 'invalid_project_code'
-  | 'duplicate_project_code'
-  | 'duplicate_ctr_code'
+  | 'already_enabled'
   | 'internal_project_has_client'
+  | 'cpy_needs_client'
   | 'invalid_cycle'
   | 'invalid_budget'
   | 'unknown_user'
@@ -90,21 +78,25 @@ export type ActionResult<T> =
   | { ok: false; error: ProjectMdrError; message?: string }
 
 export type RoleAssignmentInput = { userId: string; role: ProjectRole }
-export type CtrCodeInput = { code: string; description: string | null }
 
-export type CreateProjectMdrInput = {
+/** A project Timesheet already owns, offered by the "Enable DCS" picker — no mdr_settings row yet. */
+export type ProjectWithoutMdr = {
+  id: string
   projectCode: string
   name: string
-  processType: ProcessType
-  year: number
   clientId: string | null
+  processType: ProcessType | null
+  year: number | null
+}
+
+export type EnableProjectMdrInput = {
+  projectId: string
   cpyNumbering: boolean
   cycleIdcToIfr: number
   cycleIfrToRetcom: number
   cycleRetcomToIfc: number
   budgetHours: number | null
   roles: RoleAssignmentInput[]
-  ctrCodes: CtrCodeInput[]
 }
 
 /**
@@ -164,29 +156,6 @@ function isProjectRole(value: unknown): value is ProjectRole {
 }
 
 /**
- * CTR codes repeated within one payload, in first-seen order, each listed
- * once however many times it occurs.
- *
- * Compared EXACTLY, not case-folded, because that is what
- * sub_projects_project_id_code_key does: 'ctr100' and 'CTR100' are two
- * distinct rows to the database, and a client-side check that disagreed with
- * the constraint would either block a legal payload or wave through one the
- * database then rejects mid-wizard.
- */
-export function duplicateCtrCodes(codes: readonly string[]): string[] {
-  const seen = new Set<string>()
-  const duplicates: string[] = []
-  for (const code of codes) {
-    if (seen.has(code)) {
-      if (!duplicates.includes(code)) duplicates.push(code)
-    } else {
-      seen.add(code)
-    }
-  }
-  return duplicates
-}
-
-/**
  * The non-blocking warning from the wizard's "Team and roles" step: a project
  * with no Document Controller can be created, it just should not be created
  * silently. The DC is the only role that numbers documents and closes the
@@ -218,52 +187,25 @@ function fail(error: ProjectMdrError, message?: string): { ok: false; error: Pro
 }
 
 /**
- * Validates whatever an untrusted caller sends the create server action.
- *
- * Returns a typed error rather than `null` — the deliberate deviation from
- * parseCreateClientInput (lib/clients-admin.ts), which has one form and can
- * afford a flat 'invalid_input'. This one has six steps, and "invalid_input"
- * on a six-step wizard cannot tell the user which step to walk back to.
+ * Validates whatever an untrusted caller sends the "Enable DCS" server
+ * action. No project identity here (project code, name, client, process
+ * type, year) — 1b.24: those belong to Timesheet and are chosen by picking
+ * an existing project, not typed in. The client-needs-CPY rule can only be
+ * checked once the picked project's row is in hand, so enableProjectMdr
+ * checks it, not this parser (same reason updateProjectMdr's own version of
+ * the rule lives past its own parse step).
  */
-export function parseCreateProjectMdrInput(raw: unknown): ActionResult<CreateProjectMdrInput> {
+export function parseEnableProjectMdrInput(raw: unknown): ActionResult<EnableProjectMdrInput> {
   if (typeof raw !== 'object' || raw === null) return fail('invalid_input', 'payload is not an object')
   const r = raw as Record<string, unknown>
 
-  // --- Step 1: identification -------------------------------------------
-  if (typeof r.projectCode !== 'string' || r.projectCode.trim() === '') {
-    return fail('invalid_project_code', 'project code is required')
-  }
-  const projectCode = r.projectCode.trim()
-  if (!isValidProjectCode(projectCode)) {
-    return fail('invalid_project_code', `"${projectCode}" is not SCYYNN (SC2601) or an SCMS code`)
-  }
-  if (typeof r.name !== 'string' || r.name.trim() === '') {
-    return fail('invalid_input', 'project name is required')
-  }
-  if (!isProcessType(r.processType)) return fail('invalid_input', 'unknown process type')
-  if (typeof r.year !== 'number' || !Number.isInteger(r.year)) {
-    return fail('invalid_input', 'year must be a whole number')
+  if (typeof r.projectId !== 'string' || !UUID_RE.test(r.projectId)) {
+    return fail('invalid_input', 'project id is not a uuid')
   }
 
-  // --- Step 2: client ----------------------------------------------------
-  const clientId = r.clientId === undefined || r.clientId === null ? null : r.clientId
-  if (clientId !== null && (typeof clientId !== 'string' || !UUID_RE.test(clientId))) {
-    return fail('invalid_input', 'client id is not a uuid')
-  }
   const cpyNumbering = r.cpyNumbering === undefined ? false : r.cpyNumbering
   if (typeof cpyNumbering !== 'boolean') return fail('invalid_input', 'cpyNumbering must be a boolean')
 
-  // Mirrors the function's own 22023 raise. Checked here too so the wizard
-  // can say which field is at fault without a round trip; the database stays
-  // the enforcement either way.
-  if (skipsClientStep(r.processType) && (clientId !== null || cpyNumbering)) {
-    return fail(
-      'internal_project_has_client',
-      'an internal project has no client and no CPY numbering',
-    )
-  }
-
-  // --- Step 3: review cycle ---------------------------------------------
   const cycleIdcToIfr = r.cycleIdcToIfr === undefined ? DEFAULT_CYCLE.idcToIfr : r.cycleIdcToIfr
   const cycleIfrToRetcom = r.cycleIfrToRetcom === undefined ? DEFAULT_CYCLE.ifrToRetcom : r.cycleIfrToRetcom
   const cycleRetcomToIfc = r.cycleRetcomToIfc === undefined ? DEFAULT_CYCLE.retcomToIfc : r.cycleRetcomToIfc
@@ -271,7 +213,6 @@ export function parseCreateProjectMdrInput(raw: unknown): ActionResult<CreatePro
     return fail('invalid_cycle', 'each cycle length is a whole number of days, greater than zero')
   }
 
-  // --- Step 4: team and roles -------------------------------------------
   const rawRoles = r.roles === undefined ? [] : r.roles
   if (!Array.isArray(rawRoles)) return fail('invalid_input', 'roles must be an array')
   const roles: RoleAssignmentInput[] = []
@@ -289,31 +230,10 @@ export function parseCreateProjectMdrInput(raw: unknown): ActionResult<CreatePro
     seenPairs.add(key)
     roles.push({ userId, role })
   }
+  // "At least one DC" is enforced in the wizard (task decision, tj
+  // 2026-09-25), not here and not in the database — the database still
+  // accepts an empty team, same as dcs_create_project_mdr always has.
 
-  // --- Step 5: CTR codes -------------------------------------------------
-  const rawCtr = r.ctrCodes === undefined ? [] : r.ctrCodes
-  if (!Array.isArray(rawCtr)) return fail('invalid_input', 'ctrCodes must be an array')
-  const ctrCodes: CtrCodeInput[] = []
-  for (const entry of rawCtr) {
-    if (typeof entry !== 'object' || entry === null) return fail('invalid_input', 'a CTR entry is not an object')
-    const { code, description } = entry as Record<string, unknown>
-    if (typeof code !== 'string' || code.trim() === '') return fail('invalid_input', 'a CTR code is empty')
-    if (description !== undefined && description !== null && typeof description !== 'string') {
-      return fail('invalid_input', 'a CTR description is not text')
-    }
-    const trimmedDescription = typeof description === 'string' ? description.trim() : ''
-    ctrCodes.push({ code: code.trim(), description: trimmedDescription === '' ? null : trimmedDescription })
-  }
-  const duplicates = duplicateCtrCodes(ctrCodes.map((entry) => entry.code))
-  if (duplicates.length > 0) {
-    // Rejected here as well as by sub_projects_project_id_code_key, because
-    // the constraint fires only after the project row has been written and
-    // rolled back — the user would lose the whole wizard to a typo the app
-    // could have caught in the CTR step itself.
-    return fail('duplicate_ctr_code', `repeated CTR code(s): ${duplicates.join(', ')}`)
-  }
-
-  // --- Step 6: budget ----------------------------------------------------
   const budgetHours = r.budgetHours === undefined || r.budgetHours === null ? null : r.budgetHours
   if (budgetHours !== null && (typeof budgetHours !== 'number' || !Number.isFinite(budgetHours) || budgetHours < 0)) {
     return fail('invalid_budget', 'budget hours must be zero or more')
@@ -322,18 +242,13 @@ export function parseCreateProjectMdrInput(raw: unknown): ActionResult<CreatePro
   return {
     ok: true,
     data: {
-      projectCode,
-      name: r.name.trim(),
-      processType: r.processType,
-      year: r.year,
-      clientId,
+      projectId: r.projectId,
       cpyNumbering,
       cycleIdcToIfr,
       cycleIfrToRetcom,
       cycleRetcomToIfc,
       budgetHours,
       roles,
-      ctrCodes,
     },
   }
 }
@@ -409,12 +324,20 @@ export function parseUpdateProjectMdrInput(raw: unknown): ActionResult<UpdatePro
 /**
  * Translates a PostgREST error into something the wizard can point a user at.
  *
- * Both a clashing project_code and a repeated CTR code arrive as 23505, and
- * both a bad project_code and a bad cycle/budget arrive as 23514 — so this
- * reads the constraint name out of the message rather than mapping the
- * SQLSTATE blindly (supabase/tests/dcs_create_project_mdr.test.sql pins that
- * ambiguity on purpose). An unrecognised constraint falls through to
- * 'db_error' with the raw message attached rather than being guessed at.
+ * Reads the message text where one SQLSTATE covers more than one cause —
+ * 23505 is both "DCS already enabled" (dcs_enable_project_mdr's own explicit
+ * raise) and a genuine dcs.mdr_settings PK race, so matching on the message
+ * is what keeps the two apart (supabase/tests/dcs_enable_project_mdr.test.sql
+ * pins that ambiguity on purpose, the same way the 1a.17 test file did for
+ * its own two 23505 causes). An unrecognised message falls through to
+ * 'db_error' with the raw text attached rather than being guessed at.
+ *
+ * The 22023 fallback ('internal_project_has_client') has no live caller —
+ * dcs_create_project_mdr is the only function that ever raises it, and
+ * nothing in this app calls that function any more (1b.24) — but is left in
+ * place because the database function itself is unchanged and still reachable
+ * directly (e.g. a verification script), and a message this module cannot
+ * translate is strictly worse than one it maps too broadly.
  */
 export function mapDbError(
   code: string | undefined,
@@ -423,14 +346,15 @@ export function mapDbError(
   switch (code) {
     case '42501':
       return fail('forbidden', message)
+    case 'P0002':
+      return fail('not_found', message)
     case '22023':
+      if (message.includes('CPY numbering needs a client')) return fail('cpy_needs_client', message)
       return fail('internal_project_has_client', message)
     case '23505':
-      if (message.includes('sub_projects_project_id_code_key')) return fail('duplicate_ctr_code', message)
-      if (message.includes('unique_project_code')) return fail('duplicate_project_code', message)
+      if (message.includes('DCS is already enabled for project')) return fail('already_enabled', message)
       return fail('db_error', message)
     case '23514':
-      if (message.includes('projects_project_code_format')) return fail('invalid_project_code', message)
       if (message.includes('mdr_settings_cycle')) return fail('invalid_cycle', message)
       if (message.includes('mdr_settings_budget_hours')) return fail('invalid_budget', message)
       return fail('db_error', message)
@@ -444,30 +368,57 @@ export function mapDbError(
 }
 
 /**
- * One RPC, one transaction, four tables. Returns the new project id.
- *
- * Note what is NOT here: no insert into projects followed by an insert into
- * mdr_settings followed by… The rule (CLAUDE.md) is that a multi-table write
- * is one Postgres function, and this module is the reason that rule has teeth
- * — there is no second code path that could drift back into a sequence.
+ * Every public.projects row DCS does not yet run — the "Enable DCS" picker's
+ * source list. Deliberately a LEFT JOIN read as "not in mdr_settings" rather
+ * than a NOT EXISTS subquery over PostgREST: mdr_settings' project_id list is
+ * small (one row per enabled project) and readable by any authenticated user
+ * ("Authenticated users can read mdr settings"), so two plain selects filtered
+ * client-side avoid a .not('id', 'in', …) query string built from ids.
  */
-export async function createProjectMdr(
+export async function getProjectsWithoutMdr(supabase: DbClient): Promise<ProjectWithoutMdr[]> {
+  const [{ data: projects, error: projectsError }, { data: enabled, error: enabledError }] = await Promise.all([
+    supabase.from('projects').select('id, project_code, name, client_id, process_type, year').order('project_code'),
+    supabase.schema('dcs').from('mdr_settings').select('project_id'),
+  ])
+  if (projectsError) throw new Error(`getProjectsWithoutMdr: ${projectsError.message}`)
+  if (enabledError) throw new Error(`getProjectsWithoutMdr: ${enabledError.message}`)
+
+  const enabledIds = new Set((enabled ?? []).map((row) => row.project_id))
+  return (projects ?? [])
+    .filter((project) => !enabledIds.has(project.id))
+    .map((project) => ({
+      id: project.id,
+      projectCode: project.project_code,
+      name: project.name,
+      clientId: project.client_id,
+      processType: project.process_type,
+      year: project.year,
+    }))
+}
+
+/**
+ * One RPC, one transaction, two tables. Returns the (already existing)
+ * project's id.
+ *
+ * Note what is NOT here: no insert into projects, no insert into
+ * sub_projects, no separate insert into mdr_settings followed by a second
+ * call for roles. The rule (CLAUDE.md) is that a multi-table write is one
+ * Postgres function, and this module is the reason that rule has teeth —
+ * there is no second code path that could drift back into a sequence.
+ */
+export async function enableProjectMdr(
   supabase: DbClient,
   rawInput: unknown,
 ): Promise<ActionResult<string>> {
   const auth = await requireAdmin(supabase)
   if (!auth.ok) return auth
 
-  const parsed = parseCreateProjectMdrInput(rawInput)
+  const parsed = parseEnableProjectMdrInput(rawInput)
   if (!parsed.ok) return parsed
   const input = parsed.data
 
-  const { data, error } = await supabase.rpc('dcs_create_project_mdr', {
-    p_project_code: input.projectCode,
-    p_name: input.name,
-    p_process_type: input.processType,
-    p_year: input.year,
-    p_client_id: input.clientId ?? undefined,
+  const { data, error } = await supabase.rpc('dcs_enable_project_mdr', {
+    p_project_id: input.projectId,
     p_cpy_numbering: input.cpyNumbering,
     p_cycle_idc_to_ifr: input.cycleIdcToIfr,
     p_cycle_ifr_to_retcom: input.cycleIfrToRetcom,
@@ -477,14 +428,10 @@ export async function createProjectMdr(
       user_id: assignment.userId,
       role: assignment.role,
     })) as unknown as Json,
-    p_ctr_codes: input.ctrCodes.map((entry) => ({
-      code: entry.code,
-      description: entry.description ?? '',
-    })) as unknown as Json,
   })
 
   if (error) return mapDbError(error.code, error.message)
-  if (!data) return fail('db_error', 'dcs_create_project_mdr returned no project id')
+  if (!data) return fail('db_error', 'dcs_enable_project_mdr returned no project id')
   return { ok: true, data }
 }
 

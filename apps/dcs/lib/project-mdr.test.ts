@@ -3,16 +3,15 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@scl/db'
 import {
   DEFAULT_CYCLE,
-  createProjectMdr,
-  duplicateCtrCodes,
+  enableProjectMdr,
+  getProjectsWithoutMdr,
   hasDocController,
-  isValidProjectCode,
   mapDbError,
-  parseCreateProjectMdrInput,
+  parseEnableProjectMdrInput,
   parseUpdateProjectMdrInput,
   skipsClientStep,
   updateProjectMdr,
-  type CreateProjectMdrInput,
+  type EnableProjectMdrInput,
   type MdrSettingsRow,
   type ProjectRow,
 } from './project-mdr'
@@ -23,9 +22,9 @@ const PROJECT_ID = 'ffffffff-ffff-4fff-8fff-ffffffffffff'
 const CLIENT_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
 const USER_ID = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'
 
-/** The smallest payload the wizard can submit: step 1 filled, everything else default. */
+/** The smallest payload the wizard can submit: just the picked project. */
 function minimalInput(overrides: Record<string, unknown> = {}): Record<string, unknown> {
-  return { projectCode: 'SC2601', name: 'Alpha', processType: 'project', year: 2026, ...overrides }
+  return { projectId: PROJECT_ID, ...overrides }
 }
 
 function makeProject(overrides: Partial<ProjectRow> = {}): ProjectRow {
@@ -73,6 +72,9 @@ function stubClient(opts: {
   project?: ProjectRow | null
   settings?: MdrSettingsRow | null
   rpcResult?: { data: string | null; error: { code?: string; message: string } | null }
+  /** getProjectsWithoutMdr's two source reads — unrelated to `project`/`settings` above. */
+  projectsList?: ProjectRow[]
+  mdrProjectIds?: string[]
 }) {
   const {
     sessionUserId = ADMIN,
@@ -80,6 +82,8 @@ function stubClient(opts: {
     project = makeProject(),
     settings = makeSettings(),
     rpcResult = { data: PROJECT_ID, error: null },
+    projectsList = [],
+    mdrProjectIds = [],
   } = opts
 
   const projectUpdates: Record<string, unknown>[] = []
@@ -100,7 +104,10 @@ function stubClient(opts: {
       }
       if (table === 'projects') {
         return {
-          select: () => ({ eq: () => ({ maybeSingle: () => Promise.resolve({ data: project, error: null }) }) }),
+          select: () => ({
+            eq: () => ({ maybeSingle: () => Promise.resolve({ data: project, error: null }) }),
+            order: () => Promise.resolve({ data: projectsList, error: null }),
+          }),
           update: (payload: Record<string, unknown>) => {
             projectUpdates.push(payload)
             return { eq: () => Promise.resolve({ data: null, error: null }) }
@@ -115,7 +122,15 @@ function stubClient(opts: {
         from: (table: string) => {
           if (table !== 'mdr_settings') throw new Error(`unexpected dcs table: ${table}`)
           return {
-            select: () => ({ eq: () => ({ maybeSingle: () => Promise.resolve({ data: settings, error: null }) }) }),
+            // Two shapes over the same select(): getProjectMdr/updateProjectMdr
+            // chain .eq().maybeSingle(); getProjectsWithoutMdr awaits the
+            // select() result directly — the `then` below is what makes that
+            // work without a real Supabase query builder.
+            select: () => ({
+              eq: () => ({ maybeSingle: () => Promise.resolve({ data: settings, error: null }) }),
+              then: (resolve: (v: { data: { project_id: string }[]; error: null }) => void) =>
+                resolve({ data: mdrProjectIds.map((id) => ({ project_id: id })), error: null }),
+            }),
             update: (payload: Record<string, unknown>) => {
               settingsUpdates.push(payload)
               return { eq: () => Promise.resolve({ data: null, error: null }) }
@@ -133,50 +148,6 @@ function stubClient(opts: {
 // Pure helpers
 // ---------------------------------------------------------------------------
 
-describe('isValidProjectCode', () => {
-  // Mirrors projects_project_code_format (migration 20260901082600) disjunct
-  // for disjunct — if this table and the CHECK ever disagree, the wizard
-  // either blocks a legal code or lets the database reject one mid-submit.
-  it.each([
-    ['SC2601', true],
-    ['SC9999', true],
-    ['SCMS', true],
-    ['SCMS-IT', true],
-    ['SCMS_TEST', true],
-    ['SCC005', true], // named legacy exception, never a pattern (O-11)
-  ])('accepts %s', (code, expected) => {
-    expect(isValidProjectCode(code as string)).toBe(expected)
-  })
-
-  it.each([
-    ['SC260', 'too few digits'],
-    ['SC26011', 'too many digits'],
-    ['SC26O1', 'letter O instead of zero'],
-    ['sc2601', 'lowercase'],
-    ['SCC006', 'SCC is not a pattern — only SCC005 is grandfathered'],
-    ['ASC2601', 'not anchored at the start'],
-    ['', 'empty'],
-  ])('rejects %s (%s)', (code) => {
-    expect(isValidProjectCode(code as string)).toBe(false)
-  })
-})
-
-describe('duplicateCtrCodes', () => {
-  it('returns nothing when every code is distinct', () => {
-    expect(duplicateCtrCodes(['SC2601_CTR100', 'SC2601_CTR200'])).toEqual([])
-  })
-
-  it('names each repeated code once, in first-seen order', () => {
-    expect(duplicateCtrCodes(['A', 'B', 'A', 'C', 'B', 'A'])).toEqual(['A', 'B'])
-  })
-
-  it('compares exactly, because sub_projects_project_id_code_key does', () => {
-    // A case-insensitive check here would block a payload the database
-    // accepts — CTR100 and ctr100 are two distinct rows to Postgres.
-    expect(duplicateCtrCodes(['CTR100', 'ctr100'])).toEqual([])
-  })
-})
-
 describe('hasDocController / skipsClientStep', () => {
   it('is false for a team with no dc — the wizard warns but does not block', () => {
     expect(hasDocController([{ userId: USER_ID, role: 'orig' }])).toBe(false)
@@ -192,27 +163,27 @@ describe('hasDocController / skipsClientStep', () => {
 })
 
 // ---------------------------------------------------------------------------
-// parseCreateProjectMdrInput
+// parseEnableProjectMdrInput
 // ---------------------------------------------------------------------------
 
-describe('parseCreateProjectMdrInput', () => {
+describe('parseEnableProjectMdrInput', () => {
   it('accepts a minimal payload and applies the 7/10/7 cycle defaults', () => {
-    const result = parseCreateProjectMdrInput(minimalInput())
+    const result = parseEnableProjectMdrInput(minimalInput())
     expect(result.ok).toBe(true)
-    const data = (result as { ok: true; data: CreateProjectMdrInput }).data
-    expect(data.cycleIdcToIfr).toBe(DEFAULT_CYCLE.idcToIfr)
-    expect(data.cycleIfrToRetcom).toBe(DEFAULT_CYCLE.ifrToRetcom)
-    expect(data.cycleRetcomToIfc).toBe(DEFAULT_CYCLE.retcomToIfc)
-    expect([data.cycleIdcToIfr, data.cycleIfrToRetcom, data.cycleRetcomToIfc]).toEqual([7, 10, 7])
-    expect(data.clientId).toBeNull()
+    const data = (result as { ok: true; data: EnableProjectMdrInput }).data
+    expect(data.projectId).toBe(PROJECT_ID)
+    expect([data.cycleIdcToIfr, data.cycleIfrToRetcom, data.cycleRetcomToIfc]).toEqual([
+      DEFAULT_CYCLE.idcToIfr,
+      DEFAULT_CYCLE.ifrToRetcom,
+      DEFAULT_CYCLE.retcomToIfc,
+    ])
     expect(data.cpyNumbering).toBe(false)
     expect(data.budgetHours).toBeNull()
     expect(data.roles).toEqual([])
-    expect(data.ctrCodes).toEqual([])
   })
 
   it('keeps explicit cycle lengths instead of the defaults', () => {
-    const result = parseCreateProjectMdrInput(
+    const result = parseEnableProjectMdrInput(
       minimalInput({ cycleIdcToIfr: 5, cycleIfrToRetcom: 12, cycleRetcomToIfc: 9 }),
     )
     expect(result.ok && [result.data.cycleIdcToIfr, result.data.cycleIfrToRetcom, result.data.cycleRetcomToIfc]).toEqual([
@@ -220,104 +191,38 @@ describe('parseCreateProjectMdrInput', () => {
     ])
   })
 
-  it('rejects an off-format project code with the error that names the step', () => {
-    const result = parseCreateProjectMdrInput(minimalInput({ projectCode: 'NOPE01' }))
-    expect(result).toMatchObject({ ok: false, error: 'invalid_project_code' })
-  })
-
-  it('trims and upper-cases nothing it was not given — the code is taken as typed, only trimmed', () => {
-    const result = parseCreateProjectMdrInput(minimalInput({ projectCode: '  SC2601  ' }))
-    expect(result.ok && result.data.projectCode).toBe('SC2601')
+  it('rejects a payload with no project id', () => {
+    expect(parseEnableProjectMdrInput({})).toMatchObject({ ok: false, error: 'invalid_input' })
+    expect(parseEnableProjectMdrInput({ projectId: 'not-a-uuid' })).toMatchObject({
+      ok: false,
+      error: 'invalid_input',
+    })
   })
 
   it.each([0, -1, 1.5])('rejects a cycle of %s days', (value) => {
-    expect(parseCreateProjectMdrInput(minimalInput({ cycleIdcToIfr: value }))).toMatchObject({
+    expect(parseEnableProjectMdrInput(minimalInput({ cycleIdcToIfr: value }))).toMatchObject({
       ok: false,
       error: 'invalid_cycle',
     })
   })
 
   it('rejects a negative budget and accepts zero', () => {
-    expect(parseCreateProjectMdrInput(minimalInput({ budgetHours: -1 }))).toMatchObject({
+    expect(parseEnableProjectMdrInput(minimalInput({ budgetHours: -1 }))).toMatchObject({
       ok: false,
       error: 'invalid_budget',
     })
-    expect(parseCreateProjectMdrInput(minimalInput({ budgetHours: 0 })).ok).toBe(true)
-  })
-
-  describe('internal projects have no client', () => {
-    it('rejects an internal project carrying a client id', () => {
-      const result = parseCreateProjectMdrInput(
-        minimalInput({ processType: 'internal', clientId: CLIENT_ID }),
-      )
-      expect(result).toMatchObject({ ok: false, error: 'internal_project_has_client' })
-    })
-
-    it('rejects an internal project with CPY numbering on', () => {
-      const result = parseCreateProjectMdrInput(minimalInput({ processType: 'internal', cpyNumbering: true }))
-      expect(result).toMatchObject({ ok: false, error: 'internal_project_has_client' })
-    })
-
-    it('accepts an internal project with client_id null and cpy_numbering false', () => {
-      const result = parseCreateProjectMdrInput(
-        minimalInput({ processType: 'internal', clientId: null, cpyNumbering: false }),
-      )
-      expect(result.ok).toBe(true)
-      expect(result.ok && result.data.clientId).toBeNull()
-      expect(result.ok && result.data.cpyNumbering).toBe(false)
-    })
-
-    it('lets a non-internal project have no client — client_id stays nullable', () => {
-      expect(parseCreateProjectMdrInput(minimalInput({ processType: 'tender', clientId: null })).ok).toBe(true)
-    })
-  })
-
-  describe('CTR codes', () => {
-    it('rejects a payload with the same CTR code twice, and names it', () => {
-      const result = parseCreateProjectMdrInput(
-        minimalInput({
-          ctrCodes: [{ code: 'SC2601_CTR100' }, { code: 'SC2601_CTR200' }, { code: 'SC2601_CTR100' }],
-        }),
-      )
-      expect(result).toMatchObject({ ok: false, error: 'duplicate_ctr_code' })
-      expect(result.ok === false && result.message).toContain('SC2601_CTR100')
-      expect(result.ok === false && result.message).not.toContain('SC2601_CTR200')
-    })
-
-    it('catches a duplicate that only trimming makes identical', () => {
-      const result = parseCreateProjectMdrInput(
-        minimalInput({ ctrCodes: [{ code: 'SC2601_CTR100' }, { code: '  SC2601_CTR100  ' }] }),
-      )
-      expect(result).toMatchObject({ ok: false, error: 'duplicate_ctr_code' })
-    })
-
-    it('stores an empty or missing description as null, not an empty string', () => {
-      const result = parseCreateProjectMdrInput(
-        minimalInput({ ctrCodes: [{ code: 'A', description: '   ' }, { code: 'B' }] }),
-      )
-      expect(result.ok && result.data.ctrCodes).toEqual([
-        { code: 'A', description: null },
-        { code: 'B', description: null },
-      ])
-    })
-
-    it('rejects an empty CTR code', () => {
-      expect(parseCreateProjectMdrInput(minimalInput({ ctrCodes: [{ code: '  ' }] }))).toMatchObject({
-        ok: false,
-        error: 'invalid_input',
-      })
-    })
+    expect(parseEnableProjectMdrInput(minimalInput({ budgetHours: 0 })).ok).toBe(true)
   })
 
   describe('roles', () => {
     it('rejects a role outside the dcs.project_role enum', () => {
       expect(
-        parseCreateProjectMdrInput(minimalInput({ roles: [{ userId: USER_ID, role: 'boss' }] })),
+        parseEnableProjectMdrInput(minimalInput({ roles: [{ userId: USER_ID, role: 'boss' }] })),
       ).toMatchObject({ ok: false, error: 'invalid_input' })
     })
 
     it('keeps two different roles for the same person — dcs.project_roles is one row per pair', () => {
-      const result = parseCreateProjectMdrInput(
+      const result = parseEnableProjectMdrInput(
         minimalInput({
           roles: [
             { userId: USER_ID, role: 'dc' },
@@ -328,8 +233,8 @@ describe('parseCreateProjectMdrInput', () => {
       expect(result.ok && result.data.roles).toHaveLength(2)
     })
 
-    it('collapses a repeated (user, role) pair rather than letting UNIQUE reject the whole creation', () => {
-      const result = parseCreateProjectMdrInput(
+    it('collapses a repeated (user, role) pair rather than letting UNIQUE reject the whole enable call', () => {
+      const result = parseEnableProjectMdrInput(
         minimalInput({
           roles: [
             { userId: USER_ID, role: 'dc' },
@@ -339,11 +244,15 @@ describe('parseCreateProjectMdrInput', () => {
       )
       expect(result.ok && result.data.roles).toEqual([{ userId: USER_ID, role: 'dc' }])
     })
+
+    it('accepts an empty team — "at least one DC" is a wizard rule, not a parser rule', () => {
+      expect(parseEnableProjectMdrInput(minimalInput({ roles: [] })).ok).toBe(true)
+    })
   })
 
   it('rejects a non-object payload', () => {
-    expect(parseCreateProjectMdrInput(null)).toMatchObject({ ok: false, error: 'invalid_input' })
-    expect(parseCreateProjectMdrInput('SC2601')).toMatchObject({ ok: false, error: 'invalid_input' })
+    expect(parseEnableProjectMdrInput(null)).toMatchObject({ ok: false, error: 'invalid_input' })
+    expect(parseEnableProjectMdrInput('SC2601')).toMatchObject({ ok: false, error: 'invalid_input' })
   })
 })
 
@@ -401,99 +310,117 @@ describe('parseUpdateProjectMdrInput', () => {
 // ---------------------------------------------------------------------------
 
 describe('mapDbError', () => {
-  it('tells a duplicate CTR code from a duplicate project code, both 23505', () => {
+  it('tells "already enabled" apart from a generic 23505', () => {
     expect(
-      mapDbError('23505', 'duplicate key value violates unique constraint "sub_projects_project_id_code_key"'),
-    ).toMatchObject({ error: 'duplicate_ctr_code' })
-    expect(
-      mapDbError('23505', 'duplicate key value violates unique constraint "unique_project_code"'),
-    ).toMatchObject({ error: 'duplicate_project_code' })
+      mapDbError('23505', 'dcs_enable_project_mdr: DCS is already enabled for project ffffffff-…'),
+    ).toMatchObject({ error: 'already_enabled' })
+    expect(mapDbError('23505', 'duplicate key value violates unique constraint "something_else"')).toMatchObject({
+      error: 'db_error',
+    })
   })
 
-  it('tells a bad project code from a bad cycle or budget, all 23514', () => {
-    expect(mapDbError('23514', 'violates check constraint "projects_project_code_format"')).toMatchObject({
-      error: 'invalid_project_code',
-    })
+  it('tells a bad cycle from a bad budget, both 23514', () => {
     expect(mapDbError('23514', 'violates check constraint "mdr_settings_cycle_idc_to_ifr_positive"')).toMatchObject(
       { error: 'invalid_cycle' },
     )
     expect(
       mapDbError('23514', 'violates check constraint "mdr_settings_budget_hours_non_negative"'),
     ).toMatchObject({ error: 'invalid_budget' })
-  })
-
-  it('does not guess at an unrecognised constraint', () => {
-    expect(mapDbError('23505', 'duplicate key value violates unique constraint "something_else"')).toMatchObject({
-      error: 'db_error',
-    })
+    expect(mapDbError('23514', 'some other check')).toMatchObject({ error: 'db_error' })
   })
 
   it('maps the function-raised codes', () => {
     expect(mapDbError('42501', 'only an administrator…')).toMatchObject({ error: 'forbidden' })
-    expect(mapDbError('22023', 'an internal project has no client…')).toMatchObject({
-      error: 'internal_project_has_client',
-    })
+    expect(mapDbError('P0002', 'no project with id …')).toMatchObject({ error: 'not_found' })
+    expect(mapDbError('22023', 'CPY numbering needs a client…')).toMatchObject({ error: 'cpy_needs_client' })
     expect(mapDbError('23503', 'violates foreign key constraint')).toMatchObject({ error: 'unknown_user' })
   })
 })
 
 // ---------------------------------------------------------------------------
-// createProjectMdr — the guard, and the shape of the single RPC
+// getProjectsWithoutMdr — every project not yet in dcs.mdr_settings
 // ---------------------------------------------------------------------------
 
-describe('createProjectMdr', () => {
+describe('getProjectsWithoutMdr', () => {
+  it('excludes a project already in dcs.mdr_settings', async () => {
+    const enabled = makeProject({ id: 'enabled-id', project_code: 'SC0001' })
+    const notEnabled = makeProject({ id: 'not-enabled-id', project_code: 'SC0002' })
+    const { client } = stubClient({
+      projectsList: [enabled, notEnabled],
+      mdrProjectIds: ['enabled-id'],
+    })
+    const result = await getProjectsWithoutMdr(client)
+    expect(result).toEqual([
+      {
+        id: 'not-enabled-id',
+        projectCode: 'SC0002',
+        name: notEnabled.name,
+        clientId: notEnabled.client_id,
+        processType: notEnabled.process_type,
+        year: notEnabled.year,
+      },
+    ])
+  })
+
+  it('returns every project when none has DCS enabled', async () => {
+    const p1 = makeProject({ id: 'p1' })
+    const p2 = makeProject({ id: 'p2' })
+    const { client } = stubClient({ projectsList: [p1, p2], mdrProjectIds: [] })
+    const result = await getProjectsWithoutMdr(client)
+    expect(result.map((p) => p.id)).toEqual(['p1', 'p2'])
+  })
+})
+
+// ---------------------------------------------------------------------------
+// enableProjectMdr — the guard, and the shape of the single RPC
+// ---------------------------------------------------------------------------
+
+describe('enableProjectMdr', () => {
   it('refuses a non-admin before issuing any call at all', async () => {
     const { client, rpc } = stubClient({ sessionUserId: EMPLOYEE, role: 'employee' })
-    const result = await createProjectMdr(client, minimalInput())
+    const result = await enableProjectMdr(client, minimalInput())
     expect(result).toEqual({ ok: false, error: 'forbidden' })
     expect(rpc).not.toHaveBeenCalled()
   })
 
   it('refuses a caller with no session', async () => {
     const { client, rpc } = stubClient({ sessionUserId: null })
-    expect(await createProjectMdr(client, minimalInput())).toEqual({ ok: false, error: 'unauthenticated' })
+    expect(await enableProjectMdr(client, minimalInput())).toEqual({ ok: false, error: 'unauthenticated' })
     expect(rpc).not.toHaveBeenCalled()
   })
 
   it('validates before calling, so a bad payload never reaches the database', async () => {
     const { client, rpc } = stubClient({})
-    expect(await createProjectMdr(client, minimalInput({ projectCode: 'NOPE01' }))).toMatchObject({
+    expect(await enableProjectMdr(client, minimalInput({ cycleIdcToIfr: 0 }))).toMatchObject({
       ok: false,
-      error: 'invalid_project_code',
+      error: 'invalid_cycle',
     })
     expect(rpc).not.toHaveBeenCalled()
   })
 
   it('makes exactly ONE call — the whole point of the function is that this is one transaction', async () => {
     const { client, rpc } = stubClient({})
-    const result = await createProjectMdr(
+    const result = await enableProjectMdr(
       client,
       minimalInput({
-        clientId: CLIENT_ID,
         cpyNumbering: true,
         cycleIdcToIfr: 5,
         cycleIfrToRetcom: 12,
         cycleRetcomToIfc: 9,
         budgetHours: 1500,
         roles: [{ userId: USER_ID, role: 'dc' }],
-        ctrCodes: [{ code: 'SC2601_CTR100', description: 'PM' }],
       }),
     )
     expect(result).toEqual({ ok: true, data: PROJECT_ID })
     expect(rpc).toHaveBeenCalledTimes(1)
-    expect(rpc).toHaveBeenCalledWith('dcs_create_project_mdr', {
-      p_project_code: 'SC2601',
-      p_name: 'Alpha',
-      p_process_type: 'project',
-      p_year: 2026,
-      p_client_id: CLIENT_ID,
+    expect(rpc).toHaveBeenCalledWith('dcs_enable_project_mdr', {
+      p_project_id: PROJECT_ID,
       p_cpy_numbering: true,
       p_cycle_idc_to_ifr: 5,
       p_cycle_ifr_to_retcom: 12,
       p_cycle_retcom_to_ifc: 9,
       p_budget_hours: 1500,
       p_roles: [{ user_id: USER_ID, role: 'dc' }],
-      p_ctr_codes: [{ code: 'SC2601_CTR100', description: 'PM' }],
     })
   })
 
@@ -501,10 +428,10 @@ describe('createProjectMdr', () => {
     const { client } = stubClient({
       rpcResult: {
         data: null,
-        error: { code: '23505', message: 'duplicate key value violates unique constraint "sub_projects_project_id_code_key"' },
+        error: { code: '23505', message: 'dcs_enable_project_mdr: DCS is already enabled for project ffffffff-…' },
       },
     })
-    expect(await createProjectMdr(client, minimalInput())).toMatchObject({ ok: false, error: 'duplicate_ctr_code' })
+    expect(await enableProjectMdr(client, minimalInput())).toMatchObject({ ok: false, error: 'already_enabled' })
   })
 })
 

@@ -3,7 +3,7 @@
 // DCS 1b.04: the New Document form.
 //
 // A thin shell, the convention components/IfRole.tsx set in 1a.12 and
-// CreateProjectWizard.tsx follows: every decision it makes — what a document
+// EnableDcsWizard.tsx follows: every decision it makes — what a document
 // type suggests as a budget, whether the Originator clashes with the Checker,
 // what an error code means — is a pure function imported from lib/documents.ts,
 // the same one createDocument() re-runs on the server before the database sees
@@ -164,7 +164,8 @@ export default function DocumentCreateForm({
       {missingMdr ? (
         <Callout tone="warning">
           DCS does not run <strong>{project?.project_code ?? project?.name}</strong> yet: it has no MDR
-          configuration. Its Document Controller must create the project MDR before any document can be added here.
+          configuration. An admin must enable DCS for it first (Admin → Enable DCS) before any document can be
+          added here.
         </Callout>
       ) : null}
 
