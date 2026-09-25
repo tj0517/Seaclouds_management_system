@@ -1,7 +1,7 @@
 ---
 id: DCS-1b.19
 title: "DC edytuje ustawienia DCS projektu (cykle, budżet, numeracja CPY, status MDR)"
-status: review
+status: done
 kind: code             # code | client | ops | milestone
 difficulty: M
 model: Sonnet 5
@@ -50,3 +50,4 @@ DC prowadzi projekt w DCS samodzielnie, bez proszenia admina: zmienia cykle prze
 - 2026-09-23 tj: Uwagi z prezentacji Fazy 1 dla klienta, tj 2026-09-23. Zakres: tylko ustawienia DCS (`dcs.mdr_settings`); nazwa i klient zostają dla admina.
 - 2026-09-25 tj: ustalenie z klientem — w DCS nie edytuje się pól wspólnych projektu, także admin; tylko ustawienia DCS.
 - 2026-09-25 tj: dowód akceptacyjny na LOKALNYM buildzie produkcyjnym przez Playwright MCP zamiast Preview → scl-dev; `public.audit_log` sprawdzony lokalnie zamiast na scl-dev — Vercel pominął Preview na PR #96/#98, a deploy scl-dev jest obecnie zepsuty.
+- 2026-09-25 tj: odbiór PR #99 — udowodnione: DC własnego projektu zapisuje ustawienia DCS, DC innego projektu odrzucony przez bazę (pgTAP 5b/5c, członek — sekcja 2), zapis nie dotyka public.projects (parser + brak update w apps/dcs), pola Timesheeta disabled; UI zrzutami na WSL obejrzanymi przez tj; brak strażnika CPY-bez-klienta w bazie przy UPDATE → deferred (lll).

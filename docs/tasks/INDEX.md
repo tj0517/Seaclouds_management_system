@@ -5,8 +5,8 @@ Format zadania: [README.md](README.md) (pole `kind` — rodzaj pracy). Zadania z
 
 ## Postęp kodu
 
-**50 / 89 zadań kodowych zamkniętych (56%)** — stan na 2026-09-25.
-Liczone tylko `kind: code`: zamknięte = zamknięte z Notion (42, bez 1a.21a — przygotowanie demo) + `done` w repo (8); otwarte = kodowe `todo`/`in_progress`/`review`/`blocked` (39). Nie wlicza się: prac poza kodem, odłożonych i porzuconych. Przy zmianie statusu zadania kodowego popraw tę linię.
+**51 / 89 zadań kodowych zamkniętych (57%)** — stan na 2026-09-25.
+Liczone tylko `kind: code`: zamknięte = zamknięte z Notion (42, bez 1a.21a — przygotowanie demo) + `done` w repo (9); otwarte = kodowe `todo`/`in_progress`/`review`/`blocked` (38). Nie wlicza się: prac poza kodem, odłożonych i porzuconych. Przy zmianie statusu zadania kodowego popraw tę linię.
 
 ## Kod — otwarte
 
@@ -14,7 +14,6 @@ Liczone tylko `kind: code`: zamknięte = zamknięte z Notion (42, bez 1a.21a —
 |---|---|---|---|---|---|---|
 | [1a.27](DCS-1a.27.md) | Skan sekretów w CI (gitleaks) — PR z kluczem w kodzie jest zatrzymany | todo | S | — | — | — |
 | [1b.18](DCS-1b.18.md) | Macierz osób i ról na stronie projektu (przydzielanie ról jednym kliknięciem) | todo | M | — | — | — |
-| [1b.19](DCS-1b.19.md) | DC edytuje ustawienia DCS projektu (cykle, budżet, numeracja CPY, status MDR) | review | M | — | — | — |
 | [1b.21](DCS-1b.21.md) | Słowniki: wyjaśnienie „Sort order” i „Est. budget (h)” w tabeli i formularzu | todo | S | — | — | — |
 | [1b.22](DCS-1b.22.md) | Okno edycji dokumentu dla DC (bez pól tworzących numer SCL) | todo | M | — | — | — |
 | [1b.23](DCS-1b.23.md) | Profil dokumentu: bez technicznego Document ID, pliki w „Current revision” tylko z nazwą | todo | S | — | — | — |
@@ -106,6 +105,7 @@ Odłożone przez tj 2026-09-23; terminy zdjęte (poprzednie w notatkach zadań).
 | [1b.20](DCS-1b.20.md) | Tabela dokumentów projektu: pełne nazwy typu, dyscypliny i obszaru | code | S |
 | [1b.24](DCS-1b.24.md) | Włączenie DCS dla istniejącego projektu Timesheeta (kreator „Enable DCS” zamiast zakładania projektu) | code | L |
 | [1b.24b](DCS-1b.24b.md) | Enable DCS: kreator i funkcja uwzględniają zespół przypisany przed włączeniem DCS | code | M |
+| [1b.19](DCS-1b.19.md) | DC edytuje ustawienia DCS projektu (cykle, budżet, numeracja CPY, status MDR) | code | M |
 
 ## Zamknięte (historia w Notion)
 
