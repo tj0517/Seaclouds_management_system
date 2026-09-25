@@ -3117,3 +3117,15 @@ A fix would add a CHECK or trigger on `dcs.mdr_settings` mirroring `dcs_enable_p
 `public.projects.client_id`, since a CHECK constraint cannot reference another table directly — a trigger
 is the likely shape). Out of scope for DCS-1b.19 per its own task file ("if the database does not already
 enforce it on UPDATE, report that as a finding — do not add a migration without asking").
+
+## mmm) RoleMatrix has no cross-tab/cross-session conflict detection on a row (DCS-1b.18, 2026-09-25)
+
+`RoleMatrixRowView` (`apps/dcs/components/RoleMatrix.tsx`) keeps each row's role set in local React state
+and sends the whole set for that (project, user) pair on every click (`setProjectRoles`, diffed server-side
+against the DB's current rows). If two editors have the same project page open at once and both act on the
+same person's row before either refreshes, the second click's `roles` array is still based on the first
+editor's pre-change local state, not the first editor's write — so it can silently overwrite the first
+edit's result instead of layering on top of it. Same characteristic the old per-row `RoleCheckboxGroup` +
+Save already had (one shared client-side snapshot per row, batched instead of per-click); not new to this
+task. `public.audit_log` keeps a true row for each write either way, so nothing is lost or hidden — a
+DELETE that "loses" a grant is still a DELETE row naming exactly what it removed. Not fixed here.
