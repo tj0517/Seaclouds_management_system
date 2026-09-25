@@ -3054,13 +3054,19 @@ runners' shared egress IP or Docker Hub's anonymous-pull quota. If this becomes 
 in `.github/workflows/ci.yml` (authenticated GHCR/Docker Hub pull, or an image cache step), not in a
 retry loop.
 
-## jjj) A project's Document Controller can DELETE their own `dcs.mdr_settings` row — i.e. turn DCS back off (DCS-1b.24, 2026-09-25)
+## jjj) A project's Document Controller can DELETE their `dcs.mdr_settings` row — i.e. turn DCS back off (DCS-1b.24, 2026-09-25)
 
 Noticed while reading the baseline policies for the "Enable DCS" function (`dcs_enable_project_mdr`,
 migration 20260925111841): `"Doc controllers manage mdr settings"` on `dcs.mdr_settings` is `FOR ALL`
-(`is_doc_controller(project_id)`), not scoped to `UPDATE`. The same shape exists on `dcs.project_roles`
-(`"Doc controllers manage project roles"`, also `ALL`). Read confirmed identical on scl-dev and prod
-2026-09-25 — this predates 1b.24, nothing in this task's migration touches either policy.
+(`is_doc_controller(project_id)`), not scoped to `UPDATE`. Read confirmed identical on scl-dev and prod
+2026-09-25 — this predates 1b.24, nothing in this task's migration touches the policy.
+
+Narrowed on review (tj, 2026-09-25): the matching shape on `dcs.project_roles`
+(`"Doc controllers manage project roles"`, also `ALL`) is NOT part of this finding — a DC managing their
+project's roles, including deleting a role row, is the intended, documented behaviour (ADR-0012: "DC
+zarządza rolami swojego projektu także w aplikacji, nie tylko w RLS"). The actual hole is narrower: on
+`dcs.mdr_settings` specifically, `ALL` means a DC can delete the ONE row whose existence is what "DCS runs
+this project" means (docs/02-data-model.md) — i.e. switch DCS off entirely, not just edit its settings.
 
 Practical effect: a project's own DC can run `delete from dcs.mdr_settings where project_id = …` (or the
 matching PostgREST call) through their own session and disable DCS for their project — no admin action
@@ -3069,5 +3075,25 @@ deliberate RPC call, not a UI accident. Not exploited or reproduced here — fla
 policy, not from a failing test.
 
 Out of scope for DCS-1b.24 (enabling DCS, not policy hardening) — recorded so it is not read as a hole
-this task introduced. A fix would scope both `ALL` policies down to `UPDATE`, or add an explicit
-`FOR DELETE` policy naming who may disable DCS (task decision, not an agent's).
+this task introduced. A fix would scope `"Doc controllers manage mdr settings"` down to
+`UPDATE`/`SELECT`, or add an explicit narrower policy naming who may disable DCS (task decision, not an
+agent's).
+
+## kkk) DCS 1b.24 left two loose ends: a stale e2e script and dead code from the removed create-project path (2026-09-25)
+
+`apps/dcs/e2e/pending-action.mjs` section 10 (`row('wizard', 'CreateProjectWizard')`, lines ~395–420)
+still drives the wizard this task removed: it fills `#project-code` / `#project-name` and clicks
+"Create project…", none of which exist on `EnableDcsWizard` any more (`/admin/projects/new` now shows a
+project picker, not those fields). `e2e:pending` will fail or hang on this section the next time it is
+run. Not fixed here — re-point it to the new flow (pick a project without DCS → cycle → CPY → team → DC →
+budget → "Enable DCS") the next time `e2e:pending` runs, at the latest in DCS-1b.19.
+
+Dead code left in place rather than removed, because removing it is a bigger diff than this task's scope
+and neither blocks nor misleads a reader who follows the comment trail:
+- `apps/dcs/lib/project-mdr.ts`'s `mapDbError` still has a `22023` → `'internal_project_has_client'`
+  fallback branch, and `EnableDcsWizard.tsx`'s `ERROR_COPY` still has a matching entry — neither has a
+  live caller after 1b.24, since only `dcs_create_project_mdr` (no longer called from the app) raises that
+  specific message. Both are commented as such at the point of definition.
+- `apps/dcs/lib/single-flight.ts`'s file-level comment still names `createProjectMdr` as an example of a
+  non-idempotent action; the function it refers to was removed in 1b.24 (replaced by `enableProjectMdr`).
+  Cosmetic only — the comment's point (non-idempotent server actions need single-flight) still holds.
