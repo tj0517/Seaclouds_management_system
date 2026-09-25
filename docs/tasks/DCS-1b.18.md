@@ -1,7 +1,7 @@
 ---
 id: DCS-1b.18
 title: "Macierz osób i ról na stronie projektu (przydzielanie ról jednym kliknięciem)"
-status: in_progress
+status: review
 kind: code             # code | client | ops | milestone
 difficulty: M
 model: sonnet
@@ -13,7 +13,7 @@ depends_on: []
 blocked_by_questions: []
 touches_db: false
 touches_prod: false
-pr: null
+pr: 100
 ---
 
 # DCS-1b.18 — Macierz osób i ról na stronie projektu (przydzielanie ról jednym kliknięciem)
