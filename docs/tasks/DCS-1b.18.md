@@ -1,13 +1,13 @@
 ---
 id: DCS-1b.18
 title: "Macierz osób i ról na stronie projektu (przydzielanie ról jednym kliknięciem)"
-status: todo
+status: in_progress
 kind: code             # code | client | ops | milestone
 difficulty: M
-model: null
+model: sonnet
 model_approved: null
-effort: null
-branch: null
+effort: medium
+branch: feat/dcs-1b18-role-matrix-one-click
 due: null
 depends_on: []
 blocked_by_questions: []
@@ -47,3 +47,5 @@ DC i admin nadają role w projekcie z jednej tabeli: osoby w wierszach, role (OR
 
 ## Notatki z realizacji
 - 2026-09-23 tj: Uwagi z prezentacji Fazy 1 dla klienta, tj 2026-09-23. Wybrany wariant: macierz osób i ról.
+- 2026-09-25 tj: dowód przeglądarkowy na lokalnym buildzie produkcyjnym zamiast Preview → scl-dev — Preview jest pomijany przez Vercela, deploy scl-dev obecnie zepsuty.
+- 2026-09-25 tj: macierz jako osobny komponent tylko dla strony projektu — `RoleCheckboxGroup` i `/admin/users/[userId]` zostają bez zmian (opcja B z dwóch przedstawionych; ryzyko zaakceptowane: dwa różne wzorce UX do nadawania roli w aplikacji).

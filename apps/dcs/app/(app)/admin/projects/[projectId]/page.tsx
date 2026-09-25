@@ -30,13 +30,18 @@
 // DCS actually runs this project (settings !== null): identity (name /
 // client / process type / year) is read-only in DCS for everyone now, so a
 // project with no mdr_settings row has nothing left in this dialog to edit.
+//
+// DCS 1b.18: the Team section below is now a RoleMatrix (people in rows,
+// roles in columns, one click grants/revokes) instead of one RoleCheckboxGroup
+// per member with its own Save. RoleCheckboxGroup itself is untouched and
+// still used by /admin/users/[userId] — see docs/tasks/DCS-1b.18.md.
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { createClient } from '@scl/db/server'
 import AddMemberForm from '@/components/AddMemberForm'
 import NavLinkStatus from '@/components/NavLinkStatus'
 import EditProjectDialog from '@/components/EditProjectDialog'
-import RoleCheckboxGroup from '@/components/RoleCheckboxGroup'
+import RoleMatrix from '@/components/RoleMatrix'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Callout, EmptyState, PageBody, PageHeader } from '@/components/page-chrome'
@@ -208,23 +213,23 @@ export default async function ProjectTeamPage({ params }: { params: Promise<{ pr
       )}
 
       <h2 className="mb-2 mt-6 text-sm font-semibold">Team</h2>
-      <div className="space-y-3">
-        {memberIds.length === 0 ? (
-          <EmptyState title="No team members visible" />
-        ) : (
-          memberIds.map((memberId) => (
-            <div key={memberId} className="rounded-lg border bg-card p-4">
-              <div className="mb-3 text-sm font-medium">{displayName(memberId)}</div>
-              <RoleCheckboxGroup
-                projectId={projectId}
-                userId={memberId}
-                initialRoles={rolesByUser.get(memberId) ?? []}
-                disabled={!canEdit}
-              />
-            </div>
-          ))
-        )}
-      </div>
+      {memberIds.length === 0 ? (
+        <EmptyState title="No team members visible" />
+      ) : (
+        <div className="rounded-lg border bg-card">
+          <RoleMatrix
+            projectId={projectId}
+            disabled={!canEdit}
+            rows={[...memberIds]
+              .map((memberId) => ({
+                userId: memberId,
+                name: displayName(memberId),
+                roles: rolesByUser.get(memberId) ?? [],
+              }))
+              .sort((a, b) => a.name.localeCompare(b.name))}
+          />
+        </div>
+      )}
 
       {canEdit && (
         <div className="mt-6">
