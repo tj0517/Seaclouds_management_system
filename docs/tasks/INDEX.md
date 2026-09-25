@@ -5,15 +5,14 @@ Format zadania: [README.md](README.md) (pole `kind` — rodzaj pracy). Zadania z
 
 ## Postęp kodu
 
-**52 / 89 zadań kodowych zamkniętych (58%)** — stan na 2026-09-25.
-Liczone tylko `kind: code`: zamknięte = zamknięte z Notion (42, bez 1a.21a — przygotowanie demo) + `done` w repo (10); otwarte = kodowe `todo`/`in_progress`/`review`/`blocked` (37). Nie wlicza się: prac poza kodem, odłożonych i porzuconych. Przy zmianie statusu zadania kodowego popraw tę linię.
+**53 / 89 zadań kodowych zamkniętych (60%)** — stan na 2026-09-25.
+Liczone tylko `kind: code`: zamknięte = zamknięte z Notion (42, bez 1a.21a — przygotowanie demo) + `done` w repo (11); otwarte = kodowe `todo`/`in_progress`/`review`/`blocked` (36). Nie wlicza się: prac poza kodem, odłożonych i porzuconych. Przy zmianie statusu zadania kodowego popraw tę linię.
 
 ## Kod — otwarte
 
 | id | tytuł | status | trudność | zależności | pytania | due |
 |---|---|---|---|---|---|---|
 | [1a.27](DCS-1a.27.md) | Skan sekretów w CI (gitleaks) — PR z kluczem w kodzie jest zatrzymany | todo | S | — | — | — |
-| [1b.21](DCS-1b.21.md) | Słowniki: wyjaśnienie „Sort order” i „Est. budget (h)” w tabeli i formularzu | todo | S | — | — | — |
 | [1b.22](DCS-1b.22.md) | Okno edycji dokumentu dla DC (bez pól tworzących numer SCL) | todo | M | — | — | — |
 | [1b.23](DCS-1b.23.md) | Profil dokumentu: bez technicznego Document ID, pliki w „Current revision” tylko z nazwą | todo | S | — | — | — |
 | [1b.25](DCS-1b.25.md) | MDR projektu jako zakładka na stronie projektu (obok listy dokumentów) | todo | M | — | — | — |
@@ -106,6 +105,7 @@ Odłożone przez tj 2026-09-23; terminy zdjęte (poprzednie w notatkach zadań).
 | [1b.24b](DCS-1b.24b.md) | Enable DCS: kreator i funkcja uwzględniają zespół przypisany przed włączeniem DCS | code | M |
 | [1b.19](DCS-1b.19.md) | DC edytuje ustawienia DCS projektu (cykle, budżet, numeracja CPY, status MDR) | code | M |
 | [1b.18](DCS-1b.18.md) | Macierz osób i ról na stronie projektu (przydzielanie ról jednym kliknięciem) | code | M |
+| [1b.21](DCS-1b.21.md) | Słowniki: wyjaśnienie „Sort order” i „Est. budget (h)” w tabeli i formularzu | code | S |
 
 ## Zamknięte (historia w Notion)
 

@@ -146,6 +146,7 @@ export default function DictionaryEntryDialog({ dictType, entry, trigger }: Prop
 
           <div className="space-y-1">
             <Label htmlFor="dict-sort-order">Sort order</Label>
+            <p className="text-xs text-muted-foreground">Position in pick lists.</p>
             <Input
               id="dict-sort-order"
               type="number"
@@ -156,7 +157,10 @@ export default function DictionaryEntryDialog({ dictType, entry, trigger }: Prop
 
           {showBudgetHours && (
             <div className="space-y-1">
-              <Label htmlFor="dict-budget-hours">Default budget hours</Label>
+              <Label htmlFor="dict-budget-hours">Est. budget (h)</Label>
+              <p className="text-xs text-muted-foreground">
+                Default hours for a new document of this type; the Originator can override it.
+              </p>
               <Input
                 id="dict-budget-hours"
                 type="number"

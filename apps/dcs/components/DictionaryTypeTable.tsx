@@ -84,8 +84,18 @@ export default function DictionaryTypeTable({ dictType, rows, canEdit }: Props) 
               <TableHead>Code</TableHead>
               <TableHead>Label</TableHead>
               <TableHead>Description</TableHead>
-              {showBudgetHours && <TableHead>Budget hours</TableHead>}
-              <TableHead>Sort order</TableHead>
+              {showBudgetHours && (
+                <TableHead>
+                  Est. budget (h)
+                  <p className="mt-0.5 text-xs font-normal text-muted-foreground">
+                    Default hours for a new document of this type; the Originator can override it.
+                  </p>
+                </TableHead>
+              )}
+              <TableHead>
+                Sort order
+                <p className="mt-0.5 text-xs font-normal text-muted-foreground">Position in pick lists.</p>
+              </TableHead>
               <TableHead>Status</TableHead>
               {canEdit && <TableHead className="text-right">Actions</TableHead>}
             </TableRow>
