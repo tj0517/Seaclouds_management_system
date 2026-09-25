@@ -13,7 +13,7 @@ depends_on: []
 blocked_by_questions: []
 touches_db: false
 touches_prod: false
-pr: null
+pr: 101
 ---
 
 # DCS-1b.21 — Słowniki: wyjaśnienie „Sort order” i „Est. budget (h)” w tabeli i formularzu
