@@ -65,3 +65,4 @@ Na prezentacji pola do wpisania wyglądały jak szare bloki, czyli jak coś wype
   scrollowany widok pól edytowalnych, Dictionaries — lista ze Switch i dialog edycji z polem read-only Code).
 - 2026-09-26 tj: odbiór PR #102 — kontrast ramki ≥3:1 (3,52 / 3,21 do tła strony), brak lokalnych nadpisań tła pól,
   Timesheet i packages/ nietknięte (sprawdzone odczytem); wygląd obejrzany na Preview. Logowanie i MFA → deferred (nnn).
+- 2026-09-26 tj: poprawka po odbiorze (PR #104) — wypełnienie pól edytowalnych = --field-bg (213 22% 98,5%), bez cienia; ramka bez zmian. Świadomie jeden PR z poprawką 1b.23.

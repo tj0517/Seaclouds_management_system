@@ -182,10 +182,17 @@ const browser = await chromium.launch()
   )
   rec('a/6: no download LINK in the panel — the Download control is a button that mints a signed URL on click (1b.09)', (await page.locator(`${PANEL} a`).count()) === 0 && (await page.locator(`${PANEL} button[data-download]`).count()) === 1)
 
-  // DCS 1b.23: the panel's file row is name and Download only — the info wrapper's one child is the
-  // name <p>, with no "Uploaded as" hint, kind badge or size beside it.
-  const panelFileChildren = await page.locator(`${PANEL} [data-file-row] > div`).first().evaluate((el) => el.children.length)
-  rec('1b.23: the panel file row shows only the name (no kind, size, upload time or "Uploaded as" hint)', panelFileChildren === 1, `${panelFileChildren} child element(s)`)
+  // DCS 1b.23 (PR #104): the panel's file row is the name, then Download stacked underneath, left-aligned
+  // — two children (the name <p>, then a <div> wrapping the Download button), no "Uploaded as" hint, kind
+  // badge or size anywhere in the row.
+  const panelRow = page.locator(`${PANEL} [data-file-row]`).first()
+  const panelRowTags = await panelRow.evaluate((el) => Array.from(el.children).map((c) => c.tagName))
+  const panelRowText = await panelRow.innerText()
+  rec(
+    '1b.23: the panel file row is name then Download, stacked (no kind, size, upload time or "Uploaded as" hint)',
+    panelRowTags.length === 2 && panelRowTags[0] === 'P' && panelRowTags[1] === 'DIV' && !/Uploaded as/.test(panelRowText) && !/original/.test(panelRowText) && !/2\.3 MB/.test(panelRowText),
+    `tags: ${panelRowTags.join(',')}; text: ${panelRowText.replace(/\n/g, ' | ')}`,
+  )
   await page.getByRole('tab', { name: 'Revisions' }).click()
   await page.locator('[data-revision-row="A"] button[aria-expanded]').click()
   const revFilesText = await page.locator('[data-revision-files="A"]').innerText()
