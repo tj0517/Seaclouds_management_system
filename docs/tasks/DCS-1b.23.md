@@ -1,7 +1,7 @@
 ---
 id: DCS-1b.23
 title: "Profil dokumentu: bez technicznego Document ID, pliki w „Current revision” tylko z nazwą"
-status: in_progress
+status: review
 kind: code             # code | client | ops | milestone
 difficulty: S
 model: null
