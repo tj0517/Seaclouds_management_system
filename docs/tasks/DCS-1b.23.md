@@ -1,13 +1,13 @@
 ---
 id: DCS-1b.23
 title: "Profil dokumentu: bez technicznego Document ID, pliki w „Current revision” tylko z nazwą"
-status: todo
+status: in_progress
 kind: code             # code | client | ops | milestone
 difficulty: S
 model: null
 model_approved: null
 effort: null
-branch: null
+branch: feat/dcs-1b23-profile-cleanup
 due: null
 depends_on: []
 blocked_by_questions: []
@@ -42,3 +42,6 @@ Dwie drobne poprawki czytelności profilu dokumentu z prezentacji: techniczny id
 
 ## Notatki z realizacji
 - 2026-09-23 tj: Uwagi z prezentacji Fazy 1 dla klienta, tj 2026-09-23. Document ID: usunąć.
+- 2026-09-26 tj: panel Current revision pokazuje tylko nazwę pliku (bez kind/size/upload time/„Uploaded as”) — tylko nazwa, bez wariantu pośredniego.
+- 2026-09-26 tj: zrzuty ekranu lokalnie (Playwright MCP) + tj ogląda Preview sam przy review — Preview stoi za logowaniem Vercela, lokalny Playwright go nie zobaczy.
+- 2026-09-26 tj: `e2e:files` dodane do kryteriów odbioru — `revision-files.mjs` pokazuje pełne dane plików w zakładce Revisions, więc też jest tym dotknięte.

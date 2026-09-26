@@ -180,8 +180,21 @@ const browser = await chromium.launch()
     'a/2: the panel shows the fixture revision (revision, step, reason) and its file',
     /SCL revision\s*\n?\s*A/.test(t) && /IDC/.test(t) && /Issued for internal discipline check/.test(t) && t.includes(`${SCL_A}_A_IDC_2026-09-19_01.docx`),
   )
-  rec('a/2: the file row shows kind and size', /original/.test(t) && /2\.3 MB/.test(t))
   rec('a/6: no download LINK in the panel — the Download control is a button that mints a signed URL on click (1b.09)', (await page.locator(`${PANEL} a`).count()) === 0 && (await page.locator(`${PANEL} button[data-download]`).count()) === 1)
+
+  // DCS 1b.23: the panel's file row is name and Download only — the info wrapper's one child is the
+  // name <p>, with no "Uploaded as" hint, kind badge or size beside it.
+  const panelFileChildren = await page.locator(`${PANEL} [data-file-row] > div`).first().evaluate((el) => el.children.length)
+  rec('1b.23: the panel file row shows only the name (no kind, size, upload time or "Uploaded as" hint)', panelFileChildren === 1, `${panelFileChildren} child element(s)`)
+  await page.getByRole('tab', { name: 'Revisions' }).click()
+  await page.locator('[data-revision-row="A"] button[aria-expanded]').click()
+  const revFilesText = await page.locator('[data-revision-files="A"]').innerText()
+  rec(
+    '1b.23: the Revisions tab still shows the full file details (kind, size, upload time, "Uploaded as" hint)',
+    revFilesText.includes(`${SCL_A}_A_IDC_2026-09-19_01.docx`) && /original/.test(revFilesText) && /2\.3 MB/.test(revFilesText) && /Uploaded as Survey report draft\.docx/.test(revFilesText),
+    revFilesText.slice(0, 200),
+  )
+  await page.getByRole('tab', { name: 'Information' }).click()
 
   // 1b.07 acceptance 6, as amended by DCS 1b.08 and 1b.09: New Revision and Add File are LIVE dialogs now
   // (the DC at aal2 gets enabled buttons; new-revision.mjs and revision-files.mjs prove what they do), so the
@@ -367,7 +380,7 @@ const browser = await chromium.launch()
     (await page.getByLabel('Client (CPY) number').count()) === 0 && /Only the project.s Document Controller can set this number/.test(t),
   )
   rec('b: the CPY value is visible read-only', /CPY-TEST-0042/.test(t))
-  rec('b/2: the panel shows the revision and the file', /SCL revision/.test(t) && /original/.test(t))
+  rec('b/2: the panel shows the revision and the file name (1b.23: no kind or size here)', /SCL revision/.test(t) && t.includes(`${SCL_A}_A_IDC_2026-09-19_01.docx`))
   await shot(page, 'b1-orig-information', { fullPage: true })
 
   await page.getByRole('tab', { name: 'History' }).click()

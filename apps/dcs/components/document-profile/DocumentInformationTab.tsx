@@ -136,9 +136,6 @@ export default function DocumentInformationTab({
           <Field label="Current revision">{currentRevisionLabel ?? 'None yet'}</Field>
           <Field label="Created">{formatTimestamp(document.created_at)}</Field>
           <Field label="Last updated">{formatTimestamp(document.updated_at)}</Field>
-          <Field label="Document ID" className="space-y-0.5 sm:col-span-2">
-            <span className="font-mono text-xs text-muted-foreground">{document.id}</span>
-          </Field>
         </dl>
       </details>
     </div>

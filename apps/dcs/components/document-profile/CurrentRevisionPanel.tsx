@@ -125,7 +125,9 @@ function RevisionDetails({
 
       <div className="space-y-2">
         <h3 className="text-xs font-medium text-muted-foreground">Files ({files.length})</h3>
-        <RevisionFileList files={toFileRows(files)} />
+        {/* DCS 1b.23: name and Download only here — size, kind, upload time and the
+            "Uploaded as" hint stay in the Revisions tab (RevisionFileList's default render). */}
+        <RevisionFileList files={toFileRows(files)} compact />
       </div>
     </>
   )
