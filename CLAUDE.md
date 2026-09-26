@@ -130,5 +130,7 @@ Supabase, prod ref `tfbzivfsqsgebegcvfah`.
   actions (`'use server'`) + `revalidatePath()` + `router.refresh()`;
   brak fetchowania po stronie klienta i brak REST-owych route'ów.
 - Komponenty klienckie: `'use client'`, PascalCase, obok strony.
-- shadcn/ui w `components/ui/` (nie edytować ręcznie), Tailwind + `cn()`.
+- shadcn/ui w `components/ui/` (nie edytować ręcznie), Tailwind + `cn()`. Wyjątek:
+  `apps/dcs/components/ui/input.tsx` i `textarea.tsx` niosą stylowanie pól DCS
+  (DCS-1b.27) i nie są już copy-identyczne z upstream shadcn.
 - Szczegóły i wyjątki: `docs/03-conventions.md`.

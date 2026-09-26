@@ -22,8 +22,10 @@ type Props = {
   candidates: Candidate[]
 }
 
+// DCS 1b.27: same editable/read-only convention as Input/Textarea — see
+// components/ui/input.tsx. Native <select> has no read-only state.
 export const SELECT_CLASS =
-  'h-9 rounded-md border border-input bg-card px-2 text-sm focus-visible:ring-2 focus-visible:ring-ring'
+  'h-9 rounded-md border border-field-border bg-card px-2 text-sm focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:border-transparent disabled:bg-muted disabled:opacity-50'
 
 export default function AddMemberForm({ projectId, candidates }: Props) {
   const { run, refresh, pending } = usePendingAction()

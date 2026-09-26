@@ -48,6 +48,16 @@
     --ring: 191 91% 35%;
     --radius: 0.5rem;
 
+    /* DCS 1b.27 — a field the user types into needs a border people can
+     * actually see against its own white fill, the page background AND card
+     * surfaces (all three checked, since fields sit on all three). --input
+     * (86% light) fails that against the 96%-light page background at
+     * ~1.4:1; this token is deliberately darker, chosen for >=3:1 against
+     * white, --background and --card alike. Left as its own token instead of
+     * reusing --input: --input also drives outline buttons, the Switch track
+     * and checkboxes, and those must not change. */
+    --field-border: 214 15% 55%;
+
     /* Brand signal + the two status tints the admin screens use, so no screen
        hardcodes a raw Tailwind palette colour again. */
     --brand: 190 99% 68%;
@@ -78,6 +88,7 @@
     --border: 215 18% 20%;
     --input: 215 18% 20%;
     --ring: 190 80% 55%;
+    --field-border: 215 14% 45%;
   }
 
   * {
