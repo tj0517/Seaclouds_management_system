@@ -13,7 +13,7 @@ depends_on: []
 blocked_by_questions: []
 touches_db: false
 touches_prod: false
-pr: null
+pr: 102
 ---
 
 # DCS-1b.27 — Pola do wpisania odróżnione od pól automatycznych
