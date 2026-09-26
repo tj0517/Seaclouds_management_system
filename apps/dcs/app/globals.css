@@ -58,6 +58,13 @@
      * and checkboxes, and those must not change. */
     --field-border: 214 15% 55%;
 
+    /* DCS 1b.27 PR #104 — after looking at the Preview, a plain white fill
+     * read as identical to the surrounding card, so an editable field needed
+     * a fill of its own, softer than white: a step down from --card toward
+     * --background, still clearly lighter than either. --field-border keeps
+     * its contrast requirement against this new fill too (checked below). */
+    --field-bg: 213 22% 98.5%;
+
     /* Brand signal + the two status tints the admin screens use, so no screen
        hardcodes a raw Tailwind palette colour again. */
     --brand: 190 99% 68%;
@@ -89,6 +96,11 @@
     --input: 215 18% 20%;
     --ring: 190 80% 55%;
     --field-border: 215 14% 45%;
+    /* Same family as --background (215 25% 10%) / --card (215 24% 12%): one
+     * step lighter than --card, so an editable field still reads as its own
+     * surface against the dark card. Unused today — DCS never sets .dark
+     * (see the note above) — but kept consistent for when it does. */
+    --field-bg: 215 24% 15%;
   }
 
   * {

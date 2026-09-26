@@ -55,6 +55,8 @@ const config = {
         // DCS 1b.27: a field's own border, separate from --input (outline
         // buttons, Switch track, checkboxes) so those keep their look.
         'field-border': 'hsl(var(--field-border))',
+        // DCS 1b.27 PR #104: a field's own fill, softer than --card.
+        'field-bg': 'hsl(var(--field-bg))',
         // DCS 1a.24: brand signal + the two status tints the admin screens
         // use, so no screen hardcodes a raw Tailwind palette colour again.
         brand: {

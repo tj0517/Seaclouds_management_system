@@ -46,3 +46,4 @@ Dwie drobne poprawki czytelności profilu dokumentu z prezentacji: techniczny id
 - 2026-09-26 tj: zrzuty ekranu lokalnie (Playwright MCP) + tj ogląda Preview sam przy review — Preview stoi za logowaniem Vercela, lokalny Playwright go nie zobaczy.
 - 2026-09-26 tj: `e2e:files` dodane do kryteriów odbioru — `revision-files.mjs` pokazuje pełne dane plików w zakładce Revisions, więc też jest tym dotknięte.
 - 2026-09-26 tj: odbiór PR #103 — Document ID usunięty (tylko wyświetlanie), panel Current revision: nazwa + Pobierz, Revisions: pełne dane (jeden komponent, wariant compact); e2e przeniesione, nie osłabione; Timesheet i packages/ nietknięte (sprawdzone odczytem); wygląd obejrzany na Preview.
+- 2026-09-26 tj: poprawka po odbiorze (PR #104) — w panelu Current revision przycisk Pobierz pod nazwą pliku; Revisions bez zmian. Świadomie jeden PR z poprawką 1b.27.
