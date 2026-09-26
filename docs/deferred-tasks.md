@@ -2752,6 +2752,12 @@ including its own introduction. The counts in it ("Dziesięć obserwacji…") ar
     - HEAD `2c96817`: `CLAUDE.md` + `docs/tasks/DCS-1b.09b.md` + `docs/tasks/INDEX.md` → **oba zbudowały
       się** (`Deployment has completed`).
   Same fakty, bez wniosku; pytanie zostaje otwarte.
+- **PR #102 (DCS 1b.27, `feat/dcs-1b27-field-styles`, 2026-09-26)** — ten sam kształt jeszcze raz:
+    - HEAD `864cf28` (drzewo `apps/`+`packages/` identyczne z commitem kodowym `b1c56de`, sam commit
+      dopisuje tylko `docs/tasks/DCS-1b.27.md`) → **oba POMINIĘTE** (`Skipped - Not affected`).
+    - HEAD `a54ee4c`: wyłącznie `CLAUDE.md` (linia „Ostatni odczyt”) → **oba zbudowały się**
+      (`Deployment has completed`).
+  Same fakty, bez wniosku; pytanie zostaje otwarte.
 
 ## bbb) Audyt pobrań plików DCS — obietnica z `02-data-model.md`, której `public.audit_log` nie może spełnić (DCS 1b.09 PR 1, 2026-09-21)
 
@@ -3129,3 +3135,19 @@ edit's result instead of layering on top of it. Same characteristic the old per-
 Save already had (one shared client-side snapshot per row, batched instead of per-click); not new to this
 task. `public.audit_log` keeps a true row for each write either way, so nothing is lost or hidden — a
 DELETE that "loses" a grant is still a DELETE row naming exactly what it removed. Not fixed here.
+
+## nnn) `app/login` and `app/mfa` don't use the theme tokens at all (DCS-1b.27, 2026-09-26)
+
+DCS-1b.27 brought every themed field in the app onto a shared white-fill/visible-border style for editable
+fields and a grey/no-border style for read-only and computed ones (`components/ui/input.tsx`,
+`textarea.tsx`, `AddMemberForm.tsx`'s `SELECT_CLASS`). Step 1 of that task also turned up the email/password
+inputs on `app/login/page.tsx` and the code input on `app/mfa/page.tsx`, which are raw `<input>` elements
+styled with hardcoded Tailwind gray (`border-gray-300`, `focus:border-gray-500`) — not the CSS variable
+tokens in `globals.css` at all. The surrounding labels and buttons on both pages are the same raw gray, not
+theme tokens either.
+
+tj decision 2026-09-26: leave both pages alone for this task. Converting only the three inputs to the
+shared `Input` component would put a themed white-plus-border field next to still-raw-gray labels and
+buttons on the same screen — worse, not better. Bringing the whole pages onto the theme (inputs, labels,
+buttons, page chrome) is a separate, larger piece of work than "distinguish editable from read-only
+fields," and out of this task's scope. Not started here.

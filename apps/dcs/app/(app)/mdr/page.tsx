@@ -28,6 +28,7 @@ import { ArrowDown, ArrowUp, ChevronsUpDown, Search, X } from 'lucide-react'
 import { createClient } from '@scl/db/server'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { SELECT_CLASS } from '@/components/AddMemberForm'
 import { EmptyState, PageBody, PageHeader, RegisterScroll } from '@/components/page-chrome'
 import NavLinkStatus from '@/components/NavLinkStatus'
 // Deliberately NOT the `Table` primitive: it wraps its <table> in a second
@@ -526,7 +527,7 @@ function FilterSelect({
       <select
         name={name}
         defaultValue={value ?? ''}
-        className="h-9 rounded-md border border-input bg-background px-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        className={SELECT_CLASS}
       >
         <option value="">All</option>
         {children}

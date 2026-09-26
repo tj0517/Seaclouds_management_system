@@ -5,8 +5,8 @@ Format zadania: [README.md](README.md) (pole `kind` — rodzaj pracy). Zadania z
 
 ## Postęp kodu
 
-**53 / 89 zadań kodowych zamkniętych (60%)** — stan na 2026-09-25.
-Liczone tylko `kind: code`: zamknięte = zamknięte z Notion (42, bez 1a.21a — przygotowanie demo) + `done` w repo (11); otwarte = kodowe `todo`/`in_progress`/`review`/`blocked` (36). Nie wlicza się: prac poza kodem, odłożonych i porzuconych. Przy zmianie statusu zadania kodowego popraw tę linię.
+**54 / 89 zadań kodowych zamkniętych (61%)** — stan na 2026-09-26.
+Liczone tylko `kind: code`: zamknięte = zamknięte z Notion (42, bez 1a.21a — przygotowanie demo) + `done` w repo (12); otwarte = kodowe `todo`/`in_progress`/`review`/`blocked` (35). Nie wlicza się: prac poza kodem, odłożonych i porzuconych. Przy zmianie statusu zadania kodowego popraw tę linię.
 
 ## Kod — otwarte
 
@@ -17,7 +17,6 @@ Liczone tylko `kind: code`: zamknięte = zamknięte z Notion (42, bez 1a.21a —
 | [1b.23](DCS-1b.23.md) | Profil dokumentu: bez technicznego Document ID, pliki w „Current revision” tylko z nazwą | todo | S | — | — | — |
 | [1b.25](DCS-1b.25.md) | MDR projektu jako zakładka na stronie projektu (obok listy dokumentów) | todo | M | — | — | — |
 | [1b.26](DCS-1b.26.md) | Numer wykonawcy (contractor) na dokumencie — trzeci numer obok SCL i CPY | todo | M | — | — | — |
-| [1b.27](DCS-1b.27.md) | Pola do wpisania odróżnione od pól automatycznych (tło i ramka) | todo | S | — | — | — |
 | [2.01](DCS-2.01.md) | Schemat approval_tasks i comments | todo | L | — | — | 2026-10-02 |
 | [2.02](DCS-2.02.md) | Silnik obiegu: tryb równoległy (IDC) | todo | L | — | — | 2026-10-16 |
 | [2.03](DCS-2.03.md) | Silnik obiegu: tryb szeregowy (IFR i wyżej) | todo | L | — | — | 2026-10-23 |
@@ -106,6 +105,7 @@ Odłożone przez tj 2026-09-23; terminy zdjęte (poprzednie w notatkach zadań).
 | [1b.19](DCS-1b.19.md) | DC edytuje ustawienia DCS projektu (cykle, budżet, numeracja CPY, status MDR) | code | M |
 | [1b.18](DCS-1b.18.md) | Macierz osób i ról na stronie projektu (przydzielanie ról jednym kliknięciem) | code | M |
 | [1b.21](DCS-1b.21.md) | Słowniki: wyjaśnienie „Sort order” i „Est. budget (h)” w tabeli i formularzu | code | S |
+| [1b.27](DCS-1b.27.md) | Pola do wpisania odróżnione od pól automatycznych (tło i ramka) | code | S |
 
 ## Zamknięte (historia w Notion)
 
