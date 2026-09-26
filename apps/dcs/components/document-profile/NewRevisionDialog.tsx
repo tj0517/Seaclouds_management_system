@@ -222,7 +222,9 @@ export default function NewRevisionDialog({ config }: { config: NewRevisionFormC
                   id="revision-scl"
                   data-testid="proposed-code"
                   aria-live="polite"
-                  className="flex h-9 items-center rounded-md border bg-muted/40 px-3 font-mono text-sm"
+                  // DCS 1b.27: computed value, styled like a read-only field —
+                  // grey fill, no field border.
+                  className="flex h-9 items-center rounded-md bg-muted px-3 font-mono text-sm"
                 >
                   {loading ? '…' : (proposedCode ?? '—')}
                 </output>
