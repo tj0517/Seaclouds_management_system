@@ -1,7 +1,7 @@
 ---
 id: DCS-1b.27
 title: "Pola do wpisania odróżnione od pól automatycznych (tło i ramka)"
-status: review
+status: done
 kind: code             # code | client | ops | milestone
 difficulty: S
 model: Sonnet
@@ -63,3 +63,5 @@ Na prezentacji pola do wpisania wyglądały jak szare bloki, czyli jak coś wype
   przestylowany na tę samą konwencję pól tylko-do-odczytu; wyjątek shadcn/ui dopisany w `CLAUDE.md`.
   Zrzuty przed/po w `.playwright-mcp/` (New Document, New Revision, Edit project — w tym pola read-only i
   scrollowany widok pól edytowalnych, Dictionaries — lista ze Switch i dialog edycji z polem read-only Code).
+- 2026-09-26 tj: odbiór PR #102 — kontrast ramki ≥3:1 (3,52 / 3,21 do tła strony), brak lokalnych nadpisań tła pól,
+  Timesheet i packages/ nietknięte (sprawdzone odczytem); wygląd obejrzany na Preview. Logowanie i MFA → deferred (nnn).

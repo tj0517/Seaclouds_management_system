@@ -2752,6 +2752,12 @@ including its own introduction. The counts in it ("Dziesięć obserwacji…") ar
     - HEAD `2c96817`: `CLAUDE.md` + `docs/tasks/DCS-1b.09b.md` + `docs/tasks/INDEX.md` → **oba zbudowały
       się** (`Deployment has completed`).
   Same fakty, bez wniosku; pytanie zostaje otwarte.
+- **PR #102 (DCS 1b.27, `feat/dcs-1b27-field-styles`, 2026-09-26)** — ten sam kształt jeszcze raz:
+    - HEAD `864cf28` (drzewo `apps/`+`packages/` identyczne z commitem kodowym `b1c56de`, sam commit
+      dopisuje tylko `docs/tasks/DCS-1b.27.md`) → **oba POMINIĘTE** (`Skipped - Not affected`).
+    - HEAD `a54ee4c`: wyłącznie `CLAUDE.md` (linia „Ostatni odczyt”) → **oba zbudowały się**
+      (`Deployment has completed`).
+  Same fakty, bez wniosku; pytanie zostaje otwarte.
 
 ## bbb) Audyt pobrań plików DCS — obietnica z `02-data-model.md`, której `public.audit_log` nie może spełnić (DCS 1b.09 PR 1, 2026-09-21)
 
